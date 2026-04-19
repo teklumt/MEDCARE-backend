@@ -1,0 +1,316 @@
+// ============================================
+// USER SCHEMA
+// ============================================
+const userSchema = new Schema({
+  fullName:     { type: String, required: true, trim: true },
+  phone:        { type: String, required: true, unique: true },
+  email:        { type: String, unique: true, sparse: true },
+  passwordHash: { type: String, required: true },
+  role:         { type: String, enum: ['end_user'], default: 'end_user' },
+  region:       { type: String },
+  city:         { type: String },
+
+  status: {
+    type: String,
+    enum: ['active', 'banned', 'suspended'],
+    default: 'active'
+  },
+  ban: {
+    isBanned:   { type: Boolean, default: false },
+    reason:     { type: String },
+    type:       { type: String, enum: ['temporary', 'permanent'] },
+    expiresAt:  { type: Date },
+    bannedBy:   { type: Schema.Types.ObjectId, ref: 'Admin' }
+  },
+
+  warningCount:  { type: Number, default: 0 },
+  trustScore:    { type: Number, default: 100 },
+  isVerified:    { type: Boolean, default: false },
+  refreshToken:  { type: String }
+}, { timestamps: true })
+
+
+// ============================================
+// ADMIN SCHEMA
+// ============================================
+const adminSchema = new Schema({
+  fullName:     { type: String, required: true },
+  email:        { type: String, required: true, unique: true },
+  passwordHash: { type: String, required: true },
+
+  role: {
+    type: String,
+    enum: ['super_admin', 'admin', 'moderator'],
+    default: 'admin'
+  },
+
+  mfa: {
+    enabled: { type: Boolean, default: false },
+    secret:  { type: String }
+  },
+
+  status: {
+    type: String,
+    enum: ['active', 'suspended'],
+    default: 'active'
+  },
+  suspendedReason: { type: String },
+  createdBy:       { type: Schema.Types.ObjectId, ref: 'Admin' },
+
+  lastLoginAt:  { type: Date },
+  refreshToken: { type: String }
+}, { timestamps: true })
+
+
+// ============================================
+// PHARMACY SCHEMA
+// ============================================
+const pharmacySchema = new Schema({
+  businessName: { type: String, required: true },
+  ownerName:    { type: String, required: true },
+  email:        { type: String, required: true, unique: true },
+  phone:        { type: String, required: true, unique: true },
+  passwordHash: { type: String, required: true },
+
+  address: {
+    region:      { type: String },
+    city:        { type: String },
+    street:      { type: String },
+    coordinates: {
+      lat: { type: Number },
+      lng: { type: Number }
+    }
+  },
+
+  license: {
+    licenseNumber:   { type: String },
+    licenseImageUrl: { type: String },
+    tinNumber:       { type: String },
+    expiryDate:      { type: Date },
+    status: {
+      type: String,
+      enum: ['not_submitted', 'pending', 'verified', 'rejected', 'revoked', 'expired'],
+      default: 'not_submitted'
+    },
+    rejectionReason: { type: String },
+    reviewedBy:      { type: Schema.Types.ObjectId, ref: 'Admin' },
+    reviewedAt:      { type: Date }
+  },
+
+  status: {
+    type: String,
+    enum: ['active', 'suspended', 'deactivated'],
+    default: 'active'
+  },
+  suspendedReason: { type: String },
+  suspendedBy:     { type: Schema.Types.ObjectId, ref: 'Admin' },
+
+  isVerifiedBadge: { type: Boolean, default: false },
+  rating:          { type: Number, default: 0, min: 0, max: 5 },
+  totalRatings:    { type: Number, default: 0 },
+
+  operatingHours: {
+    open:   { type: String },
+    close:  { type: String },
+    days:   [{ type: String }]
+  },
+
+  mfa: {
+    enabled: { type: Boolean, default: false },
+    secret:  { type: String }
+  },
+  refreshToken: { type: String }
+}, { timestamps: true })
+
+
+// ============================================
+// MEDICINE / INVENTORY SCHEMA
+// ============================================
+const medicineSchema = new Schema({
+  pharmacyId:   { type: Schema.Types.ObjectId, ref: 'Pharmacy', required: true },
+  drugName:     { type: String, required: true },
+  genericName:  { type: String },
+  brand:        { type: String },
+  category:     { type: String },
+  imageUrl:     { type: String },
+
+  stock: {
+    quantity:      { type: Number, required: true, default: 0 },
+    unit:          { type: String, enum: ['tablet','capsule','syrup','injection','cream','drops','other'] },
+    lowThreshold:  { type: Number, default: 10 },
+    batchNumber:   { type: String },
+    expiryDate:    { type: Date }
+  },
+
+  pricing: {
+    costPrice:    { type: Number },
+    sellingPrice: { type: Number, required: true }
+  },
+
+  requiresPrescription: { type: Boolean, default: false },
+  isAvailable:          { type: Boolean, default: true },
+  lastRestockedAt:      { type: Date }
+}, { timestamps: true })
+
+
+// ============================================
+// DRIVER SCHEMA
+// ============================================
+const driverSchema = new Schema({
+  fullName:     { type: String, required: true },
+  phone:        { type: String, required: true, unique: true },
+  email:        { type: String, unique: true, sparse: true },
+  passwordHash: { type: String, required: true },
+
+  nationalId:      { type: String },
+  licenseNumber:   { type: String },
+  licenseImageUrl: { type: String },
+
+  vehicle: {
+    type:  { type: String, enum: ['motorcycle', 'bicycle', 'car'] },
+    plate: { type: String }
+  },
+
+  region:  { type: String },
+  city:    { type: String },
+
+  assignedPharmacyId: { type: Schema.Types.ObjectId, ref: 'Pharmacy', default: null },
+
+  status: {
+    type: String,
+    enum: ['available', 'on_delivery', 'offline', 'suspended'],
+    default: 'offline'
+  },
+
+  backgroundCheck: {
+    status: {
+      type: String,
+      enum: ['pending', 'cleared', 'failed'],
+      default: 'pending'
+    },
+    reviewedBy: { type: Schema.Types.ObjectId, ref: 'Admin' },
+    reviewedAt: { type: Date }
+  },
+
+  isSuspended:     { type: Boolean, default: false },
+  suspendedReason: { type: String },
+  suspendedBy:     { type: Schema.Types.ObjectId, ref: 'Admin' },
+
+  rating:           { type: Number, default: 0 },
+  totalDeliveries:  { type: Number, default: 0 },
+  refreshToken:     { type: String }
+}, { timestamps: true })
+
+
+// ============================================
+// ORDER SCHEMA
+// ============================================
+const orderSchema = new Schema({
+  orderId:    { type: String, unique: true }, // e.g. MC-20260417-XXXX
+  patientId:  { type: Schema.Types.ObjectId, ref: 'User',     required: true },
+  pharmacyId: { type: Schema.Types.ObjectId, ref: 'Pharmacy', required: true },
+  driverId:   { type: Schema.Types.ObjectId, ref: 'Driver',   default: null },
+
+  items: [{
+    medicineId:   { type: Schema.Types.ObjectId, ref: 'Medicine' },
+    medicineName: { type: String },
+    quantity:     { type: Number, required: true },
+    priceAtOrder: { type: Number, required: true }
+  }],
+
+  totalAmount: { type: Number, required: true },
+
+  delivery: {
+    method: { type: String, enum: ['pickup', 'delivery'], required: true },
+    address: {
+      region: { type: String },
+      city:   { type: String },
+      street: { type: String },
+      coordinates: {
+        lat: { type: Number },
+        lng: { type: Number }
+      }
+    }
+  },
+
+  payment: {
+    method: {
+      type: String,
+      enum: ['chapa', 'cash_on_delivery'],
+      required: true
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'paid', 'failed', 'refunded'],
+      default: 'pending'
+    },
+    transactionId: { type: String }
+  },
+
+  status: {
+    type: String,
+    enum: [
+      'pending', 'accepted', 'rejected',
+      'preparing', 'ready', 'out_for_delivery',
+      'delivered', 'cancelled'
+    ],
+    default: 'pending'
+  },
+
+  statusHistory: [{
+    status:    { type: String },
+    updatedBy: { type: Schema.Types.ObjectId },
+    updatedByRole: { type: String },
+    note:      { type: String },
+    timestamp: { type: Date, default: Date.now }
+  }],
+
+  notes: {
+    patient:    { type: String },
+    pharmacist: { type: String }
+  },
+
+  deliveredAt:  { type: Date },
+  cancelledAt:  { type: Date },
+  cancelReason: { type: String }
+}, { timestamps: true })
+
+// Auto-generate orderId before save
+orderSchema.pre('save', async function (next) {
+  if (!this.orderId) {
+    const date = new Date().toISOString().slice(0,10).replace(/-/g,'')
+    const rand = Math.random().toString(36).substring(2,6).toUpperCase()
+    this.orderId = `MC-${date}-${rand}`
+  }
+  next()
+})
+
+
+// ============================================
+// INDEXES (add these after schema definitions)
+// ============================================
+
+// User
+userSchema.index({ phone: 1 })
+userSchema.index({ 'ban.isBanned': 1 })
+
+// Pharmacy
+pharmacySchema.index({ 'address.coordinates': '2dsphere' })
+pharmacySchema.index({ 'license.status': 1 })
+pharmacySchema.index({ status: 1 })
+
+// Medicine
+medicineSchema.index({ pharmacyId: 1 })
+medicineSchema.index({ drugName: 'text', genericName: 'text' })
+medicineSchema.index({ 'stock.expiryDate': 1 })
+
+// Order
+orderSchema.index({ patientId: 1 })
+orderSchema.index({ pharmacyId: 1 })
+orderSchema.index({ driverId: 1 })
+orderSchema.index({ status: 1 })
+orderSchema.index({ createdAt: -1 })
+
+// Driver
+driverSchema.index({ status: 1 })
+driverSchema.index({ assignedPharmacyId: 1 })

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+uploads/
+temp/
+coverage/
+.vscode/
+*.tsbuildinfo

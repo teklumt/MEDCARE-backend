@@ -1,0 +1,592 @@
+## 1. INVENTORY BACKEND
+
+### 1.1 The Master Medication Database vs Pharmacy Inventory
+
+Your backend needs to understand there are **two separate concepts:**
+
+**Master Medication Records** — a platform-wide database of medications that exists independently of any pharmacy. Amoxicillin 500mg exists once in this database. All pharmacies reference the same Amoxicillin 500mg record.
+
+**Inventory Items** — a pharmacy-specific record that says "Selam Pharmacy has 200 units of Amoxicillin 500mg, priced at ETB 45, expiring on December 2025." This links a pharmacy to a medication with their specific stock details.
+
+This separation is what allows the patient search to work — when a patient searches "Amoxicillin," the backend finds the medication record, then finds all inventory items across all pharmacies that reference it.
+
+---
+
+### 1.2 Search Existing Medications (Live Search as Pharmacy Types)
+
+**What it does:**
+When the pharmacy starts typing a medication name in the Add Stock form, the frontend sends what they have typed so far. The backend searches the master medication database and returns matching results so the pharmacy can select an existing one instead of creating a duplicate.
+
+**What the backend receives:**
+The partial text the pharmacy has typed, minimum 2 characters before triggering.
+
+**What the backend must do:**
+Search the medications collection using a text index on both the English name and Amharic name fields. Return the top 10 closest matches. The search must be case-insensitive. It should match partial words — typing "amox" should find "Amoxicillin." Return enough information for the dropdown to display: medication ID, English name, Amharic name, generic name, dosage strength, dosage form, category, requires prescription flag.
+
+**What the backend checks:**
+No ownership check needed — this is a read from the shared medication database, available to any verified supplier.
+
+**Performance requirement:**
+Must return results within 200 milliseconds as per Requirement 2.1. This means the medication name fields must be properly indexed in MongoDB.
+
+---
+
+### 1.3 Add a Single New Inventory Item
+
+**What it does:**
+Processes the completed Add New Stock form submission. Either links the pharmacy to an existing medication or creates a new medication record first, then creates the inventory item.
+
+**What the backend receives:**
+All fields from the form: medication name (English and Amharic), generic name, dosage strength, dosage form, category, requires prescription flag, quantity, price, expiration date, batch number, supplier name, storage requirements, special instructions, controlled substance flag, availability status, delivery eligible flag, maximum order quantity, prescription verification mode, prescription validity period, image file if uploaded.
+
+**What the backend must do, step by step:**
+
+First, validate every incoming field before touching the database:
+- Medication name in English: must not be empty, must be a string, maximum 200 characters
+- Amharic name: must not be empty
+- Quantity: must be a positive integer, not zero, not negative, not a decimal
+- Price: must be a positive number, must have no more than 2 decimal places — this is explicitly required by Requirement 3.7. The backend must enforce this even if the frontend already validated it, because the frontend can be bypassed
+- Expiration date: must be a valid date, must be in the future
+- Dosage form: must be one of the accepted enum values
+- Category: must be one of the accepted enum values
+- All required fields must be present
+
+If any validation fails, return a 400 error with a detailed message specifying exactly which field failed and why. Do not return a generic "validation error."
+
+Second, check for duplicate in this pharmacy's inventory:
+Query inventory items where pharmacy ID matches the authenticated pharmacy AND the medication name matches (case-insensitive). If a match is found, do not create a duplicate. Return a specific response telling the frontend "this medication already exists in your inventory" with the existing item's ID so the frontend can offer to update it instead.
+
+Third, resolve the medication record:
+If the pharmacy selected an existing medication from the search dropdown, use that medication's ID directly. If the pharmacy is creating a new medication, check the master medications collection one more time to confirm no medication with this exact name and dosage already exists (prevent platform-wide duplicates). If it exists, use it. If it genuinely does not exist, create a new medication record in the master collection first, then use its ID.
+
+Fourth, handle image upload if provided:
+Validate file type is JPEG or PNG. Validate file size is under 5MB. Upload the file to cloud storage (S3 or equivalent). Store only the URL reference in the database, never the raw file. Generate a unique filename to prevent collisions.
+
+Fifth, create the inventory item record:
+Create a new document in the inventory collection with: the resolved medication ID, the authenticated pharmacy's ID (taken from the JWT — never trust the pharmacy to send their own ID in the request body), all the stock details, created timestamp, last updated timestamp, a version number starting at 1 (used for optimistic locking to prevent race conditions on stock updates), status set based on availability selection.
+
+Sixth, update search index:
+After the inventory item is saved, the new item must be discoverable in patient searches within 2 seconds per Requirement 3.2. If you are using MongoDB's text search, the index updates automatically. If you are using a separate search service, trigger an index update.
+
+Seventh, create audit log entry:
+Record: timestamp, action type "INVENTORY_ITEM_ADDED", pharmacy ID, medication name, quantity added, price set, performed by (user ID from JWT). This satisfies Requirement 3.8.
+
+**What the backend returns:**
+The newly created inventory item's full details including its generated ID, and the medication record details. A 201 Created status.
+
+---
+
+### 1.4 Get All Inventory Items for This Pharmacy
+
+**What it does:**
+Returns the pharmacy's complete inventory list for display in the inventory table.
+
+**What the backend receives:**
+Authentication token. Optional query parameters for filtering: status (in_stock / low_stock / out_of_stock / expiring_soon), category, search text, sort field, sort direction, page number, page size for pagination.
+
+**What the backend must do:**
+Query inventory items scoped strictly to the authenticated pharmacy's ID. Apply any filters passed as query parameters. For the "expiring_soon" filter, calculate which items have expiration dates within the next 30 days from today's date — this is dynamic, not a stored flag. For "low_stock," compare current quantity against the item's low stock threshold. Sort results by the requested field. Apply pagination — return a specified page of results along with the total count so the frontend can show "Showing 1-20 of 87 items."
+
+Join each inventory item with its medication record to return the full medication name, category, and other details in one response — the frontend should not need to make a second request.
+
+**What the backend also returns in the response:**
+An alert summary object containing counts: how many items are low stock, how many are out of stock, how many are expiring within 30 days. This powers the alert summary strip at the top of the inventory page without requiring a separate request.
+
+---
+
+### 1.5 Update an Inventory Item
+
+**What it does:**
+Processes edits to an existing inventory item — a pharmacy updating quantity, price, expiration date, or any other field.
+
+**What the backend receives:**
+The inventory item ID in the URL. The fields being changed in the request body. Authentication token.
+
+**What the backend must do:**
+First, verify ownership — confirm the inventory item with this ID belongs to the authenticated pharmacy. If not, return 403. Never allow a pharmacy to edit another pharmacy's inventory, even if they somehow have the item ID.
+
+Capture the current values of all fields being changed before applying the update. These "before" values are needed for the audit log.
+
+Validate the new values using the same rules as creation — price max 2 decimal places, quantity positive integer, expiration date in the future.
+
+Apply the update. Increment the version number by 1 (optimistic locking mechanism).
+
+If quantity was changed to zero, automatically update the item's status to "out_of_stock" and ensure it no longer appears in patient search results per Requirement 3.3.
+
+If quantity was changed from zero to a positive number, restore the item's status to "available" and make it searchable again per Requirement 3.2.
+
+After saving, create an audit log entry recording: what changed, the old value, the new value, who made the change, when.
+
+**What the backend returns:**
+The updated inventory item. A 200 status.
+
+---
+
+### 1.6 Delete an Inventory Item
+
+**What it does:**
+Removes a medication from the pharmacy's inventory entirely.
+
+**What the backend must do:**
+Verify ownership of the item. Check if there are any active orders containing this inventory item that have not yet been delivered. If active orders exist, do not allow deletion — return a 409 Conflict error explaining "This item has pending orders. Complete or cancel those orders before removing this item." This prevents a situation where a patient's order suddenly has no inventory backing it.
+
+If no active orders, perform a soft delete — set a "deleted" flag and a deletion timestamp rather than removing the document from the database. This preserves the record for audit purposes and for historical orders that reference this item.
+
+Remove the item from search results immediately.
+
+Create an audit log entry.
+
+---
+
+### 1.7 Bulk CSV Upload
+
+**What it does:**
+Processes a CSV file upload containing multiple inventory items at once.
+
+**What the backend receives:**
+A CSV file upload. Authentication token.
+
+**What the backend must do:**
+Validate that the uploaded file is a CSV (check MIME type and file extension). Validate file size is reasonable (maximum 10MB suggested).
+
+Parse the CSV row by row. For each row, run the same validations that apply to individual item creation: required fields present, price format, expiration date validity, quantity is positive integer. Do not stop at the first error — collect all errors across all rows.
+
+For each valid row, run the same medication resolution logic: check if medication exists, create if not, then create the inventory item. Do all of this in a way that if row 23 fails, rows 1-22 that succeeded are still saved. Do not use an all-or-nothing transaction for the entire file — process valid rows and skip invalid ones.
+
+Track: total rows in file, rows successfully processed, rows skipped due to errors, specific error per skipped row (row number + field + reason).
+
+Create one bulk audit log entry summarizing the upload.
+
+**What the backend returns:**
+A summary: total processed, total succeeded, total failed, and an array of error objects each containing the row number and error description. This allows the frontend to show the detailed error report.
+
+---
+
+### 1.8 Get Inventory Change Log
+
+**What it does:**
+Returns the audit trail of all inventory changes for the pharmacy to review.
+
+**What the backend receives:**
+Authentication token. Optional filters: date range, action type (added/updated/deleted), medication name search.
+
+**What the backend must do:**
+Query the audit log collection for entries where the pharmacy ID matches, action type is inventory-related, and any date filters apply. Return paginated results sorted by timestamp descending (newest first). Each entry must include: timestamp, action, medication name, what changed (old → new values), and which user performed the action.
+
+---
+
+### 1.9 Low Stock and Expiration Alerts Background Job
+
+**What it does:**
+This is not triggered by a frontend request. It is a scheduled background job that runs periodically (every hour is reasonable) to check for items that are approaching expiration or low stock thresholds.
+
+**What it must do:**
+Query all inventory items across all pharmacies where expiration date is within 30 days AND the pharmacy has not been notified yet (or was notified more than 7 days ago). For each such item, queue a notification to the relevant pharmacy. Mark the item as "expiration_warning_sent" with a timestamp.
+
+Separately query items where quantity is at or below the pharmacy's defined low stock threshold and queue notifications for those.
+
+This satisfies Requirement 3.4. The actual notification sending is handled by the notification service.
+
+---
+
+## 2. ORDERS BACKEND
+
+### 2.1 Get All Orders for This Pharmacy
+
+**What it does:**
+Returns all orders that have been placed with this specific pharmacy, with filtering and pagination.
+
+**What the backend receives:**
+Authentication token. Optional query parameters: status filter (new/accepted/preparing/out_for_delivery/delivered/rejected/cancelled), date range, search by order ID or patient name, page and page size.
+
+**What the backend must do:**
+Query the orders collection where the pharmacy ID field matches the authenticated pharmacy's ID. Apply all filters. For each order, join the patient's basic information (first name, last initial — not full personal details unless needed), the list of ordered items with medication names and quantities, the delivery address, payment status, and whether a prescription image is attached.
+
+Also run a separate query for the "stuck orders" count — orders in "placed" status for more than 30 minutes. Return this count in the response alongside the main results so the frontend can show the urgent banner without a second request.
+
+Return orders sorted by creation time descending by default, but allow sort override.
+
+---
+
+### 2.2 Get Single Order Details
+
+**What it does:**
+Returns the complete details of one specific order for the pharmacy's order detail panel.
+
+**What the backend receives:**
+Order ID in the URL. Authentication token.
+
+**What the backend must do:**
+Verify the order's pharmacy ID matches the authenticated pharmacy. Return full order details: all items with full medication names and images, patient delivery address with coordinates, prescription image URL if attached, complete status history with timestamps for each transition, payment details, all notifications sent related to this order.
+
+---
+
+### 2.3 Accept an Order
+
+**What it does:**
+Pharmacy confirms they will fulfill a patient's order.
+
+**What the backend receives:**
+Order ID. Authentication token. Optional estimated preparation time in minutes.
+
+**What the backend must do:**
+Verify the order belongs to this pharmacy. Verify the order is currently in "placed" status — only "placed" orders can be accepted. If the order is in any other status, return a 409 error.
+
+Re-verify that all items in the order are still in stock (quantities have not dropped to zero since the order was placed). If any item is now out of stock, return an error explaining which items are unavailable — the pharmacy may need to contact the patient.
+
+Update the order status from "placed" to "accepted." Add an entry to the order's status history array recording the timestamp and who performed the action.
+
+Queue a notification to the patient that their order has been accepted. This notification must be delivered within 2 seconds per Requirement 6.2.
+
+Create an audit log entry.
+
+---
+
+### 2.4 Reject an Order
+
+**What it does:**
+Pharmacy declines to fulfill the order and the patient is notified with a reason and alternative suggestions.
+
+**What the backend receives:**
+Order ID. Authentication token. Rejection reason text (required — cannot be empty). Boolean flag for whether to suggest alternatives.
+
+**What the backend must do:**
+Verify order belongs to this pharmacy and is in an acceptable state for rejection (placed or accepted — not already being delivered).
+
+Update order status to "rejected." Record the rejection reason in the order document.
+
+Release the inventory reservation — when an order was placed, stock was soft-reserved. On rejection, restore those quantities back.
+
+If "suggest alternatives" is true, find other verified pharmacies on the platform that have all the same medications in stock within a reasonable distance of the patient. Return up to 3 alternatives in the notification.
+
+Queue a notification to the patient with the rejection reason and the alternative pharmacy suggestions. Satisfies Requirement 6.10.
+
+Create audit log entry.
+
+---
+
+### 2.5 Update Order Status (Preparing → Dispatched → Delivered)
+
+**What it does:**
+Moves an order through its fulfillment pipeline stages.
+
+**What the backend receives:**
+Order ID. Target status. Authentication token. For "dispatched" status, the delivery personnel ID being assigned must also be provided. For "delivered" status, optional photo proof URL if captured.
+
+**What the backend must do:**
+Enforce the state machine strictly. The allowed transitions are:
+- accepted → preparing (when delivery personnel is being assigned)
+- preparing → out_for_delivery (when dispatched)
+- out_for_delivery → delivered (when delivery personnel confirms delivery)
+- delivered → completed (when patient confirms receipt)
+
+Any attempt to skip a step or go backwards must be rejected with a 409 error explaining the invalid transition.
+
+For the "preparing" transition: verify the delivery personnel ID belongs to this pharmacy. Check the delivery person's current active delivery count — if they already have 5 active deliveries, reject the assignment (Requirement 18.6). If valid, increment their active delivery count.
+
+For each transition, add a timestamped entry to the order's status history, and queue the appropriate patient notification. Status update notifications must reach the patient within 2 seconds (Requirement 6.2 and 12.1).
+
+---
+
+### 2.6 Order Stuck Reminder Background Job
+
+**What it does:**
+A scheduled background job that checks for orders sitting in "placed" status without any pharmacy response for 30 minutes.
+
+**What it must do:**
+Every 5 minutes, query all orders in "placed" status where the creation timestamp is more than 30 minutes ago and a reminder has not yet been sent. For each such order, queue a reminder notification to the relevant pharmacy. Mark the order as "reminder_sent" with a timestamp to avoid sending repeated reminders every 5 minutes. This satisfies Requirement 6.8.
+
+---
+
+## 3. DELIVERIES BACKEND
+
+### 3.1 Get All Delivery Personnel for This Pharmacy
+
+**What it does:**
+Returns the list of delivery agents registered under this pharmacy.
+
+**What the backend must do:**
+Query the users collection for users with role "delivery_personnel" whose "employer_pharmacy_id" field matches the authenticated pharmacy. For each person, also query their current active delivery count by counting orders assigned to them in active states. Return both the personnel details and their real-time workload.
+
+---
+
+### 3.2 Add Delivery Personnel
+
+**What it does:**
+Registers a new delivery person under this pharmacy.
+
+**What the backend receives:**
+Name, phone number, vehicle type, vehicle registration number (optional), national ID (optional). Authentication token.
+
+**What the backend must do:**
+Validate phone number format (Ethiopian format). Check no existing delivery personnel account already uses this phone number. Create a new user record with role "delivery_personnel" and link their "employer_pharmacy_id" to the authenticated pharmacy. Generate a temporary password or invite link for the delivery person to set up their account. Send an SMS notification to the delivery person's phone with their account setup instructions.
+
+Create audit log entry.
+
+---
+
+### 3.3 Update Delivery Personnel Details
+
+**What it does:**
+Edits a delivery person's information.
+
+**What the backend must do:**
+Verify the delivery person's employer_pharmacy_id matches the authenticated pharmacy — a pharmacy can only edit their own delivery personnel. Apply updates. Create audit log entry.
+
+---
+
+### 3.4 Deactivate Delivery Personnel
+
+**What it does:**
+Removes a delivery person from active duty without deleting their historical records.
+
+**What the backend must do:**
+Check if the delivery person has any active deliveries currently. If yes, prevent deactivation and return an error: "This agent has active deliveries. Reassign or complete those deliveries first." If no active deliveries, set their status to "deactivated." Preserve all historical delivery records completely — do not delete anything. Satisfies Requirement 18.9.
+
+---
+
+### 3.5 Assign Delivery Personnel to an Order
+
+**What it does:**
+Links a specific delivery person to a specific order for delivery.
+
+**What the backend receives:**
+Order ID, delivery personnel ID, authentication token.
+
+**What the backend must do:**
+Verify order belongs to this pharmacy. Verify delivery person belongs to this pharmacy. Check delivery person's current active delivery count — if 5 or more, reject with error explaining they are at capacity (Requirement 18.6). If under limit, assign them to the order. Update order status to "preparing." Increment the delivery person's active delivery count. Send a notification to the delivery person with order details and delivery address including map coordinates (Requirement 18.2). This notification must arrive within 2 seconds.
+
+---
+
+### 3.6 Get Active Deliveries with Location Data
+
+**What it does:**
+Returns all active deliveries for this pharmacy's map view, ideally with current location of delivery agents.
+
+**What the backend must do:**
+Query all orders for this pharmacy in "preparing" or "out_for_delivery" states. For each, return: order details, delivery address coordinates, delivery personnel details. If you are tracking delivery agent location in real time via WebSocket or periodic pings from their mobile device, return their last known coordinates and the timestamp of that location update.
+
+---
+
+### 3.7 Delivery Personnel Performance Metrics
+
+**What it does:**
+Calculates and returns performance data for the pharmacy's delivery tab.
+
+**What the backend receives:**
+Authentication token. Date range parameters.
+
+**What the backend must do:**
+For each delivery person employed by this pharmacy, query their completed deliveries within the date range. Calculate: total deliveries, deliveries completed on time (delivered before or within the estimated arrival time), average actual delivery time in minutes, completion rate percentage (completed vs assigned). Identify any agent whose metrics fall below acceptable thresholds (e.g., completion rate below 80% or on-time rate below 70%). Return a flag for below-threshold agents so the frontend can display the warning. This satisfies Requirements 18.7 and 18.8.
+
+Also queue notifications to the pharmacy for any agent whose performance has dropped below threshold if not already notified this week.
+
+---
+
+### 3.8 Confirm Cash on Delivery Collection
+
+**What it does:**
+Marks a cash payment as collected when the delivery person physically receives cash from the patient.
+
+**What the backend receives:**
+Order ID. Authentication token (could be delivery personnel's token for this specific action). Optional confirmation note.
+
+**What the backend must do:**
+Verify the order is in "delivered" or "completed" state and payment method is cash_on_delivery. Update the payment record's status from "pending" to "paid." Record the cash collection timestamp and who confirmed it. Queue a payment receipt generation. Create an audit log entry for this financial transaction. Satisfies Requirements 7.5 and 7.6.
+
+---
+
+## 4. MESSAGES (CHAT) BACKEND
+
+### 4.1 Get All Conversations for This Pharmacy
+
+**What it does:**
+Returns the list of all chat sessions this pharmacy is participating in.
+
+**What the backend must do:**
+Query chat sessions where the supplier_id matches the authenticated pharmacy. For each session, return: session ID, the patient's basic info (name, avatar), the last message preview (this requires decrypting the last message on the server — or if using true end-to-end encryption where the server cannot decrypt, return only the encrypted blob and let the client decrypt), the timestamp of the last message, the unread message count for this pharmacy, whether the patient is currently online (check their active WebSocket connection), and any linked order ID.
+
+Sort by last message timestamp descending.
+
+---
+
+### 4.2 Get Single Conversation Messages
+
+**What it does:**
+Returns the message history for a specific chat session.
+
+**What the backend receives:**
+Chat session ID. Authentication token. Optional pagination (load older messages as pharmacy scrolls up).
+
+**What the backend must do:**
+Verify the chat session's supplier_id matches the authenticated pharmacy. Return paginated messages sorted by timestamp ascending. Each message contains: sender ID, the encrypted message content, the IV (initialization vector) and authentication tag needed for AES-256-GCM decryption, timestamp, delivery status (sent/delivered/read). The backend stores and returns encrypted content — it does not decrypt messages (zero-knowledge storage per Requirement 8.6).
+
+Mark all unread messages from the patient as "read" and update the unread count.
+
+---
+
+### 4.3 Send a Message
+
+**What it does:**
+Saves a new message from the pharmacy to a patient and delivers it in real time.
+
+**What the backend receives:**
+Chat session ID. The encrypted message content (already encrypted by the pharmacy's client using the AES session key). The IV. Authentication token.
+
+**What the backend must do:**
+Verify the pharmacy is a participant in this chat session. Store the encrypted message with all its encryption metadata — the backend must never attempt to decrypt and re-encrypt the content. Assign a message ID and timestamp. Attempt to deliver via the active WebSocket connection if the patient is online. If the patient is offline, add to the offline message queue. Queue a push notification to the patient (Requirement 12.2). Return the saved message with its assigned ID and timestamp. Message must be delivered within 1 second latency when recipient is online (Requirement 8.7).
+
+---
+
+### 4.4 WebSocket Connection Management
+
+**What it does:**
+Manages the persistent real-time connection that enables instant messaging.
+
+**What the backend must handle:**
+When the pharmacy client connects to the WebSocket server, validate their JWT token immediately. If invalid, close the connection. Register the pharmacy's connection in an in-memory store (or Redis for multi-server setups) mapping their pharmacy ID to their WebSocket connection object.
+
+When a new message arrives for this pharmacy (from a patient), find their connection in the store and push the message directly.
+
+When the connection closes (pharmacy navigates away, loses internet), remove them from the connection store. Update their "last seen" timestamp.
+
+Handle reconnections gracefully — when the pharmacy reconnects, deliver any messages that arrived while they were disconnected.
+
+---
+
+### 4.5 Encryption Key Management
+
+**What it does:**
+Manages the cryptographic keys that enable end-to-end encryption per Requirements 8.1, 8.2, 8.5, 8.6.
+
+**What the backend must handle:**
+
+When a new chat session is initiated between a patient and a pharmacy, the backend's Key Management Server generates a new AES-256 session key. This session key is then encrypted twice — once with the patient's RSA-2048 public key and once with the pharmacy's RSA-2048 public key. Both encrypted copies are stored. Only each party's private key (held by their respective client) can decrypt the session key. The server stores public keys but never has access to private keys.
+
+When either party joins the chat session, the backend delivers their encrypted copy of the session key. Their client decrypts it using their private key and uses it for all message encryption and decryption locally.
+
+When the chat session ends, the backend destroys the stored AES session key (Requirement 8.8). The encrypted messages remain stored but become undecryptable without the session key — this is intentional.
+
+RSA-2048 key pairs for new users are generated either on the client or on the server, depending on your architecture. Public keys are stored on the server. Private keys, if generated server-side, are encrypted with a key derived from the user's password using PBKDF2 before storage.
+
+---
+
+### 4.6 Message Retention Cleanup Background Job
+
+**What it does:**
+Permanently deletes encrypted chat messages older than 90 days per Requirement 8.9.
+
+**What it must do:**
+Run daily. Query all chat messages with a timestamp older than 90 days. Permanently delete them from the database (hard delete, not soft delete — this is a regulatory compliance requirement). Log the deletion count in the system audit log. This is not reversible by design.
+
+---
+
+## 5. ANALYTICS BACKEND
+
+### 5.1 Get Pharmacy Analytics Dashboard Data
+
+**What it does:**
+Returns all data needed to render the analytics page for this pharmacy.
+
+**What the backend receives:**
+Authentication token. Date range (start date, end date).
+
+**What the backend must do:**
+This is a data aggregation endpoint. Run multiple aggregation queries against the orders, inventory, and reviews collections and combine the results into one response. Running these as MongoDB aggregation pipelines is important for performance — do not fetch all records and calculate in JavaScript.
+
+**Revenue and Orders aggregation:**
+Group completed orders by day within the date range. For each day calculate: total order count, total revenue (sum of order totals). Return as an array of day objects for the chart.
+
+**Top Medications aggregation:**
+From completed orders for this pharmacy within the date range, aggregate by medication: total units sold, total revenue generated. Sort by units sold descending. Return top 20.
+
+**Customer Reviews summary:**
+Calculate average rating across all reviews for this pharmacy. Calculate count of reviews at each star level (1 through 5). Return the 5 most recent reviews with text content.
+
+**Delivery performance:**
+Calculate average delivery time from dispatch timestamp to delivery confirmation timestamp. Calculate on-time rate by comparing actual delivery time against estimated delivery time. Group by delivery personnel to show per-agent breakdown.
+
+**Revenue by category:**
+From completed orders, group medications by their category and sum revenue per category. Returns data for the donut chart.
+
+**Comparison with previous period:**
+For each key metric (revenue, order count, average rating), also calculate the same metric for the equivalent previous period of the same length. Return both values so the frontend can show "↑ 12% vs last week."
+
+---
+
+### 5.2 Export Report
+
+**What it does:**
+Generates a downloadable report for the pharmacy.
+
+**What the backend receives:**
+Authentication token. Report type (orders / revenue / deliveries / reviews). Date range. Format (PDF or CSV).
+
+**What the backend must do:**
+Run the appropriate aggregation queries for the requested report type and date range. Format the data into the requested format. For CSV, serialize the data rows with proper headers. For PDF, generate a formatted document. Store the generated file temporarily (15 minutes) and return a pre-signed download URL. Delete the file after it is downloaded or after the 15-minute window expires.
+
+---
+
+## 6. SETTINGS BACKEND
+
+### 6.1 Get Pharmacy Profile and Settings
+
+**What it does:**
+Returns all the pharmacy's current settings for display in the settings tabs.
+
+**What the backend must do:**
+Return the complete pharmacy profile document. Mask any sensitive fields — for example, show the API keys or integration credentials as partially masked. Return the current MFA status. Return all active sessions for the "active sessions" list.
+
+---
+
+### 6.2 Update Pharmacy Profile
+
+**What it does:**
+Saves changes to the pharmacy's public-facing profile.
+
+**What the backend receives:**
+Any combination of: pharmacy name, Amharic name, description, phone numbers, email, website, profile image. Authentication token.
+
+**What the backend must do:**
+Validate all fields. If phone number is being changed, the new number must be verified with an OTP before the change takes effect — queue an OTP to the new number and require verification. If email is being changed, same verification flow. Update the profile. If the pharmacy name changed, update it in all search indexes. Create audit log entry for profile changes.
+
+---
+
+### 6.3 Update Operating Hours
+
+**What it does:**
+Saves the pharmacy's weekly schedule.
+
+**What the backend receives:**
+An array of seven day objects, each containing: day name, open/closed boolean, open time, close time, is_24_hours boolean. Authentication token.
+
+**What the backend must do:**
+Validate time formats. Validate that open time is before close time for each day unless is_24_hours is true. Save the schedule to the pharmacy's profile. This schedule is used when patients search for "Open Now" pharmacies — the backend filters search results using this schedule against the current time and timezone (East Africa Time).
+
+---
+
+### 6.4 Update Delivery Settings
+
+**What it does:**
+Saves the pharmacy's delivery configuration.
+
+**What the backend receives:**
+Delivery enabled toggle, delivery radius in km, minimum order for free delivery in ETB, base delivery fee in ETB, maximum concurrent deliveries limit. Authentication token.
+
+**What the backend must do:**
+Validate all values are positive numbers. Validate maximum concurrent deliveries is between 1 and 10 (reasonable business limits). Save to pharmacy profile. The delivery radius is used in patient proximity searches — patients beyond this radius do not see this pharmacy's delivery option.
+
+---
+
+### 6.5 Upload Renewed License Document
+
+**What it does:**
+Allows a pharmacy near expiration or already expired/suspended to submit new license documents for re-verification.
+
+**What the backend receives:**
+One or more document files (PDFs or images). Authentication token.
+
+**What the backend must do:**
+Validate file types and sizes. Upload files to secure cloud storage with encryption at rest. Create a new license verification request record with status "pending" linked to this pharmacy. Notify the admin team that a new verification request has been submitted. Update the pharmacy's license status to "pending_renewal." The pharmacy can still operate if they were previously verified — they only get suspended if the license actually expires and the renewal is not processed in time. Satisfies Requirement 9.9.
+
+---

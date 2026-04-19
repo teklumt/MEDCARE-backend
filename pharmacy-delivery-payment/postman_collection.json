@@ -1,0 +1,842 @@
+{
+  "info": {
+    "name": "Pharmacy Backend API",
+    "description": "Complete API collection for Pharmacy Management System",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "pharmacy-backend"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pharmacy_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "medication_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "inventory_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "order_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "driver_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}",
+              "host": ["{{base_url}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Data (Seeded)",
+      "item": [
+        {
+          "name": "Get All Pharmacies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/test/pharmacies",
+              "host": ["{{base_url}}"],
+              "path": ["test", "pharmacies"]
+            }
+          }
+        },
+        {
+          "name": "Get All Medications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/test/medications",
+              "host": ["{{base_url}}"],
+              "path": ["test", "medications"]
+            }
+          }
+        },
+        {
+          "name": "Get All Inventory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/test/inventory",
+              "host": ["{{base_url}}"],
+              "path": ["test", "inventory"]
+            }
+          }
+        },
+        {
+          "name": "Get All Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/test/orders",
+              "host": ["{{base_url}}"],
+              "path": ["test", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/test/users",
+              "host": ["{{base_url}}"],
+              "path": ["test", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get All Drivers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/test/drivers",
+              "host": ["{{base_url}}"],
+              "path": ["test", "drivers"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Inventory Management",
+      "item": [
+        {
+          "name": "Search Medications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/inventory/medications/search?q=amox",
+              "host": ["{{base_url}}"],
+              "path": ["inventory", "medications", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "amox",
+                  "description": "Search query (min 2 characters)"
+                }
+              ]
+            },
+            "description": "Search master medication database"
+          }
+        },
+        {
+          "name": "Add Inventory Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"medicationId\": \"{{medication_id}}\",\n  \"nameEnglish\": \"Amoxicillin\",\n  \"nameAmharic\": \"አሞክሲሲሊን\",\n  \"genericName\": \"Amoxicillin\",\n  \"dosageStrength\": \"500mg\",\n  \"dosageForm\": \"tablet\",\n  \"category\": \"antibiotic\",\n  \"requiresPrescription\": true,\n  \"quantity\": 200,\n  \"price\": 45.50,\n  \"expiryDate\": \"2025-12-31\",\n  \"batchNumber\": \"BATCH-2024-001\",\n  \"supplierName\": \"PharmaCorp\",\n  \"lowThreshold\": 20\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/inventory",
+              "host": ["{{base_url}}"],
+              "path": ["inventory"]
+            }
+          }
+        },
+        {
+          "name": "Get All Inventory Items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/inventory?status=available&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["inventory"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "available",
+                  "description": "available, out_of_stock, low_stock, expiring_soon"
+                },
+                {
+                  "key": "category",
+                  "value": "antibiotic",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "amox",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Inventory Item",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 150,\n  \"price\": 48.00,\n  \"expiryDate\": \"2025-12-31\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/inventory/{{inventory_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["inventory", "{{inventory_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Inventory Item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/inventory/{{inventory_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["inventory", "{{inventory_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Bulk CSV Upload",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/inventory.csv"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/inventory/bulk-upload",
+              "host": ["{{base_url}}"],
+              "path": ["inventory", "bulk-upload"]
+            }
+          }
+        },
+        {
+          "name": "Get Inventory Change Log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/inventory/audit-log?startDate=2024-01-01&endDate=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["inventory", "audit-log"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31"
+                },
+                {
+                  "key": "action",
+                  "value": "INVENTORY_ITEM_ADDED",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Orders Management",
+      "item": [
+        {
+          "name": "Get All Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/orders?status=pending&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "pending",
+                  "description": "pending, accepted, rejected, preparing, ready, out_for_delivery, delivered, cancelled"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "MC-20240417",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/orders/{{order_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["orders", "{{order_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Accept Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estimatedPreparationTime\": 30\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/orders/{{order_id}}/accept",
+              "host": ["{{base_url}}"],
+              "path": ["orders", "{{order_id}}", "accept"]
+            }
+          }
+        },
+        {
+          "name": "Reject Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Out of stock\",\n  \"suggestAlternatives\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/orders/{{order_id}}/reject",
+              "host": ["{{base_url}}"],
+              "path": ["orders", "{{order_id}}", "reject"]
+            }
+          }
+        },
+        {
+          "name": "Update Order Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"preparing\",\n  \"driverId\": \"{{driver_id}}\",\n  \"note\": \"Order is being prepared\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/orders/{{order_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["orders", "{{order_id}}", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Delivery Management",
+      "item": [
+        {
+          "name": "Get All Delivery Personnel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/deliveries/personnel",
+              "host": ["{{base_url}}"],
+              "path": ["deliveries", "personnel"]
+            }
+          }
+        },
+        {
+          "name": "Add Delivery Personnel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"John Doe\",\n  \"phone\": \"+251911234567\",\n  \"email\": \"john@example.com\",\n  \"vehicleType\": \"motorcycle\",\n  \"vehiclePlate\": \"AA-12345\",\n  \"nationalId\": \"ID123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/deliveries/personnel",
+              "host": ["{{base_url}}"],
+              "path": ["deliveries", "personnel"]
+            }
+          }
+        },
+        {
+          "name": "Update Delivery Personnel",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+251911234568\",\n  \"vehiclePlate\": \"AA-54321\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/deliveries/personnel/{{driver_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["deliveries", "personnel", "{{driver_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Deactivate Delivery Personnel",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/deliveries/personnel/{{driver_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["deliveries", "personnel", "{{driver_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Assign Delivery",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{order_id}}\",\n  \"driverId\": \"{{driver_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/deliveries/assign",
+              "host": ["{{base_url}}"],
+              "path": ["deliveries", "assign"]
+            }
+          }
+        },
+        {
+          "name": "Get Active Deliveries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/deliveries/active",
+              "host": ["{{base_url}}"],
+              "path": ["deliveries", "active"]
+            }
+          }
+        },
+        {
+          "name": "Get Performance Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/deliveries/metrics?startDate=2024-01-01&endDate=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["deliveries", "metrics"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Confirm Cash Collection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{order_id}}\",\n  \"note\": \"Cash collected successfully\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/deliveries/confirm-payment",
+              "host": ["{{base_url}}"],
+              "path": ["deliveries", "confirm-payment"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Messages (Chat)",
+      "item": [
+        {
+          "name": "Get All Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/messages/conversations",
+              "host": ["{{base_url}}"],
+              "path": ["messages", "conversations"]
+            }
+          }
+        },
+        {
+          "name": "Get Conversation Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/messages/session/{{session_id}}?page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["messages", "session", "{{session_id}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{session_id}}\",\n  \"encryptedContent\": \"encrypted_message_content_here\",\n  \"iv\": \"initialization_vector_here\",\n  \"authTag\": \"auth_tag_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["messages"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Analytics",
+      "item": [
+        {
+          "name": "Get Dashboard Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/analytics/dashboard?startDate=2024-01-01&endDate=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["analytics", "dashboard"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31"
+                }
+              ]
+            },
+            "description": "Get revenue, orders, top medications, reviews, and delivery performance"
+          }
+        },
+        {
+          "name": "Export Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reportType\": \"orders\",\n  \"format\": \"csv\",\n  \"startDate\": \"2024-01-01\",\n  \"endDate\": \"2024-12-31\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/analytics/export",
+              "host": ["{{base_url}}"],
+              "path": ["analytics", "export"]
+            },
+            "description": "reportType: orders, revenue, deliveries, reviews | format: csv, pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Settings",
+      "item": [
+        {
+          "name": "Get Pharmacy Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settings/profile",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Update Pharmacy Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessName\": \"Selam Pharmacy\",\n  \"nameAmharic\": \"ሰላም ፋርማሲ\",\n  \"description\": \"Your trusted healthcare partner\",\n  \"phone\": \"+251911234567\",\n  \"email\": \"info@selampharmacy.com\",\n  \"website\": \"https://selampharmacy.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/profile",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Update Operating Hours",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatingHours\": [\n    {\n      \"day\": \"monday\",\n      \"isOpen\": true,\n      \"openTime\": \"08:00\",\n      \"closeTime\": \"20:00\",\n      \"is24Hours\": false\n    },\n    {\n      \"day\": \"tuesday\",\n      \"isOpen\": true,\n      \"openTime\": \"08:00\",\n      \"closeTime\": \"20:00\",\n      \"is24Hours\": false\n    },\n    {\n      \"day\": \"sunday\",\n      \"isOpen\": false\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/operating-hours",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "operating-hours"]
+            }
+          }
+        },
+        {
+          "name": "Update Delivery Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"radiusKm\": 10,\n  \"minOrderForFreeDelivery\": 500,\n  \"baseDeliveryFee\": 50,\n  \"maxConcurrentDeliveries\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/delivery",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "delivery"]
+            }
+          }
+        },
+        {
+          "name": "Upload License Renewal",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "license",
+                  "type": "file",
+                  "src": "/path/to/license.pdf"
+                },
+                {
+                  "key": "licenseNumber",
+                  "value": "LIC-2024-12345",
+                  "type": "text"
+                },
+                {
+                  "key": "expiryDate",
+                  "value": "2025-12-31",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/license",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "license"]
+            }
+          }
+        },
+        {
+          "name": "Upload Profile Image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": "/path/to/profile.jpg"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/profile-image",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "profile-image"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

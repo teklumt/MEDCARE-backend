@@ -1,0 +1,11 @@
+nameEnglish,nameAmharic,genericName,dosageStrength,dosageForm,category,requiresPrescription,quantity,price,expiryDate,batchNumber,supplierName,lowThreshold
+Amoxicillin,አሞክሲሲሊን,Amoxicillin,500mg,tablet,antibiotic,true,200,45.50,2025-12-31,BATCH-2024-001,PharmaCorp,20
+Paracetamol,ፓራሴታሞል,Acetaminophen,500mg,tablet,painkiller,false,500,12.00,2025-11-30,BATCH-2024-002,MediSupply,50
+Ibuprofen,አይቡፕሮፈን,Ibuprofen,400mg,tablet,painkiller,false,300,18.50,2025-10-31,BATCH-2024-003,PharmaCorp,30
+Vitamin C,ቪታሚን ሲ,Ascorbic Acid,1000mg,tablet,vitamin,false,400,25.00,2026-01-31,BATCH-2024-004,HealthPlus,40
+Metformin,ሜትፎርሚን,Metformin,500mg,tablet,diabetes,true,150,35.00,2025-09-30,BATCH-2024-005,DiabetesCare,15
+Aspirin,አስፒሪን,Acetylsalicylic Acid,100mg,tablet,cardiovascular,false,250,8.50,2025-08-31,BATCH-2024-006,CardioMed,25
+Omeprazole,ኦሜፕራዞል,Omeprazole,20mg,capsule,chronic_disease,true,180,42.00,2025-12-15,BATCH-2024-007,GastroHealth,20
+Salbutamol,ሳልቡታሞል,Salbutamol,100mcg,inhaler,respiratory,true,100,85.00,2025-11-20,BATCH-2024-008,RespiraCare,10
+Ciprofloxacin,ሲፕሮፍሎክሳሲን,Ciprofloxacin,500mg,tablet,antibiotic,true,120,55.00,2025-10-15,BATCH-2024-009,PharmaCorp,15
+Cetirizine,ሴቲሪዚን,Cetirizine,10mg,tablet,other,false,350,15.00,2025-12-25,BATCH-2024-010,AllergyRelief,35
