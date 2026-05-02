@@ -4,13 +4,23 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { Search, MapPin, Clock, CheckCircle2, XCircle, AlertTriangle, MessageSquare, ClipboardList, Globe, ChevronDown } from 'lucide-react';
+import { apiGet, apiPatch } from '@/lib/api';
 
-const ORDERS = [
-  { id: 'MED-20847', patient: 'Abebe Kebede', items: 'Amoxicillin 500mg, Paracetamol', itemsAm: 'አሞክሲሲሊን 500mg, ፓራሲታሞል', total: 285.00, method: 'Home Delivery', time: '14 mins ago', payment: 'Paid (Chapa)', status: 'new', hasPrescription: true },
-  { id: 'MED-20848', patient: 'Sara Mohammed', items: 'Ibuprofen 400mg', itemsAm: 'አይቡፕሮፌን 400mg', total: 45.00, method: 'Pickup', time: '25 mins ago', payment: 'Pending (Cash)', status: 'preparing', hasPrescription: false },
-  { id: 'MED-20849', patient: 'Dawit Tadesse', items: 'Vitamin C, Zinc', itemsAm: 'ቫይታሚን ሲ, ዚንክ', total: 600.00, method: 'Home Delivery', time: '45 mins ago', payment: 'Paid (Chapa)', status: 'accepted', hasPrescription: false },
-  { id: 'MED-20850', patient: 'Helen Girma', items: 'Omeprazole 20mg', itemsAm: 'ኦሜፕራዞል 20mg', total: 120.00, method: 'Home Delivery', time: '1 hour ago', payment: 'Pending (Cash)', status: 'out_for_delivery', hasPrescription: true },
-];
+type OrderEntry = {
+  id: string;
+  backendId: string;
+  patient: string;
+  items: string;
+  itemsAm?: string;
+  total: number;
+  method: string;
+  time: string;
+  payment: string;
+  status: string;
+  hasPrescription: boolean;
+};
+
+const ORDERS: OrderEntry[] = [];
 
 const TRANSLATIONS = {
   en: {
@@ -80,7 +90,7 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [deliveryFilter, setDeliveryFilter] = useState('All');
   
-  const [orders, setOrders] = useState(ORDERS);
+  const [orders, setOrders] = useState<OrderEntry[]>(ORDERS);
   const [acceptModalOrder, setAcceptModalOrder] = useState<string | null>(null);
   const [rejectModalOrder, setRejectModalOrder] = useState<string | null>(null);
   const [markReadyModalOrder, setMarkReadyModalOrder] = useState<string | null>(null);
@@ -111,49 +121,103 @@ export default function OrdersPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleAccept = () => {
-    if (!acceptModalOrder) return;
-    setIsAccepting(true);
-    setTimeout(() => {
-      setOrders(prev => prev.map(o => o.id === acceptModalOrder ? { ...o, status: 'accepted' } : o));
-      setAcceptModalOrder(null);
-      setIsAccepting(false);
-      showToast(`Order ${acceptModalOrder} accepted successfully.`);
-    }, 1000);
+  const mapOrder = (order: any): OrderEntry => {
+    const statusMap: Record<string, string> = {
+      pending: 'new',
+      confirmed: 'accepted',
+      preparing: 'preparing',
+      ready: 'preparing',
+      dispatched: 'out_for_delivery',
+      delivered: 'delivered',
+      rejected: 'rejected',
+      cancelled: 'rejected'
+    };
+
+    const method = order.deliveryMethod === 'delivery' ? 'Home Delivery' : 'Pickup';
+    const payment = order.paymentMethod === 'cod' || order.paymentStatus?.includes('cod')
+      ? 'Pending (Cash)'
+      : order.paymentStatus === 'success'
+        ? 'Paid (Chapa)'
+        : 'Pending (Chapa)';
+
+    return {
+      id: order.ref || order._id,
+      backendId: order._id,
+      patient: order.deliveryAddress?.recipientName || 'Patient',
+      items: (order.items || []).map((item: any) => item.medicationName).join(', '),
+      itemsAm: (order.items || []).map((item: any) => item.medicationName).join(', '),
+      total: order.totalAmount || 0,
+      method,
+      time: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
+      payment,
+      status: statusMap[order.status] || 'new',
+      hasPrescription: Boolean(order.prescriptionUploadId)
+    };
   };
 
-  const handleReject = () => {
-    if (!rejectModalOrder || rejectReason.length < 10) return;
-    setIsRejecting(true);
-    const order = orders.find(o => o.id === rejectModalOrder);
-    setTimeout(() => {
-      setOrders(prev => prev.map(o => o.id === rejectModalOrder ? { ...o, status: 'rejected' } : o));
-      setRejectModalOrder(null);
-      setIsRejecting(false);
-      if (order?.payment.includes('Chapa')) {
-        showToast(`Order ${rejectModalOrder} has been rejected. A refund of ETB ${order.total} has been initiated.`);
-      } else {
-        showToast(`Order ${rejectModalOrder} has been rejected.`);
+  useEffect(() => {
+    const loadOrders = async () => {
+      try {
+        const response = await apiGet<any[]>('/pharmacy/me/orders');
+        const mapped = (response.data || []).map(mapOrder);
+        setOrders(mapped);
+      } catch (error) {
+        console.error(error);
       }
-    }, 1000);
+    };
+
+    loadOrders();
+  }, []);
+
+  const applyStatusChange = async (order: OrderEntry, nextStatus: string, localStatus: string) => {
+    try {
+      await apiPatch(`/orders/${order.backendId}/status`, { status: nextStatus });
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: localStatus } : o)));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleAccept = async () => {
+    if (!acceptModalOrder) return;
+    const order = orders.find((o) => o.id === acceptModalOrder);
+    if (!order) return;
+
+    setIsAccepting(true);
+    await applyStatusChange(order, 'confirmed', 'accepted');
+    setAcceptModalOrder(null);
+    setIsAccepting(false);
+    showToast(`Order ${acceptModalOrder} accepted successfully.`);
+  };
+
+  const handleReject = async () => {
+    if (!rejectModalOrder || rejectReason.length < 10) return;
+    const order = orders.find((o) => o.id === rejectModalOrder);
+    if (!order) return;
+
+    setIsRejecting(true);
+    await applyStatusChange(order, 'rejected', 'rejected');
+    setRejectModalOrder(null);
+    setIsRejecting(false);
+    if (order.payment.includes('Chapa')) {
+      showToast(`Order ${rejectModalOrder} has been rejected. A refund of ETB ${order.total} has been initiated.`);
+    } else {
+      showToast(`Order ${rejectModalOrder} has been rejected.`);
+    }
   };
 
   const triggerMarkReady = (id: string) => {
     setMarkReadyModalOrder(id);
   };
 
-  const confirmMarkReady = () => {
+  const confirmMarkReady = async () => {
     if (!markReadyModalOrder) return;
-    const order = orders.find(o => o.id === markReadyModalOrder);
+    const order = orders.find((o) => o.id === markReadyModalOrder);
     if (!order) return;
-    
-    if (order.method === 'Pickup') {
-      setOrders(prev => prev.map(o => o.id === markReadyModalOrder ? { ...o, status: 'ready_for_pickup' } : o));
-      showToast(`Order ${markReadyModalOrder} marked as ready.`);
-    } else {
-      setOrders(prev => prev.map(o => o.id === markReadyModalOrder ? { ...o, status: 'preparing' } : o));
-      showToast(`Order ${markReadyModalOrder} marked as ready.`);
-    }
+
+    await applyStatusChange(order, 'preparing', 'preparing');
+
+    showToast(`Order ${markReadyModalOrder} marked as ready.`);
     setMarkReadyModalOrder(null);
   };
 
@@ -166,10 +230,13 @@ export default function OrdersPage() {
     }
   };
 
-  const handleAssignDelivery = () => {
+  const handleAssignDelivery = async () => {
     if (!assignDeliveryModalOrder || !selectedAgent) return;
-    const agent = MOCK_AGENTS.find(a => a.id === selectedAgent);
-    setOrders(prev => prev.map(o => o.id === assignDeliveryModalOrder ? { ...o, status: 'out_for_delivery' } : o));
+    const agent = MOCK_AGENTS.find((a) => a.id === selectedAgent);
+    const order = orders.find((o) => o.id === assignDeliveryModalOrder);
+    if (!order) return;
+
+    await applyStatusChange(order, 'dispatched', 'out_for_delivery');
     setAssignDeliveryModalOrder(null);
     setSelectedAgent(null);
     showToast(`Delivery assigned to ${agent?.name} for Order ${assignDeliveryModalOrder}.`);
@@ -394,7 +461,14 @@ export default function OrdersPage() {
                       )}
                       {order.status === 'preparing' && (
                         order.method === 'Pickup' ? (
-                          <button onClick={() => setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'delivered' } : o))} className="px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-xl transition-colors whitespace-nowrap">Mark Collected</button>
+                          <button
+                            onClick={async () => {
+                              await applyStatusChange(order, 'delivered', 'delivered');
+                            }}
+                            className="px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-xl transition-colors whitespace-nowrap"
+                          >
+                            Mark Collected
+                          </button>
                         ) : (
                           <button onClick={() => attemptAssignDelivery(order.id)} className="px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-xl transition-colors whitespace-nowrap">{t.assignDelivery}</button>
                         )
@@ -403,7 +477,14 @@ export default function OrdersPage() {
                         <button onClick={() => handleTrackDelivery(order.id)} className="px-4 py-2 text-xs font-bold text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-xl transition-colors">{t.track}</button>
                       )}
                       {order.status === 'ready_for_pickup' && (
-                        <button onClick={() => setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'delivered' } : o))} className="px-4 py-2 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">Complete Pickup</button>
+                        <button
+                          onClick={async () => {
+                            await applyStatusChange(order, 'delivered', 'delivered');
+                          }}
+                          className="px-4 py-2 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+                        >
+                          Complete Pickup
+                        </button>
                       )}
                     </div>
                  </td>

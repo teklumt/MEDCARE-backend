@@ -6,11 +6,14 @@ import { X, Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Download } fro
 interface BulkUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onUpload: (file: File) => Promise<void>;
 }
 
-export default function BulkUploadModal({ isOpen, onClose }: BulkUploadModalProps) {
+export default function BulkUploadModal({ isOpen, onClose, onUpload }: BulkUploadModalProps) {
   const [step, setStep] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Mock validation data
   const MOCK_PREVIEW = [
@@ -21,12 +24,22 @@ export default function BulkUploadModal({ isOpen, onClose }: BulkUploadModalProp
     { id: 5, name: 'Azithromycin', qty: 30, price: 250, valid: false, error: 'Expiration date in past' },
   ];
 
-  const handleFileUpload = () => {
-    setIsUploading(true);
-    setTimeout(() => {
-      setIsUploading(false);
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      setError('Please select a CSV file first.');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      setError(null);
+      await onUpload(selectedFile);
       setStep(3);
-    }, 1500);
+    } catch (uploadError) {
+      setError((uploadError as Error).message || 'Upload failed');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -76,13 +89,36 @@ export default function BulkUploadModal({ isOpen, onClose }: BulkUploadModalProp
                 <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
                 <h3 className="font-bold text-brand-950 mb-1">Step 2: Upload Completed File</h3>
                 <p className="text-sm text-gray-500 mb-6">Drag and drop your .csv file here, or click to browse</p>
-                <button 
-                  onClick={handleFileUpload}
-                  disabled={isUploading}
-                  className="bg-brand-900 text-white font-bold px-8 py-3 rounded-xl hover:bg-brand-800 transition-colors shadow-sm disabled:opacity-70"
-                >
-                  {isUploading ? 'Processing...' : 'Select File'}
-                </button>
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  id="bulk-upload-input"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    setSelectedFile(file);
+                    if (file) setError(null);
+                  }}
+                />
+                <div className="flex flex-col items-center gap-3">
+                  <label
+                    htmlFor="bulk-upload-input"
+                    className="bg-white border border-gray-200 text-gray-700 font-bold px-6 py-2.5 rounded-xl hover:bg-gray-100 transition-colors shadow-sm cursor-pointer"
+                  >
+                    {selectedFile ? 'Change File' : 'Choose File'}
+                  </label>
+                  {selectedFile && (
+                    <p className="text-xs text-gray-600 font-medium">Selected: {selectedFile.name}</p>
+                  )}
+                  {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
+                  <button
+                    onClick={handleFileUpload}
+                    disabled={isUploading}
+                    className="bg-brand-900 text-white font-bold px-8 py-3 rounded-xl hover:bg-brand-800 transition-colors shadow-sm disabled:opacity-70"
+                  >
+                    {isUploading ? 'Processing...' : 'Upload File'}
+                  </button>
+                </div>
               </div>
             </div>
           )}

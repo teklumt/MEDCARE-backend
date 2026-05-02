@@ -1,6 +1,6 @@
 # MED-CARE Ethiopia — Full Platform Schema
 
-> Stack: Go backend · MongoDB · Chapa payments · Next.js frontend
+> Stack: Node + express  backend · MongoDB · Chapa payments · Next.js frontend
 
 ---
 

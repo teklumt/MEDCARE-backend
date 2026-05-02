@@ -5,8 +5,9 @@ export interface AuthRequest extends Request {
   user?: {
     userId: string;
     email: string;
-    role: 'user' | 'pharmacy' | 'delivery';
+    role: 'patient' | 'pharmacy';
   };
+  file?: Express.Multer.File;
 }
 
 export const authenticate = (req: AuthRequest, res: Response, next: NextFunction): void => {
@@ -43,7 +44,7 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
   }
 };
 
-export const authorizeRoles = (...roles: Array<'user' | 'pharmacy' | 'delivery'>) => {
+export const authorizeRoles = (...roles: Array<'patient' | 'pharmacy'>) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({

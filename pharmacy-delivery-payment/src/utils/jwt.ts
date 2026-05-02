@@ -4,10 +4,10 @@ import { Types } from 'mongoose';
 interface TokenPayload {
   userId: string;
   email: string;
-  role: 'user' | 'pharmacy' | 'delivery';
+  role: 'patient' | 'pharmacy';
 }
 
-export const generateAccessToken = (userId: Types.ObjectId, email: string, role: 'user' | 'pharmacy' | 'delivery'): string => {
+export const generateAccessToken = (userId: Types.ObjectId, email: string, role: 'patient' | 'pharmacy'): string => {
   return jwt.sign(
     { userId: userId.toString(), email, role },
     process.env.JWT_SECRET as string,
@@ -15,7 +15,7 @@ export const generateAccessToken = (userId: Types.ObjectId, email: string, role:
   );
 };
 
-export const generateRefreshToken = (userId: Types.ObjectId, email: string, role: 'user' | 'pharmacy' | 'delivery'): string => {
+export const generateRefreshToken = (userId: Types.ObjectId, email: string, role: 'patient' | 'pharmacy'): string => {
   return jwt.sign(
     { userId: userId.toString(), email, role },
     process.env.JWT_REFRESH_SECRET as string,

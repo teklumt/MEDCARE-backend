@@ -3,7 +3,18 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/database';
 import authRoutes from './routes/auth.routes';
-import inventoryRoutes from './routes/inventory.routes';
+import usersRoutes from './routes/users.routes';
+import pharmaciesRoutes from './routes/pharmacies.routes';
+import pharmacyRoutes from './routes/pharmacy.routes';
+import medicationsRoutes from './routes/medications.routes';
+import ordersRoutes from './routes/orders.routes';
+import paymentsRoutes from './routes/payments.routes';
+import prescriptionsRoutes from './routes/prescriptions.routes';
+import conversationsRoutes from './routes/conversations.routes';
+import hospitalsRoutes from './routes/hospitals.routes';
+import alertsRoutes from './routes/alerts.routes';
+import complaintsRoutes from './routes/complaints.routes';
+import searchRoutes from './routes/search.routes';
 
 // Load environment variables
 dotenv.config();
@@ -25,32 +36,39 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
-// Auth routes
 app.use('/api/v1/auth', authRoutes);
-
-// Inventory routes
-app.use('/api/v1/inventory', inventoryRoutes);
+app.use('/api/v1/users', usersRoutes);
+app.use('/api/v1/pharmacies', pharmaciesRoutes);
+app.use('/api/v1/pharmacy', pharmacyRoutes);
+app.use('/api/v1/medications', medicationsRoutes);
+app.use('/api/v1/search', searchRoutes);
+app.use('/api/v1/orders', ordersRoutes);
+app.use('/api/v1/payments', paymentsRoutes);
+app.use('/api/v1/prescriptions', prescriptionsRoutes);
+app.use('/api/v1/conversations', conversationsRoutes);
+app.use('/api/v1/hospitals', hospitalsRoutes);
+app.use('/api/v1/alerts', alertsRoutes);
+app.use('/api/v1/complaints', complaintsRoutes);
 
 // API info
 app.get('/api/v1', (_req: Request, res: Response) => {
   res.json({
     success: true,
-    message: 'Pharmacy Backend API v1',
+    message: 'MedCare Backend API v1',
     endpoints: {
-      auth: {
-        pharmacySignup: 'POST /api/v1/auth/pharmacy/signup',
-        deliverySignup: 'POST /api/v1/auth/delivery/signup',
-        login: 'POST /api/v1/auth/login',
-        refreshToken: 'POST /api/v1/auth/refresh-token',
-        logout: 'POST /api/v1/auth/logout',
-        profile: 'GET /api/v1/auth/profile'
-      },
-      inventory: '/api/v1/inventory',
+      auth: '/api/v1/auth',
+      users: '/api/v1/users',
+      pharmacies: '/api/v1/pharmacies',
+      pharmacy: '/api/v1/pharmacy',
+      medications: '/api/v1/medications',
+      search: '/api/v1/search',
       orders: '/api/v1/orders',
-      deliveries: '/api/v1/deliveries',
-      messages: '/api/v1/messages',
-      analytics: '/api/v1/analytics',
-      settings: '/api/v1/settings'
+      payments: '/api/v1/payments',
+      prescriptions: '/api/v1/prescriptions',
+      conversations: '/api/v1/conversations',
+      hospitals: '/api/v1/hospitals',
+      alerts: '/api/v1/alerts',
+      complaints: '/api/v1/complaints'
     }
   });
 });
