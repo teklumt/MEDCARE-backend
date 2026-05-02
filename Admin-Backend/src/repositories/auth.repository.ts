@@ -2,30 +2,30 @@ import { User, type IUser } from "../models/User.js";
 import { RefreshToken } from "../models/RefreshToken.js";
 
 export const authRepository = {
-  findActiveAdminByEmail(email: string): Promise<IUser | null> {
-    return User.findOne({ email: email.toLowerCase(), role: "admin", isActive: true });
+  findActiveUserByEmail(email: string): Promise<IUser | null> {
+    return User.findOne({ email: email.toLowerCase(), isActive: true });
   },
 
-  findAdminById(id: string): Promise<IUser | null> {
-    return User.findOne({ _id: id, role: "admin" });
+  findUserById(id: string): Promise<IUser | null> {
+    return User.findOne({ _id: id });
   },
 
-  saveAdmin(admin: IUser): Promise<IUser> {
-    return admin.save();
+  saveUser(user: IUser): Promise<IUser> {
+    return user.save();
   },
 
-  createRefreshToken(adminId: string, tokenHash: string, expiresAt: Date) {
+  createRefreshToken(userId: string, tokenHash: string, expiresAt: Date) {
     return RefreshToken.create({
-      adminId,
+      adminId: userId, // Keep the field name for compatibility
       tokenHash,
       expiresAt,
       isRevoked: false,
     });
   },
 
-  findValidRefreshToken(adminId: string, tokenHash: string) {
+  findValidRefreshToken(userId: string, tokenHash: string) {
     return RefreshToken.findOne({
-      adminId,
+      adminId: userId, // Keep the field name for compatibility
       tokenHash,
       isRevoked: false,
       expiresAt: { $gt: new Date() },
@@ -36,7 +36,7 @@ export const authRepository = {
     await RefreshToken.updateOne({ _id: tokenDocId }, { $set: { isRevoked: true } });
   },
 
-  async revokeByTokenAndAdmin(tokenHash: string, adminId: string): Promise<void> {
-    await RefreshToken.updateMany({ tokenHash, adminId }, { $set: { isRevoked: true } });
+  async revokeByTokenAndUser(tokenHash: string, userId: string): Promise<void> {
+    await RefreshToken.updateMany({ tokenHash, adminId: userId }, { $set: { isRevoked: true } });
   },
 };

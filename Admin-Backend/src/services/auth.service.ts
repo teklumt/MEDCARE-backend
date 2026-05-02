@@ -9,23 +9,23 @@ const refreshTtlMs = 30 * 24 * 60 * 60 * 1000;
 
 export const authService = {
   async login(email: string, password: string, totpCode?: string) {
-    const admin = await authRepository.findActiveAdminByEmail(email);
-    if (!admin) {
+    const user = await authRepository.findActiveUserByEmail(email);
+    if (!user) {
       return { error: { message: "Invalid credentials", code: "INVALID_CREDENTIALS", status: 401 } };
     }
 
-    if (!admin.isActive || admin.isLocked) {
+    if (!user.isActive || user.isLocked) {
       return {
         error: {
           message: "Account unavailable",
           code: "ACCOUNT_UNAVAILABLE",
           status: 403,
-          details: { isActive: admin.isActive, isLocked: admin.isLocked },
+          details: { isActive: user.isActive, isLocked: user.isLocked },
         },
       };
     }
 
-    const isValidPassword = await bcrypt.compare(password, admin.passwordHash);
+    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
       return { error: { message: "Invalid credentials", code: "INVALID_CREDENTIALS", status: 401 } };
     }
@@ -34,28 +34,28 @@ export const authService = {
     void totpCode;
 
     const accessToken = signAccessToken({
-      sub: String(admin._id),
-      role: admin.role,
-      mfa: admin.mfa?.enabled ?? false,
-      permissions: (admin as any).permissions?.length ? (admin as any).permissions : allRolePermissions[admin.role],
+      sub: String(user._id),
+      role: user.role,
+      mfa: user.mfa?.enabled ?? false,
+      permissions: (user as any).permissions?.length ? (user as any).permissions : allRolePermissions[user.role],
     });
-    const refreshToken = signRefreshToken(String(admin._id));
+    const refreshToken = signRefreshToken(String(user._id));
 
-    await authRepository.createRefreshToken(String(admin._id), hashToken(refreshToken), new Date(Date.now() + refreshTtlMs));
+    await authRepository.createRefreshToken(String(user._id), hashToken(refreshToken), new Date(Date.now() + refreshTtlMs));
 
-    (admin as any).lastLoginAt = new Date();
-    (admin as any).refreshToken = hashToken(refreshToken);
-    await authRepository.saveAdmin(admin);
+    (user as any).lastLoginAt = new Date();
+    (user as any).refreshToken = hashToken(refreshToken);
+    await authRepository.saveUser(user);
 
     return {
       data: {
         user: {
-          id: String(admin._id),
-          email: admin.email,
-          username: admin.username,
-          role: admin.role,
-          isActive: admin.isActive,
-          permissions: (admin as any).permissions?.length ? (admin as any).permissions : allRolePermissions[admin.role],
+          id: String(user._id),
+          email: user.email,
+          username: user.username,
+          role: user.role,
+          isActive: user.isActive,
+          permissions: (user as any).permissions?.length ? (user as any).permissions : allRolePermissions[user.role],
         },
         tokens: {
           accessToken,
@@ -74,34 +74,34 @@ export const authService = {
         return { error: { message: "Refresh token invalid", code: "TOKEN_INVALID", status: 401 } };
       }
 
-      const admin = await authRepository.findAdminById(decoded.sub);
-      if (!admin || !admin.isActive || admin.isLocked) {
-        return { error: { message: "Admin unavailable", code: "ADMIN_UNAVAILABLE", status: 401 } };
+      const user = await authRepository.findUserById(decoded.sub);
+      if (!user || !user.isActive || user.isLocked) {
+        return { error: { message: "User unavailable", code: "USER_UNAVAILABLE", status: 401 } };
       }
 
       await authRepository.revokeTokenDoc(String(tokenDoc._id));
 
       const newAccessToken = signAccessToken({
-        sub: String(admin._id),
-        role: admin.role,
-        mfa: admin.mfa?.enabled ?? false,
-        permissions: (admin as any).permissions?.length ? (admin as any).permissions : allRolePermissions[admin.role],
+        sub: String(user._id),
+        role: user.role,
+        mfa: user.mfa?.enabled ?? false,
+        permissions: (user as any).permissions?.length ? (user as any).permissions : allRolePermissions[user.role],
       });
-      const newRefreshToken = signRefreshToken(String(admin._id));
+      const newRefreshToken = signRefreshToken(String(user._id));
 
-      await authRepository.createRefreshToken(String(admin._id), hashToken(newRefreshToken), new Date(Date.now() + refreshTtlMs));
-      (admin as any).refreshToken = hashToken(newRefreshToken);
-      await authRepository.saveAdmin(admin);
+      await authRepository.createRefreshToken(String(user._id), hashToken(newRefreshToken), new Date(Date.now() + refreshTtlMs));
+      (user as any).refreshToken = hashToken(newRefreshToken);
+      await authRepository.saveUser(user);
 
       return { 
         data: { 
           user: {
-            id: String(admin._id),
-            email: admin.email,
-            username: admin.username,
-            role: admin.role,
-            isActive: admin.isActive,
-            permissions: (admin as any).permissions?.length ? (admin as any).permissions : allRolePermissions[admin.role],
+            id: String(user._id),
+            email: user.email,
+            username: user.username,
+            role: user.role,
+            isActive: user.isActive,
+            permissions: (user as any).permissions?.length ? (user as any).permissions : allRolePermissions[user.role],
           },
           tokens: {
             accessToken: newAccessToken, 
@@ -114,18 +114,18 @@ export const authService = {
     }
   },
 
-  async logout(adminId: string, refreshToken: string): Promise<void> {
-    await authRepository.revokeByTokenAndAdmin(hashToken(refreshToken), adminId);
-    const admin = await authRepository.findAdminById(adminId);
-    if (admin) {
-      admin.refreshToken = undefined;
-      await authRepository.saveAdmin(admin);
+  async logout(userId: string, refreshToken: string): Promise<void> {
+    await authRepository.revokeByTokenAndUser(hashToken(refreshToken), userId);
+    const user = await authRepository.findUserById(userId);
+    if (user) {
+      user.refreshToken = undefined;
+      await authRepository.saveUser(user);
     }
   },
 
-  async setupMfa(adminId: string, adminEmail: string) {
+  async setupMfa(userId: string, userEmail: string) {
     const secret = generateSecret();
-    const otpauth = generateURI({ issuer: "MED-CARE Ethiopia", label: adminEmail, secret });
+    const otpauth = generateURI({ issuer: "MED-CARE Ethiopia", label: userEmail, secret });
     const qrCodeDataUrl = await QRCode.toDataURL(otpauth);
 
     return { secret, otpauth, qrCodeDataUrl };
