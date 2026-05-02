@@ -11,7 +11,7 @@ import { errorResponse } from "../../utils/response.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
-reportsRouter.use(requireRole("super_admin", "admin", "moderator"));
+reportsRouter.use(requireRole("admin"));
 
 reportsRouter.get("/export", async (req, res) => {
   const { type } = req.query as { type?: string };
@@ -25,7 +25,7 @@ reportsRouter.get("/export", async (req, res) => {
   else if (type === "pharmacies") rows = await Pharmacy.find().lean();
   else if (type === "orders") rows = await Order.find().lean();
   else if (type === "drivers") rows = await Driver.find().lean();
-  else if (type === "licenses") rows = await Pharmacy.find({}, { businessName: 1, ownerName: 1, email: 1, license: 1 }).lean();
+  else if (type === "licenses") rows = await Pharmacy.find({}, { businessName: 1, ownerId: 1, email: 1, license: 1, verification: 1 }).lean();
   else if (type === "alerts") rows = await DiseaseAlert.find().lean();
   else return errorResponse(res, "Invalid report type", "VALIDATION_ERROR", 422);
 

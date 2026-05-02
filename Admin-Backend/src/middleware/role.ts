@@ -18,7 +18,7 @@ export const requirePermission = (...permissions: string[]) =>
       return errorResponse(res, "Unauthorized", "AUTH_REQUIRED", 401);
     }
 
-    if (req.admin.role === "super_admin" || req.admin.permissions.includes("*")) {
+    if (req.admin.permissions.includes("*")) {
       return next();
     }
 

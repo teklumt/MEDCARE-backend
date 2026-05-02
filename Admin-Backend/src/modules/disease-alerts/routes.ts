@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { body, query } from "express-validator";
-import { DiseaseAlert } from "../../models/DiseaseAlert.js";
+import { HealthAlert } from "../../models/HealthAlert.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/role.js";
 import { validateRequest } from "../../middleware/validate.js";
@@ -12,72 +12,75 @@ diseaseAlertRouter.use(requireAuth);
 
 diseaseAlertRouter.post(
   "/",
-  requireRole("super_admin", "admin"),
-  body("title").isString().isLength({ min: 3 }),
-  body("description").isString().isLength({ min: 5 }),
-  body("alertType").isIn(["malaria", "cholera", "marburg", "other"]),
-  body("severity").isIn(["low", "moderate", "high", "critical"]),
+  requireRole("admin"),
+  body("type").isIn(["Disease Outbreak", "Medication Recall", "Emergency Health Advisory"]),
+  body("region").isString().isLength({ min: 2 }),
+  body("message").isString().isLength({ min: 5 }),
+  body("details").optional().isString(),
+  body("youtubeLink").optional().isString(),
   validateRequest,
   async (req, res) => {
-    const payload = req.body;
-    const alert = await DiseaseAlert.create({
+    const payload = req.body as {
+      type: "Disease Outbreak" | "Medication Recall" | "Emergency Health Advisory";
+      region: string;
+      message: string;
+      details?: string;
+      youtubeLink?: string;
+    };
+
+    const alert = await HealthAlert.create({
       ...payload,
-      createdBy: req.admin!.id,
-      sentCount: 100,
-      deliveredCount: 92,
+      createdById: req.admin!.id as any,
       isActive: true,
     });
 
-    await logAudit(req, "alert.create", "DiseaseAlert", String(alert._id), {
-      regions: payload.affectedRegions?.length ?? 0,
-    });
-
+    await logAudit(req, "alert.create", "HealthAlert", String(alert._id));
     return successResponse(res, alert, undefined, 201);
   },
 );
 
-diseaseAlertRouter.get("/", requireRole("super_admin", "admin", "moderator"), async (req, res) => {
-  const { severity, alertType, isActive } = req.query as Record<string, string>;
-  const filter: Record<string, unknown> = {};
-  if (severity) filter.severity = severity;
-  if (alertType) filter.alertType = alertType;
-  if (typeof isActive !== "undefined") filter.isActive = isActive === "true";
+diseaseAlertRouter.get(
+  "/",
+  requireRole("admin"),
+  query("type").optional().isString(),
+  query("region").optional().isString(),
+  query("isActive").optional().isBoolean(),
+  validateRequest,
+  async (req, res) => {
+    const { type, region, isActive } = req.query as Record<string, string>;
+    const filter: Record<string, unknown> = {};
+    if (type) filter.type = type;
+    if (region) filter.region = region;
+    if (typeof isActive !== "undefined") filter.isActive = isActive === "true";
 
-  const alerts = await DiseaseAlert.find(filter).sort({ createdAt: -1 }).lean();
-  return successResponse(res, alerts);
-});
+    const alerts = await HealthAlert.find(filter).sort({ createdAt: -1 }).lean();
+    return successResponse(res, alerts);
+  },
+);
 
 diseaseAlertRouter.patch(
   "/:id",
-  requireRole("super_admin", "admin"),
-  body("title").optional().isString(),
-  body("description").optional().isString(),
+  requireRole("admin"),
+  body("type").optional().isString(),
+  body("region").optional().isString(),
+  body("message").optional().isString(),
+  body("details").optional().isString(),
+  body("youtubeLink").optional().isString(),
+  body("isActive").optional().isBoolean(),
   validateRequest,
   async (req, res) => {
-    const alert = await DiseaseAlert.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true }).lean();
+    const alert = await HealthAlert.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true }).lean();
     if (!alert) return errorResponse(res, "Alert not found", "NOT_FOUND", 404);
 
-    await logAudit(req, "alert.update", "DiseaseAlert", String(alert._id));
+    await logAudit(req, "alert.update", "HealthAlert", String(alert._id));
     return successResponse(res, alert);
   },
 );
 
-diseaseAlertRouter.delete("/:id", requireRole("super_admin", "admin"), async (req, res) => {
-  const alert = await DiseaseAlert.findByIdAndUpdate(req.params.id, { $set: { isActive: false } }, { new: true }).lean();
+diseaseAlertRouter.delete("/:id", requireRole("admin"), async (req, res) => {
+  const alert = await HealthAlert.findByIdAndUpdate(req.params.id, { $set: { isActive: false } }, { new: true }).lean();
   if (!alert) return errorResponse(res, "Alert not found", "NOT_FOUND", 404);
 
-  await logAudit(req, "alert.deactivate", "DiseaseAlert", String(alert._id));
+  await logAudit(req, "alert.deactivate", "HealthAlert", String(alert._id));
   return successResponse(res, { id: alert._id, isActive: alert.isActive });
-});
-
-diseaseAlertRouter.get("/:id/stats", requireRole("super_admin", "admin", "moderator"), async (req, res) => {
-  const alert = await DiseaseAlert.findById(req.params.id).lean();
-  if (!alert) return errorResponse(res, "Alert not found", "NOT_FOUND", 404);
-
-  return successResponse(res, {
-    id: alert._id,
-    sentCount: alert.sentCount,
-    deliveredCount: alert.deliveredCount,
-    deliveryRate: alert.sentCount ? Number(((alert.deliveredCount / alert.sentCount) * 100).toFixed(2)) : 0,
-  });
 });

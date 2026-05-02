@@ -1,26 +1,26 @@
-import { Admin, type IAdmin } from "../models/Admin.js";
+import { User, type IUser } from "../models/User.js";
 
 export const adminRepository = {
-  findByEmail(email: string): Promise<IAdmin | null> {
-    return Admin.findOne({ email: email.toLowerCase(), deletedAt: { $exists: false } });
+  findByEmail(email: string): Promise<IUser | null> {
+    return User.findOne({ email: email.toLowerCase(), role: "admin" });
   },
 
-  create(payload: Partial<IAdmin>): Promise<IAdmin> {
-    return Admin.create(payload);
+  create(payload: Partial<IUser>): Promise<IUser> {
+    return User.create(payload);
   },
 
-  findById(id: string): Promise<IAdmin | null> {
-    return Admin.findById(id);
+  findById(id: string): Promise<IUser | null> {
+    return User.findById(id);
   },
 
-  save(admin: IAdmin): Promise<IAdmin> {
+  save(admin: IUser): Promise<IUser> {
     return admin.save();
   },
 
   listPaginated(filter: Record<string, unknown>, skip: number, limit: number) {
     return Promise.all([
-      Admin.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      Admin.countDocuments(filter),
+      User.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      User.countDocuments(filter),
     ]);
   },
 };

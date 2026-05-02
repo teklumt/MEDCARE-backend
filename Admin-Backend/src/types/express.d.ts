@@ -1,11 +1,11 @@
-import type { AdminRole } from "./auth.js";
+import type { UserRole } from "./auth.js";
 
 declare global {
   namespace Express {
     interface Request {
       admin?: {
         id: string;
-        role: AdminRole;
+        role: UserRole;
         mfaEnabled: boolean;
         permissions: string[];
       };

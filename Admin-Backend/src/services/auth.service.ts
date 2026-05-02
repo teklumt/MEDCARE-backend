@@ -3,7 +3,7 @@ import { generateSecret, generateURI, verify } from "otplib";
 import QRCode from "qrcode";
 import { authRepository } from "../repositories/auth.repository.js";
 import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/tokens.js";
-import { rolePermissions } from "../types/auth.js";
+import { allRolePermissions } from "../types/auth.js";
 
 const refreshTtlMs = 30 * 24 * 60 * 60 * 1000;
 
@@ -14,13 +14,13 @@ export const authService = {
       return { error: { message: "Invalid credentials", code: "INVALID_CREDENTIALS", status: 401 } };
     }
 
-    if (admin.status === "suspended") {
+    if (!admin.isActive || admin.isLocked) {
       return {
         error: {
-          message: "Account suspended",
-          code: "ACCOUNT_SUSPENDED",
+          message: "Account unavailable",
+          code: "ACCOUNT_UNAVAILABLE",
           status: 403,
-          details: { reason: admin.suspendedReason },
+          details: { isActive: admin.isActive, isLocked: admin.isLocked },
         },
       };
     }
@@ -36,22 +36,31 @@ export const authService = {
     const accessToken = signAccessToken({
       sub: String(admin._id),
       role: admin.role,
-      mfa: admin.mfa.enabled,
-      permissions: admin.permissions?.length ? admin.permissions : rolePermissions[admin.role],
+      mfa: admin.mfa?.enabled ?? false,
+      permissions: (admin as any).permissions?.length ? (admin as any).permissions : allRolePermissions[admin.role],
     });
     const refreshToken = signRefreshToken(String(admin._id));
 
     await authRepository.createRefreshToken(String(admin._id), hashToken(refreshToken), new Date(Date.now() + refreshTtlMs));
 
-    admin.lastLoginAt = new Date();
-    admin.refreshToken = hashToken(refreshToken);
+    (admin as any).lastLoginAt = new Date();
+    (admin as any).refreshToken = hashToken(refreshToken);
     await authRepository.saveAdmin(admin);
 
     return {
       data: {
-        accessToken,
-        refreshToken,
-        admin,
+        user: {
+          id: String(admin._id),
+          email: admin.email,
+          username: admin.username,
+          role: admin.role,
+          isActive: admin.isActive,
+          permissions: (admin as any).permissions?.length ? (admin as any).permissions : allRolePermissions[admin.role],
+        },
+        tokens: {
+          accessToken,
+          refreshToken,
+        },
       },
     };
   },
@@ -66,7 +75,7 @@ export const authService = {
       }
 
       const admin = await authRepository.findAdminById(decoded.sub);
-      if (!admin || admin.status === "suspended") {
+      if (!admin || !admin.isActive || admin.isLocked) {
         return { error: { message: "Admin unavailable", code: "ADMIN_UNAVAILABLE", status: 401 } };
       }
 
@@ -75,16 +84,31 @@ export const authService = {
       const newAccessToken = signAccessToken({
         sub: String(admin._id),
         role: admin.role,
-        mfa: admin.mfa.enabled,
-        permissions: admin.permissions?.length ? admin.permissions : rolePermissions[admin.role],
+        mfa: admin.mfa?.enabled ?? false,
+        permissions: (admin as any).permissions?.length ? (admin as any).permissions : allRolePermissions[admin.role],
       });
       const newRefreshToken = signRefreshToken(String(admin._id));
 
       await authRepository.createRefreshToken(String(admin._id), hashToken(newRefreshToken), new Date(Date.now() + refreshTtlMs));
-      admin.refreshToken = hashToken(newRefreshToken);
+      (admin as any).refreshToken = hashToken(newRefreshToken);
       await authRepository.saveAdmin(admin);
 
-      return { data: { accessToken: newAccessToken, refreshToken: newRefreshToken, admin } };
+      return { 
+        data: { 
+          user: {
+            id: String(admin._id),
+            email: admin.email,
+            username: admin.username,
+            role: admin.role,
+            isActive: admin.isActive,
+            permissions: (admin as any).permissions?.length ? (admin as any).permissions : allRolePermissions[admin.role],
+          },
+          tokens: {
+            accessToken: newAccessToken, 
+            refreshToken: newRefreshToken,
+          },
+        } 
+      };
     } catch {
       return { error: { message: "Refresh token invalid", code: "TOKEN_INVALID", status: 401 } };
     }

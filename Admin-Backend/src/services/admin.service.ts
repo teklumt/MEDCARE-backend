@@ -3,10 +3,10 @@ import { adminRepository } from "../repositories/admin.repository.js";
 
 export const adminService = {
   async createAdmin(payload: {
-    fullName: string;
+    username: string;
     email: string;
+    phone: string;
     password: string;
-    role: "admin" | "moderator";
     permissions?: string[];
     createdBy?: string;
   }) {
@@ -17,13 +17,14 @@ export const adminService = {
 
     const passwordHash = await bcrypt.hash(payload.password, 12);
     const admin = await adminRepository.create({
-      fullName: payload.fullName,
+      username: payload.username,
       email: payload.email.toLowerCase(),
+      phone: payload.phone,
       passwordHash,
-      role: payload.role,
-      permissions: payload.permissions ?? [],
+      role: "admin",
+      permissions: payload.permissions ?? ["*"],
       createdBy: payload.createdBy as any,
-    });
+    } as any);
 
     return { data: admin };
   },
@@ -33,7 +34,7 @@ export const adminService = {
     return { items, total };
   },
 
-  async updateRole(id: string, role: "super_admin" | "admin" | "moderator") {
+  async updateRole(id: string, role: "admin") {
     const admin = await adminRepository.findById(id);
     if (!admin) {
       return { error: { message: "Admin not found", code: "NOT_FOUND", status: 404 } };
@@ -50,8 +51,8 @@ export const adminService = {
       return { error: { message: "Admin not found", code: "NOT_FOUND", status: 404 } };
     }
 
-    admin.status = "suspended";
-    admin.suspendedReason = reason;
+    (admin as any).isActive = false;
+    (admin as any).suspendedReason = reason;
     await adminRepository.save(admin);
     return { data: admin };
   },
@@ -62,7 +63,7 @@ export const adminService = {
       return { error: { message: "Admin not found", code: "NOT_FOUND", status: 404 } };
     }
 
-    admin.status = "suspended";
+    (admin as any).isActive = false;
     await adminRepository.save(admin);
     return { data: admin };
   },

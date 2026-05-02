@@ -1,11 +1,11 @@
 import crypto from "crypto";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { env } from "../config/env.js";
-import type { AdminRole } from "../types/auth.js";
+import type { AdminRole, UserRole } from "../types/auth.js";
 
 export type AccessPayload = {
   sub: string;
-  role: AdminRole;
+  role: UserRole;
   mfa: boolean;
   permissions: string[];
 };

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { EndUser } from "../../models/EndUser.js";
+import { User } from "../../models/User.js";
 import { Pharmacy } from "../../models/Pharmacy.js";
 import { Order } from "../../models/Order.js";
 import { Driver } from "../../models/Driver.js";
@@ -10,11 +10,11 @@ import { successResponse } from "../../utils/response.js";
 
 export const analyticsRouter = Router();
 analyticsRouter.use(requireAuth);
-analyticsRouter.use(requireRole("super_admin", "admin", "moderator"));
+analyticsRouter.use(requireRole("admin"));
 
 analyticsRouter.get("/overview", async (_req, res) => {
   const [users, pharmacies, drivers, ordersAgg] = await Promise.all([
-    EndUser.countDocuments(),
+    User.countDocuments(),
     Pharmacy.countDocuments(),
     Driver.countDocuments(),
     Order.aggregate([{ $group: { _id: null, totalOrders: { $sum: 1 }, revenue: { $sum: "$totalAmount" } } }]),
@@ -30,15 +30,15 @@ analyticsRouter.get("/overview", async (_req, res) => {
 });
 
 analyticsRouter.get("/users", async (_req, res) => {
-  const [regionBreakdown, banRates, signups] = await Promise.all([
-    EndUser.aggregate([{ $group: { _id: "$region", count: { $sum: 1 } } }]),
-    EndUser.aggregate([{ $group: { _id: "$ban.isBanned", count: { $sum: 1 } } }]),
-    EndUser.aggregate([
+  const [roleBreakdown, languageBreakdown, signups] = await Promise.all([
+    User.aggregate([{ $group: { _id: "$role", count: { $sum: 1 } } }]),
+    User.aggregate([{ $group: { _id: "$language", count: { $sum: 1 } } }]),
+    User.aggregate([
       { $group: { _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } }, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]),
   ]);
-  return successResponse(res, { signupsOverTime: signups, banRates, regionBreakdown });
+  return successResponse(res, { signupsOverTime: signups, roleBreakdown, languageBreakdown });
 });
 
 analyticsRouter.get("/pharmacies", async (_req, res) => {
@@ -47,15 +47,15 @@ analyticsRouter.get("/pharmacies", async (_req, res) => {
       {
         $group: {
           _id: null,
-          active: { $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] } },
-          suspended: { $sum: { $cond: [{ $eq: ["$status", "suspended"] }, 1, 0] } },
+          active: { $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] } },
+          inactive: { $sum: { $cond: [{ $eq: ["$isActive", false] }, 1, 0] } },
         },
       },
     ]),
     Order.aggregate([{ $group: { _id: "$pharmacyId", orders: { $sum: 1 } } }, { $sort: { orders: -1 } }]),
   ]);
 
-  return successResponse(res, { status: status[0] ?? { active: 0, suspended: 0 }, ordersPerPharmacy });
+  return successResponse(res, { status: status[0] ?? { active: 0, inactive: 0 }, ordersPerPharmacy });
 });
 
 analyticsRouter.get("/orders", async (_req, res) => {
@@ -77,14 +77,14 @@ analyticsRouter.get("/orders", async (_req, res) => {
 });
 
 analyticsRouter.get("/licenses", async (_req, res) => {
-  const counts = await Pharmacy.aggregate([{ $group: { _id: "$license.status", count: { $sum: 1 } } }]);
+  const counts = await Pharmacy.aggregate([{ $group: { _id: "$verification.status", count: { $sum: 1 } } }]);
   const avgReview = await Pharmacy.aggregate([
-    { $match: { "license.reviewedAt": { $ne: null } } },
+    { $match: { "verification.verifiedAt": { $ne: null } } },
     {
       $project: {
         reviewHours: {
           $divide: [
-            { $subtract: ["$license.reviewedAt", "$createdAt"] },
+            { $subtract: ["$verification.verifiedAt", "$createdAt"] },
             1000 * 60 * 60,
           ],
         },
@@ -97,8 +97,9 @@ analyticsRouter.get("/licenses", async (_req, res) => {
 });
 
 analyticsRouter.get("/drivers", async (_req, res) => {
-  const [activeDrivers, deliveryStats] = await Promise.all([
-    Driver.countDocuments({ status: { $in: ["available", "on_delivery", "offline"] }, isSuspended: false }),
+  const [totalAgents, onlineAgents, deliveryStats] = await Promise.all([
+    Driver.countDocuments(),
+    Driver.countDocuments({ isOnline: true }),
     Order.aggregate([
       {
         $group: {
@@ -113,13 +114,13 @@ analyticsRouter.get("/drivers", async (_req, res) => {
   const totalOrders = deliveryStats[0]?.totalOrders ?? 0;
   const successRate = totalOrders ? ((deliveryStats[0]?.totalDeliveries ?? 0) / totalOrders) * 100 : 0;
 
-  return successResponse(res, { activeDrivers, deliverySuccessRate: Number(successRate.toFixed(2)) });
+  return successResponse(res, { totalAgents, onlineAgents, deliverySuccessRate: Number(successRate.toFixed(2)) });
 });
 
 analyticsRouter.get("/alerts", async (_req, res) => {
   const [totalAlerts, regionMentions] = await Promise.all([
     DiseaseAlert.countDocuments(),
-    DiseaseAlert.aggregate([{ $unwind: "$affectedRegions" }, { $group: { _id: "$affectedRegions", count: { $sum: 1 } } }]),
+    DiseaseAlert.aggregate([{ $group: { _id: "$region", count: { $sum: 1 } } }]),
   ]);
 
   return successResponse(res, { totalAlerts, regionMentions });

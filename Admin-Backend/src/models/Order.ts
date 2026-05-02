@@ -1,126 +1,144 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 
 export interface IOrder extends Document {
-  orderId?: string;
+  ref: string;
   patientId: Types.ObjectId;
   pharmacyId: Types.ObjectId;
-  driverId?: Types.ObjectId | null;
-  items: {
-    medicineId?: Types.ObjectId;
-    medicineName?: string;
-    quantity: number;
-    priceAtOrder: number;
-  }[];
-  totalAmount: number;
-  delivery: {
-    method: "pickup" | "delivery";
-    address?: {
-      region?: string;
-      city?: string;
-      street?: string;
-      coordinates?: { lat?: number; lng?: number };
-    };
+  deliveryAgentId?: Types.ObjectId | null;
+  paymentId?: Types.ObjectId | null;
+  deliveryMethod: "pickup" | "delivery";
+  deliveryAddress?: {
+    recipientName: string;
+    phone: string;
+    street: string;
+    subCity: string;
+    city: string;
+    additionalInfo?: string;
   };
-  payment: {
-    method: "chapa" | "cash_on_delivery";
-    status: "pending" | "paid" | "failed" | "refunded";
-    transactionId?: string;
-  };
+  deliveryInstructions?: string;
+  prescriptionUploadId?: Types.ObjectId | null;
+  prescriptionVerified: boolean;
   status:
     | "pending"
-    | "accepted"
-    | "rejected"
+    | "confirmed"
     | "preparing"
     | "ready"
-    | "out_for_delivery"
+    | "dispatched"
     | "delivered"
-    | "cancelled";
-  statusHistory?: {
-    status?: string;
-    updatedBy?: Types.ObjectId;
-    updatedByRole?: string;
-    note?: string;
-    timestamp?: Date;
+    | "cancelled"
+    | "rejected";
+  paymentMethod: "chapa" | "cod";
+  paymentStatus:
+    | "pending"
+    | "initiated"
+    | "success"
+    | "failed"
+    | "refunded"
+    | "reversed"
+    | "cod_pending"
+    | "cod_collected";
+  items: {
+    medicationId: Types.ObjectId;
+    medicationName: string;
+    genericName?: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    requiresPrescription: boolean;
   }[];
-  notes?: {
-    patient?: string;
-    pharmacist?: string;
-  };
-  deliveredAt?: Date;
-  cancelledAt?: Date;
-  cancelReason?: string;
+  subtotal: number;
+  deliveryFee: number;
+  discount: number;
+  totalAmount: number;
+  statusHistory: {
+    status: string;
+    actorId?: Types.ObjectId;
+    note?: string;
+    createdAt: Date;
+  }[];
+  estimatedReadyAt?: Date;
+  estimatedDeliveryAt?: Date;
+  deliveredAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const orderSchema = new Schema<IOrder>(
   {
-    orderId: { type: String, unique: true, index: true },
+    ref: { type: String, required: true, unique: true, index: true },
     patientId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     pharmacyId: { type: Schema.Types.ObjectId, ref: "Pharmacy", required: true, index: true },
-    driverId: { type: Schema.Types.ObjectId, ref: "Driver", default: null, index: true },
-    items: [
-      {
-        medicineId: { type: Schema.Types.ObjectId, ref: "Medicine" },
-        medicineName: { type: String },
-        quantity: { type: Number, required: true },
-        priceAtOrder: { type: Number, required: true },
-      },
-    ],
-    totalAmount: { type: Number, required: true },
-    delivery: {
-      method: { type: String, enum: ["pickup", "delivery"], required: true },
-      address: {
-        region: { type: String },
-        city: { type: String },
-        street: { type: String },
-        coordinates: {
-          lat: { type: Number },
-          lng: { type: Number },
-        },
-      },
+    deliveryAgentId: { type: Schema.Types.ObjectId, ref: "DeliveryAgent", default: null, index: true },
+    paymentId: { type: Schema.Types.ObjectId, ref: "Payment", default: null, index: true },
+    deliveryMethod: { type: String, enum: ["pickup", "delivery"], required: true },
+    deliveryAddress: {
+      recipientName: { type: String },
+      phone: { type: String },
+      street: { type: String },
+      subCity: { type: String },
+      city: { type: String },
+      additionalInfo: { type: String },
     },
-    payment: {
-      method: { type: String, enum: ["chapa", "cash_on_delivery"], required: true },
-      status: { type: String, enum: ["pending", "paid", "failed", "refunded"], default: "pending" },
-      transactionId: { type: String },
-    },
+    deliveryInstructions: { type: String },
+    prescriptionUploadId: { type: Schema.Types.ObjectId, ref: "PrescriptionUpload", default: null },
+    prescriptionVerified: { type: Boolean, default: false },
     status: {
       type: String,
-      enum: ["pending", "accepted", "rejected", "preparing", "ready", "out_for_delivery", "delivered", "cancelled"],
+      enum: ["pending", "confirmed", "preparing", "ready", "dispatched", "delivered", "cancelled", "rejected"],
       default: "pending",
       index: true,
     },
+    paymentMethod: { type: String, enum: ["chapa", "cod"], default: "chapa" },
+    paymentStatus: {
+      type: String,
+      enum: [
+        "pending",
+        "initiated",
+        "success",
+        "failed",
+        "refunded",
+        "reversed",
+        "cod_pending",
+        "cod_collected",
+      ],
+      default: "pending",
+      index: true,
+    },
+    items: [
+      {
+        medicationId: { type: Schema.Types.ObjectId, ref: "Medication" },
+        medicationName: { type: String, required: true },
+        genericName: { type: String },
+        quantity: { type: Number, required: true },
+        unitPrice: { type: Number, required: true },
+        subtotal: { type: Number, required: true },
+        requiresPrescription: { type: Boolean, default: false },
+      },
+    ],
+    subtotal: { type: Number, required: true },
+    deliveryFee: { type: Number, default: 0 },
+    discount: { type: Number, default: 0 },
+    totalAmount: { type: Number, required: true },
     statusHistory: [
       {
         status: { type: String },
-        updatedBy: { type: Schema.Types.ObjectId },
-        updatedByRole: { type: String },
+        actorId: { type: Schema.Types.ObjectId },
         note: { type: String },
-        timestamp: { type: Date, default: Date.now },
+        createdAt: { type: Date, default: Date.now },
       },
     ],
-    notes: {
-      patient: { type: String },
-      pharmacist: { type: String },
-    },
+    estimatedReadyAt: { type: Date },
+    estimatedDeliveryAt: { type: Date },
     deliveredAt: { type: Date },
-    cancelledAt: { type: Date },
-    cancelReason: { type: String },
   },
-  { timestamps: { createdAt: true, updatedAt: true }, strict: false, minimize: false },
+  { timestamps: true, strict: false, minimize: false },
 );
 
-orderSchema.pre("save", function () {
-  if (!this.orderId) {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-    this.orderId = `MC-${date}-${rand}`;
-  }
-});
-
-orderSchema.index({ patientId: 1 });
-orderSchema.index({ pharmacyId: 1 });
-orderSchema.index({ driverId: 1 });
-orderSchema.index({ status: 1 });
-orderSchema.index({ createdAt: -1 });
+orderSchema.index({ ref: 1 }, { unique: true });
+orderSchema.index({ patientId: 1, createdAt: -1 });
+orderSchema.index({ pharmacyId: 1, status: 1 });
+orderSchema.index({ deliveryAgentId: 1, status: 1 });
+orderSchema.index({ paymentId: 1 });
+orderSchema.index({ status: 1, createdAt: -1 });
 
 export const Order = mongoose.model<IOrder>("Order", orderSchema);

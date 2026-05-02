@@ -14,29 +14,39 @@ export const adminManagementRouter = Router();
 adminManagementRouter.post(
   "/create",
   requireAuth,
-  requireRole("super_admin"),
-  body("fullName").isString().isLength({ min: 2 }),
+  requireRole("admin"),
+  body("username").optional().isString().isLength({ min: 2 }),
+  body("fullName").optional().isString().isLength({ min: 2 }),
   body("email").isEmail(),
+  body("phone").isString().isLength({ min: 6 }),
   body("password").isString().isLength({ min: 8 }),
-  body("role").isIn(["admin", "moderator"]),
   validateRequest,
   async (req, res) => {
-    const { fullName, email, password, role, permissions } = req.body as {
-      fullName: string;
+    const { username, fullName, email, phone, password, permissions } = req.body as {
+      username?: string;
+      fullName?: string;
       email: string;
+      phone: string;
       password: string;
-      role: "admin" | "moderator";
       permissions?: string[];
     };
 
-    const result = await adminService.createAdmin({ fullName, email, password, role, permissions, createdBy: req.admin?.id });
+    const resolvedUsername = username ?? fullName ?? email.split("@")[0];
+    const result = await adminService.createAdmin({
+      username: resolvedUsername,
+      email,
+      phone,
+      password,
+      permissions,
+      createdBy: req.admin?.id,
+    });
     if (result.error) {
       return errorResponse(res, result.error.message, result.error.code, result.error.status);
     }
 
     const admin = result.data!;
 
-    await logAudit(req, "admin.create", "Admin", String(admin._id), { role });
+    await logAudit(req, "admin.create", "User", String(admin._id), { role: admin.role });
     return successResponse(res, { id: admin._id, email: admin.email, role: admin.role }, undefined, 201);
   },
 );
@@ -44,10 +54,10 @@ adminManagementRouter.post(
 adminManagementRouter.get(
   "/",
   requireAuth,
-  requireRole("super_admin"),
+  requireRole("admin"),
   query("page").optional().isInt({ min: 1 }),
   query("limit").optional().isInt({ min: 1, max: 100 }),
-  query("role").optional().isIn(["super_admin", "admin", "moderator"]),
+  query("role").optional().isIn(["admin"]),
   validateRequest,
   async (req, res) => {
     const { page, limit, role } = req.query as { page?: string; limit?: string; role?: string };
@@ -55,6 +65,7 @@ adminManagementRouter.get(
 
     const filter: Record<string, unknown> = {};
     if (role) filter.role = role;
+    if (!role) filter.role = "admin";
 
     const { items, total } = await adminService.listAdmins(filter, skip, l);
 
@@ -65,12 +76,12 @@ adminManagementRouter.get(
 adminManagementRouter.patch(
   "/:id/role",
   requireAuth,
-  requireRole("super_admin"),
-  body("role").isIn(["super_admin", "admin", "moderator"]),
+  requireRole("admin"),
+  body("role").isIn(["admin"]),
   validateRequest,
   async (req, res) => {
     const id = String(req.params.id);
-    const { role } = req.body as { role: "super_admin" | "admin" | "moderator" };
+    const { role } = req.body as { role: "admin" };
 
     const result = await adminService.updateRole(id, role);
     if (result.error) {
@@ -79,7 +90,7 @@ adminManagementRouter.patch(
 
     const admin = result.data!;
 
-    await logAudit(req, "admin.role.update", "Admin", String(admin._id), { role });
+    await logAudit(req, "admin.role.update", "User", String(admin._id), { role });
     return successResponse(res, { id: admin._id, role: admin.role });
   },
 );
@@ -87,7 +98,7 @@ adminManagementRouter.patch(
 adminManagementRouter.patch(
   "/:id/suspend",
   requireAuth,
-  requireRole("super_admin"),
+  requireRole("admin"),
   requireMFA,
   body("reason").isString().isLength({ min: 3 }),
   validateRequest,
@@ -102,12 +113,12 @@ adminManagementRouter.patch(
 
     const admin = result.data!;
 
-    await logAudit(req, "admin.suspend", "Admin", String(admin._id), { reason });
-    return successResponse(res, { id: admin._id, status: admin.status, reason });
+    await logAudit(req, "admin.suspend", "User", String(admin._id), { reason });
+    return successResponse(res, { id: admin._id, isActive: admin.isActive, reason });
   },
 );
 
-adminManagementRouter.delete("/:id", requireAuth, requireRole("super_admin"), requireMFA, async (req, res) => {
+adminManagementRouter.delete("/:id", requireAuth, requireRole("admin"), requireMFA, async (req, res) => {
   const id = String(req.params.id);
   const result = await adminService.softDelete(id);
   if (result.error) {
@@ -116,6 +127,6 @@ adminManagementRouter.delete("/:id", requireAuth, requireRole("super_admin"), re
 
   const admin = result.data!;
 
-  await logAudit(req, "admin.delete.soft", "Admin", String(admin._id));
+  await logAudit(req, "admin.delete.soft", "User", String(admin._id));
   return successResponse(res, { id: admin._id, deleted: true });
 });

@@ -2,25 +2,22 @@ import mongoose, { Document, Schema, Types } from "mongoose";
 
 export interface IMedicine extends Document {
   pharmacyId: Types.ObjectId;
-  drugName: string;
+  name: string;
   genericName?: string;
-  brand?: string;
   category?: string;
-  imageUrl?: string;
-  stock: {
-    quantity: number;
-    unit?: "tablet" | "capsule" | "syrup" | "injection" | "cream" | "drops" | "other";
-    lowThreshold?: number;
-    batchNumber?: string;
-    expiryDate?: Date;
-  };
-  pricing: {
-    costPrice?: number;
-    sellingPrice: number;
-  };
+  dosageForm?: string;
+  strength?: string;
+  manufacturer?: string;
+  batchNumber?: string;
+  expiryDate?: Date;
+  price: number;
+  stockQuantity: number;
+  lowStockThreshold: number;
+  stockStatus: "adequate" | "low_stock" | "out_of_stock";
   requiresPrescription: boolean;
-  isAvailable: boolean;
-  lastRestockedAt?: Date;
+  imageUrl?: string;
+  description?: string;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,31 +25,34 @@ export interface IMedicine extends Document {
 const medicineSchema = new Schema<IMedicine>(
   {
     pharmacyId: { type: Schema.Types.ObjectId, ref: "Pharmacy", required: true, index: true },
-    drugName: { type: String, required: true },
+    name: { type: String, required: true },
     genericName: { type: String },
-    brand: { type: String },
     category: { type: String },
-    imageUrl: { type: String },
-    stock: {
-      quantity: { type: Number, required: true, default: 0 },
-      unit: { type: String, enum: ["tablet", "capsule", "syrup", "injection", "cream", "drops", "other"] },
-      lowThreshold: { type: Number, default: 10 },
-      batchNumber: { type: String },
-      expiryDate: { type: Date },
-    },
-    pricing: {
-      costPrice: { type: Number },
-      sellingPrice: { type: Number, required: true },
+    dosageForm: { type: String },
+    strength: { type: String },
+    manufacturer: { type: String },
+    batchNumber: { type: String },
+    expiryDate: { type: Date },
+    price: { type: Number, required: true },
+    stockQuantity: { type: Number, required: true, default: 0 },
+    lowStockThreshold: { type: Number, default: 10 },
+    stockStatus: {
+      type: String,
+      enum: ["adequate", "low_stock", "out_of_stock"],
+      default: "adequate",
+      index: true,
     },
     requiresPrescription: { type: Boolean, default: false },
-    isAvailable: { type: Boolean, default: true },
-    lastRestockedAt: { type: Date },
+    imageUrl: { type: String },
+    description: { type: String },
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true, strict: false, minimize: false },
 );
 
-medicineSchema.index({ pharmacyId: 1 });
-medicineSchema.index({ drugName: "text", genericName: "text" });
-medicineSchema.index({ "stock.expiryDate": 1 });
+medicineSchema.index({ pharmacyId: 1, stockStatus: 1 });
+medicineSchema.index({ pharmacyId: 1, category: 1 });
+medicineSchema.index({ name: "text", genericName: "text" });
+medicineSchema.index({ expiryDate: 1 });
 
-export const Medicine = mongoose.model<IMedicine>("Medicine", medicineSchema);
+export const Medicine = mongoose.model<IMedicine>("Medication", medicineSchema);

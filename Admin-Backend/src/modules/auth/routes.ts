@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { Admin } from "../../models/Admin.js";
+import { User } from "../../models/User.js";
 import { authRateLimiter } from "../../middleware/rateLimiter.js";
 import { validateRequest } from "../../middleware/validate.js";
 import { requireAuth } from "../../middleware/auth.js";
@@ -25,20 +25,13 @@ authAdminRouter.post(
       return errorResponse(res, result.error.message, result.error.code, result.error.status, result.error.details);
     }
 
-    const { accessToken, refreshToken, admin } = result.data!;
+    const { user, tokens } = result.data!;
 
-    await logAudit(req, "auth.login", "Admin", String(admin._id), { role: admin.role });
+    await logAudit(req, "auth.login", "User", user.id, { role: user.role });
 
     return successResponse(res, {
-      accessToken,
-      refreshToken,
-      admin: {
-        id: admin._id,
-        fullName: admin.fullName,
-        email: admin.email,
-        role: admin.role,
-        mfaEnabled: admin.mfa.enabled,
-      },
+      user,
+      tokens,
     });
   },
 );
@@ -56,7 +49,9 @@ authAdminRouter.post(
       return errorResponse(res, result.error.message, result.error.code, result.error.status);
     }
 
-    return successResponse(res, { accessToken: result.data!.accessToken, refreshToken: result.data!.refreshToken });
+    const { user, tokens } = result.data!;
+
+    return successResponse(res, { user, tokens });
   },
 );
 
@@ -69,17 +64,17 @@ authAdminRouter.post(
     const { refreshToken } = req.body as { refreshToken: string };
     await authService.logout(req.admin!.id, refreshToken);
 
-    await logAudit(req, "auth.logout", "Admin", req.admin?.id);
+    await logAudit(req, "auth.logout", "User", req.admin?.id);
     return successResponse(res, { loggedOut: true });
   },
 );
 
 authAdminRouter.post("/mfa/setup", requireAuth, async (req, res) => {
-  if (!req.admin || (req.admin.role !== "super_admin" && req.admin.role !== "admin")) {
+  if (!req.admin || req.admin.role !== "admin") {
     return errorResponse(res, "Only admin roles can setup MFA", "FORBIDDEN", 403);
   }
 
-  const admin = await Admin.findById(req.admin.id);
+  const admin = await User.findById(req.admin.id);
   if (!admin) {
     return errorResponse(res, "Admin not found", "NOT_FOUND", 404);
   }
@@ -89,7 +84,7 @@ authAdminRouter.post("/mfa/setup", requireAuth, async (req, res) => {
   admin.mfa = { ...(admin.mfa ?? { enabled: false }), secret };
   await admin.save();
 
-  await logAudit(req, "auth.mfa.setup", "Admin", String(admin._id));
+  await logAudit(req, "auth.mfa.setup", "User", String(admin._id));
   return successResponse(res, { secret, otpauth, qrCodeDataUrl });
 });
 
@@ -99,7 +94,7 @@ authAdminRouter.post(
   body("code").isString().isLength({ min: 6, max: 8 }),
   validateRequest,
   async (req, res) => {
-    const admin = await Admin.findById(req.admin?.id);
+    const admin = await User.findById(req.admin?.id);
     if (!admin || !admin.mfa?.secret) {
       return errorResponse(res, "MFA setup is not initialized", "MFA_NOT_SETUP", 400);
     }
@@ -113,7 +108,7 @@ authAdminRouter.post(
     admin.mfa.enabled = true;
     await admin.save();
 
-    await logAudit(req, "auth.mfa.verify", "Admin", String(admin._id));
+    await logAudit(req, "auth.mfa.verify", "User", String(admin._id));
     return successResponse(res, { mfaEnabled: true });
   },
 );

@@ -9,12 +9,10 @@ export const logAudit = async (
   metadata?: Record<string, unknown>,
 ): Promise<void> => {
   await AuditLog.create({
-    adminId: req.admin?.id,
+    actorId: req.admin?.id,
     action,
     targetType,
     targetId,
     metadata,
-    ip: req.ip,
-    userAgent: req.get("user-agent"),
   });
 };

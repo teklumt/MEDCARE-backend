@@ -1,28 +1,29 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 
 export interface IAuditLog extends Document {
-  adminId?: Types.ObjectId;
+  actorId?: Types.ObjectId;
+  actorName?: string;
   action: string;
   targetType: string;
-  targetId?: string;
+  targetId?: Types.ObjectId;
   metadata?: Record<string, unknown>;
-  ip?: string;
-  userAgent?: string;
-  timestamp: Date;
+  createdAt: Date;
 }
 
 const auditLogSchema = new Schema<IAuditLog>(
   {
-    adminId: { type: Schema.Types.ObjectId, ref: "Admin", index: true },
+    actorId: { type: Schema.Types.ObjectId, ref: "User", index: true },
+    actorName: { type: String },
     action: { type: String, required: true, index: true },
     targetType: { type: String, required: true, index: true },
-    targetId: { type: String },
+    targetId: { type: Schema.Types.ObjectId },
     metadata: { type: Schema.Types.Mixed },
-    ip: { type: String },
-    userAgent: { type: String },
-    timestamp: { type: Date, default: Date.now, index: true },
+    createdAt: { type: Date, default: Date.now, index: true },
   },
   { versionKey: false, strict: false, minimize: false },
 );
+
+auditLogSchema.index({ createdAt: -1 });
+auditLogSchema.index({ actorId: 1, createdAt: -1 });
 
 export const AuditLog = mongoose.model<IAuditLog>("AuditLog", auditLogSchema);

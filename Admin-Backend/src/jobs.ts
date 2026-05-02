@@ -7,8 +7,14 @@ export const startCronJobs = () => {
     try {
       const now = new Date();
       const result = await Pharmacy.updateMany(
-        { "license.status": "verified", "license.expiryDate": { $lt: now } },
-        { $set: { "license.status": "expired" } },
+        {
+          "verification.status": "approved",
+          $or: [
+            { "license.businessLicenseExpiry": { $lt: now } },
+            { "license.professionalLicenseExpiry": { $lt: now } },
+          ],
+        },
+        { $set: { "verification.status": "needs_docs" } },
       );
       if (result.modifiedCount > 0) {
         logger.info("Expired licenses updated", { count: result.modifiedCount });

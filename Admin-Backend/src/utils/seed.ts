@@ -1,23 +1,25 @@
 import bcrypt from "bcrypt";
-import { Admin } from "../models/Admin.js";
+import { User } from "../models/User.js";
 import { logger } from "./logger.js";
 
 export const seedSuperAdmin = async (email?: string, password?: string): Promise<void> => {
   if (!email || !password) return;
 
-  const existing = await Admin.findOne({ email: email.toLowerCase() });
+  const existing = await User.findOne({ email: email.toLowerCase(), role: "admin" });
   if (existing) return;
 
   const passwordHash = await bcrypt.hash(password, 12);
-  await Admin.create({
-    fullName: "Super Admin",
+  await User.create({
+    username: "super_admin",
     email: email.toLowerCase(),
+    phone: "+251000000000",
     passwordHash,
-    role: "super_admin",
+    role: "admin",
     permissions: ["*"],
-    status: "active",
+    isActive: true,
+    isLocked: false,
     mfa: { enabled: false },
-  });
+  } as any);
 
   logger.info("Super admin seeded", { email });
 };

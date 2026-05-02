@@ -1,23 +1,15 @@
-export type AdminRole = "super_admin" | "admin" | "moderator";
+export type AdminRole = "admin";
+export type UserRole = "patient" | "pharmacy" | "delivery" | "admin";
 
 export const rolePermissions: Record<AdminRole, string[]> = {
-  super_admin: ["*"],
-  admin: [
-    "licenses.verify",
-    "users.ban",
-    "pharmacies.manage",
-    "analytics.view",
-    "drivers.manage",
-    "alerts.manage",
-  ],
-  moderator: ["reports.view", "activity.flag", "analytics.read"],
+  admin: ["*"],
 };
 
-export const sensitiveActions = new Set([
-  "admin.delete",
-  "admin.suspend",
-  "user.ban",
-  "license.revoke",
-  "pharmacy.suspend",
-  "driver.suspend",
-]);
+export const allRolePermissions: Record<UserRole, string[]> = {
+  admin: ["*"],
+  patient: ["order.create", "order.read", "pharmacy.read"],
+  pharmacy: ["order.read", "order.update", "medicine.manage"],
+  delivery: ["order.read", "order.update", "delivery.manage"],
+};
+
+export const sensitiveActions = new Set(["admin.delete", "admin.suspend"]);

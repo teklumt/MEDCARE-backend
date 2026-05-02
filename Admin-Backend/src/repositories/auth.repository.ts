@@ -1,16 +1,16 @@
-import { Admin, type IAdmin } from "../models/Admin.js";
+import { User, type IUser } from "../models/User.js";
 import { RefreshToken } from "../models/RefreshToken.js";
 
 export const authRepository = {
-  findActiveAdminByEmail(email: string): Promise<IAdmin | null> {
-    return Admin.findOne({ email: email.toLowerCase(), status: "active" });
+  findActiveAdminByEmail(email: string): Promise<IUser | null> {
+    return User.findOne({ email: email.toLowerCase(), role: "admin", isActive: true });
   },
 
-  findAdminById(id: string): Promise<IAdmin | null> {
-    return Admin.findById(id);
+  findAdminById(id: string): Promise<IUser | null> {
+    return User.findOne({ _id: id, role: "admin" });
   },
 
-  saveAdmin(admin: IAdmin): Promise<IAdmin> {
+  saveAdmin(admin: IUser): Promise<IUser> {
     return admin.save();
   },
 
