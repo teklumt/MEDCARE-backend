@@ -458,6 +458,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'signup.role.pharmacy.desc': 'Manage stock, receive orders, and connect with patients.',
     'signup.role.admin.title': 'I am an Admin',
     'signup.role.admin.desc': 'Manage platform, users, and monitor system health.',
+    'signup.role.delivery.title': 'I am a Delivery Personnel',
+    'signup.role.delivery.desc': 'Deliver medications to patients on behalf of registered pharmacies',
     'signup.alreadyHaveAccount': 'Already have an account?',
     'signup.login': 'Log in',
     
@@ -1029,6 +1031,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'signup.role.pharmacy.desc': 'ክምችትን ያስተዳድሩ፣ ትዕዛዞችን ይቀበሉ እና ከታካሚዎች ጋር ይገናኙ።',
     'signup.role.admin.title': 'እኔ አስተዳዳሪ ነኝ',
     'signup.role.admin.desc': 'መድረክን፣ ተጠቃሚዎችን ያስተዳድሩ እና የስርዓት ጤናን ይቆጣጠሩ።',
+    'signup.role.delivery.title': 'እኔ አድራሽ (Delivery) ነኝ',
+    'signup.role.delivery.desc': 'የተመዘገቡ ፋርማሲዎችን ወክለው መድሃኒቶችን ለታካሚዎች ያድርሱ',
     'signup.alreadyHaveAccount': 'አስቀድመው መለያ አሎት?',
     'signup.login': 'ግባ',
     

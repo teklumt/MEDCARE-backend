@@ -273,7 +273,8 @@ export default function PharmacyProfilePage() {
                           <button 
                             onClick={() => {
                               setProfilePhoto(null);
-                              localStorage.removeItem('medcare_pharmacy_photo');
+                              localStorage.removeItem('medcare_pharmacy_avatar');
+                              window.dispatchEvent(new Event('avatar-changed'));
                             }}
                             className="text-xs font-bold text-rose-600 hover:text-rose-700 transition-colors"
                           >

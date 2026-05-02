@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Shield, User, Store, ArrowLeft, Mail, Lock, Phone, UserCircle, FileText, ChevronRight, Eye, EyeOff, Globe, ChevronDown } from 'lucide-react';
+import { Shield, User, Store, ArrowLeft, Mail, Lock, Phone, UserCircle, FileText, ChevronRight, Eye, EyeOff, Globe, ChevronDown, Bike } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import PharmacySignupForm from '@/components/auth/PharmacySignupForm';
+import DeliverySignupForm from '@/components/auth/DeliverySignupForm';
 
-type SignupStep = 'role' | 'patient' | 'pharmacy' | 'admin';
+type SignupStep = 'role' | 'patient' | 'pharmacy' | 'delivery' | 'admin';
 
 export default function SignupPage() {
   const [step, setStep] = useState<SignupStep>('role');
@@ -154,6 +155,20 @@ export default function SignupPage() {
                   </button>
 
                   <button
+                    onClick={() => setStep('delivery')}
+                    className="w-full group flex items-center p-6 bg-white border-2 border-gray-100 rounded-2xl hover:border-brand-500 hover:shadow-md transition-all text-left"
+                  >
+                    <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center text-orange-600 group-hover:bg-orange-600 group-hover:text-white transition-colors shrink-0">
+                      <Bike className="w-6 h-6" />
+                    </div>
+                    <div className="ml-4 flex-1">
+                      <h3 className="text-lg font-bold text-gray-900 mb-1">{t('signup.role.delivery.title')}</h3>
+                      <p className="text-sm text-gray-500">{t('signup.role.delivery.desc')}</p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-brand-500 transition-colors" />
+                  </button>
+
+                  <button
                     onClick={() => setStep('admin')}
                     className="w-full group flex items-center p-6 bg-white border-2 border-gray-100 rounded-2xl hover:border-brand-500 hover:shadow-md transition-all text-left"
                   >
@@ -287,6 +302,19 @@ export default function SignupPage() {
                 <PharmacySignupForm onBack={() => setStep('role')} />
               </motion.div>
             )}
+            {/* STEP 2: DELIVERY FORM */}
+            {step === 'delivery' && (
+              <motion.div
+                key="delivery"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <DeliverySignupForm onBack={() => setStep('role')} />
+              </motion.div>
+            )}
+
             {/* STEP 3: ADMIN FORM */}
             {step === 'admin' && (
               <motion.div

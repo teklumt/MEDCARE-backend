@@ -567,6 +567,14 @@ export default function DeliveriesPage() {
                         <Phone className="w-4 h-4" /> {t.contact}
                       </button>
 
+                      <Link 
+                        href={`/pharmacy/messages?agent=${encodeURIComponent(delivery.agent)}&orderId=${delivery.id}`} 
+                        className="flex items-center justify-center p-2 text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-xl transition-colors"
+                        title="Message Agent"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+                      </Link>
+
                       {delivery.flagged ? (
                         <button
                           onClick={() => handleOpenFlagModal(delivery)}
@@ -649,9 +657,18 @@ export default function DeliveriesPage() {
                         </div>
                       </td>
                       <td className="p-4 text-right">
-                        <button className="text-sm font-bold text-brand-600 hover:text-brand-800">
-                          {t.edit}
-                        </button>
+                        <div className="flex items-center justify-end gap-3">
+                          <Link 
+                            href={`/pharmacy/messages?agent=${encodeURIComponent(person.name)}&tab=team`}
+                            className="text-brand-600 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 p-2 rounded-lg transition-colors"
+                            title="Message Agent"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+                          </Link>
+                          <button className="text-sm font-bold text-gray-600 hover:text-gray-900">
+                            {t.edit}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
