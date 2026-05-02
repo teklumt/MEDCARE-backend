@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { Search, Star, ShieldAlert, Store, Edit, Trash2, Globe, ChevronDown } from 'lucide-react';
+import { adminApi } from '@/lib/admin-api';
 
 const TRANSLATIONS = {
   en: {
@@ -58,6 +59,41 @@ export default function AdminPharmaciesPage() {
   };
 
   const t = TRANSLATIONS[language];
+
+  useEffect(() => {
+    const loadPharmacies = async () => {
+      try {
+        const data = await adminApi.getPharmacies();
+        const mapped = data.map((pharmacy: any) => {
+          const expiry = pharmacy.license?.businessLicenseExpiry || pharmacy.license?.professionalLicenseExpiry;
+          const isExpired = expiry ? new Date(expiry).getTime() < Date.now() : false;
+          const status = !pharmacy.isActive
+            ? 'Suspended'
+            : isExpired
+              ? 'License Expired'
+              : pharmacy.verification?.status === 'approved'
+                ? 'Verified'
+                : 'Pending Verification';
+
+          return {
+            id: pharmacy._id,
+            name: pharmacy.businessName,
+            location: pharmacy.location || pharmacy.address || '-',
+            status,
+            rating: pharmacy.stats?.rating ?? 0,
+            orders: 0,
+            activeOrders: 0,
+            joinDate: pharmacy.createdAt ? new Date(pharmacy.createdAt).toISOString().slice(0, 10) : '-',
+          };
+        });
+        if (mapped.length) setPharmacies(mapped);
+      } catch (error) {
+        console.error('Failed to load pharmacies', error);
+      }
+    };
+
+    loadPharmacies();
+  }, []);
 
   const tabs = [
     { key: 'All', label: t.all },

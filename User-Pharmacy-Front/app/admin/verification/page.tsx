@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { FileCheck, AlertTriangle, CheckCircle2, XCircle, Globe, ChevronDown } from 'lucide-react';
+import { adminApi } from '@/lib/admin-api';
 
 const TRANSLATIONS = {
   en: {
@@ -86,13 +87,58 @@ export default function AdminVerificationPage() {
     }
   };
 
-  const handleApproveReject = (id: string, action: 'approve' | 'reject') => {
-    setVerifications(prev => prev.map(v => 
-      v.id === id ? { ...v, status: action === 'approve' ? 'Approved' : 'Rejected' } : v
-    ));
-    setSelectedApp(null);
-    alert(`Application ${action}d successfully.`);
+  const handleApproveReject = async (id: string, action: 'approve' | 'reject') => {
+    try {
+      await adminApi.updateVerification(id, action === 'approve' ? 'approved' : 'rejected', 'Review completed');
+      setVerifications(prev => prev.map(v => 
+        v.id === id ? { ...v, status: action === 'approve' ? 'Approved' : 'Rejected' } : v
+      ));
+      setSelectedApp(null);
+      alert(`Application ${action}d successfully.`);
+    } catch (error) {
+      alert((error as Error).message);
+    }
   };
+
+  useEffect(() => {
+    const loadVerifications = async () => {
+      try {
+        const data = await adminApi.getVerifications();
+        const now = Date.now();
+        const mapped = data.map((pharmacy: any) => {
+          const expiry = pharmacy.license?.businessLicenseExpiry || pharmacy.license?.professionalLicenseExpiry;
+          const expiryMs = expiry ? new Date(expiry).getTime() : null;
+          const isExpiring = expiryMs ? expiryMs - now < 60 * 24 * 60 * 60 * 1000 : false;
+          const statusMap: Record<string, string> = {
+            pending: 'Pending Review',
+            reviewing: 'Pending Review',
+            approved: 'Approved',
+            rejected: 'Rejected',
+            needs_docs: 'Pending Review',
+          };
+
+          return {
+            id: pharmacy._id,
+            name: pharmacy.businessName,
+            location: pharmacy.location || pharmacy.address || '-',
+            time: pharmacy.createdAt ? new Date(pharmacy.createdAt).toLocaleString() : '-',
+            status: isExpiring ? 'Expiring' : statusMap[pharmacy.verification?.status] || 'Pending Review',
+            docs: Object.values(pharmacy.verification?.documents || {}).filter(Boolean).length,
+            urgent: pharmacy.verification?.status === 'pending',
+            email: pharmacy.email,
+            phone: pharmacy.phone,
+            owner: pharmacy.ownerId || '-',
+            regNo: pharmacy.license?.businessLicenseNumber || '-',
+          };
+        });
+        if (mapped.length) setVerifications(mapped);
+      } catch (error) {
+        console.error('Failed to load verifications', error);
+      }
+    };
+
+    loadVerifications();
+  }, []);
 
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6">

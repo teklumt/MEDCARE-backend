@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Mail, Lock, Eye, EyeOff, Globe, ChevronDown, CheckCircle2, ChevronLeft, AlertCircle } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { authApi, setupTokenRefresh } from '@/lib/auth-api';
 
 const translations = {
   en: {
@@ -170,14 +171,16 @@ export default function LoginPage() {
     if (generalError) setGeneralError('');
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setPhoneEmailError('');
     setPasswordError('');
     setGeneralError('');
 
     let isValid = true;
-    if (!phone && !email) {
+    const identifier = email || phone.replace(/\s/g, '');
+    
+    if (!identifier) {
       setPhoneEmailError(tLocal.emptyPhoneEmail);
       isValid = false;
     }
@@ -189,56 +192,109 @@ export default function LoginPage() {
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      setIsLoading(false);
-      // Simulate backend logic
-      const identifier = email || phone.replace(/\s/g, '');
-      if (identifier.includes('fail')) {
-        setGeneralError(tLocal.unknownError);
-      } else if (identifier.includes('lock')) {
-        setGeneralError(tLocal.lockError);
-      } else if (identifier.includes('admin') || password === 'admin') {
-        setPendingRole('admin');
-        setPendingUser(identifier);
-        setView('mfa');
-      } else if (identifier.includes('pharm') || password === 'pharm') {
-        setPendingRole('pharmacy');
-        setPendingUser(identifier);
-        setView('mfa');
-      } else if (identifier.includes('wrong')) {
-        setGeneralError(tLocal.invalidCreds);
+    try {
+      // For admin login, we need email format
+      let loginEmail = identifier;
+      
+      // If it's a phone number, handle differently
+      if (/^\+?251\d{9}$/.test(identifier.replace(/\s/g, ''))) {
+        // This is a phone number, but admin backend expects email
+        setGeneralError('Admin login requires email address, not phone number.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(loginEmail)) {
+        setGeneralError('Please enter a valid email address for admin login.');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('Attempting login with:', loginEmail);
+
+      // Try to login with backend API
+      const response = await authApi.login({
+        email: loginEmail,
+        password: password
+      });
+
+      console.log('Login response:', response);
+
+      // Store authentication data
+      authApi.storeAuthData(response);
+      
+      // Check if user has admin role
+      if (response.data.user.role === 'admin') {
+        // Setup token refresh
+        setupTokenRefresh();
+        router.push('/admin');
       } else {
-        localStorage.setItem('medcare_role', 'patient');
-        localStorage.setItem('medcare_username', identifier.split('@')[0] || identifier);
+        // Non-admin users go to regular dashboard
+        localStorage.setItem('medcare_role', response.data.user.role);
+        localStorage.setItem('medcare_username', response.data.user.username);
         router.push('/dashboard');
       }
-    }, 1200);
+
+    } catch (error: any) {
+      setIsLoading(false);
+      
+      // Handle specific error cases
+      if (error.message.includes('Invalid credentials')) {
+        setGeneralError(tLocal.invalidCreds);
+      } else if (error.message.includes('Account locked')) {
+        setGeneralError(tLocal.lockError);
+      } else if (error.message.includes('MFA required')) {
+        // Handle MFA requirement
+        setPendingUser(loginEmail);
+        setView('mfa');
+      } else if (error.message.includes('Invalid email format')) {
+        setGeneralError('Please enter a valid email address.');
+      } else {
+        setGeneralError(error.message || tLocal.unknownError);
+      }
+    }
   };
 
-  const handleMfaSubmit = () => {
+  const handleMfaSubmit = async () => {
     setMfaError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
       const code = mfaMode === 'totp' ? mfaCode.join('') : backupCode;
       
-      if (code.includes('000') || code.length < 6) {
-        const att = mfaAttempts + 1;
-        setMfaAttempts(att);
-        if (att >= 5) {
-          setView('login');
-          setGeneralError(tLocal.invalidCreds);
-        } else {
-          setMfaError(tLocal.mfaIncorrect);
-        }
+      const response = await authApi.verifyMFA({
+        email: pendingUser,
+        code: code,
+        type: mfaMode
+      });
+
+      // Store authentication data
+      authApi.storeAuthData(response);
+      
+      // Setup token refresh
+      setupTokenRefresh();
+      
+      // Redirect based on role
+      if (response.data.user.role === 'admin') {
+        router.push('/admin');
       } else {
-        localStorage.setItem('medcare_role', pendingRole);
-        localStorage.setItem('medcare_username', pendingUser.split('@')[0] || pendingUser);
-        if (pendingRole === 'admin') router.push('/admin');
-        else router.push('/pharmacy');
+        router.push('/dashboard');
       }
-    }, 800);
+
+    } catch (error: any) {
+      setIsLoading(false);
+      const att = mfaAttempts + 1;
+      setMfaAttempts(att);
+      
+      if (att >= 5) {
+        setView('login');
+        setGeneralError('Too many failed attempts. Please try logging in again.');
+      } else {
+        setMfaError(error.message || tLocal.mfaIncorrect);
+      }
+    }
   };
 
   const handleMfaChange = (index: number, value: string) => {
