@@ -38,8 +38,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     const userData = authApi.getCurrentUser();
     if (userData) {
-      setAdminName(userData.username || userData.email.split('@')[0]);
-      setIsAuthorized(true);
+      // Allow admin, pharmacy, and delivery roles to access admin panel
+      if (['admin', 'pharmacy', 'delivery'].includes(userData.role)) {
+        setAdminName(userData.username || userData.email.split('@')[0]);
+        setIsAuthorized(true);
+      } else {
+        // Regular patients should go to user dashboard
+        router.push('/dashboard');
+      }
     } else {
       router.push('/login');
     }
@@ -117,7 +123,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-brand-950 truncate">{adminName}</p>
-                <p className="text-xs text-gray-500 truncate">Super Admin</p>
+                <p className="text-xs text-gray-500 truncate capitalize">
+                  {authApi.getCurrentUser()?.role || 'User'}
+                </p>
               </div>
             </div>
             <button 

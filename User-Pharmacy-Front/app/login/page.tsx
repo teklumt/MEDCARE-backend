@@ -225,15 +225,21 @@ export default function LoginPage() {
       // Store authentication data
       authApi.storeAuthData(response);
       
-      // Check if user has admin role
-      if (response.data.user.role === 'admin') {
-        // Setup token refresh
+      // Redirect based on user role
+      const userRole = response.data.user.role;
+      
+      if (userRole === 'admin') {
+        // Setup token refresh for admin
         setupTokenRefresh();
         router.push('/admin');
+      } else if (userRole === 'pharmacy') {
+        // Pharmacy users go to pharmacy dashboard
+        router.push('/pharmacy');
+      } else if (userRole === 'delivery') {
+        // Delivery users go to delivery dashboard
+        router.push('/delivery');
       } else {
-        // Non-admin users go to regular dashboard
-        localStorage.setItem('medcare_role', response.data.user.role);
-        localStorage.setItem('medcare_username', response.data.user.username);
+        // Regular patients go to user dashboard
         router.push('/dashboard');
       }
 
