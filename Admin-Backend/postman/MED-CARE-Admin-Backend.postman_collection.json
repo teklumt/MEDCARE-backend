@@ -1,0 +1,1570 @@
+{
+  "info": {
+    "name": "MED-CARE Admin Backend (Complete)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Comprehensive API collection for MED-CARE Admin Backend with seeded data and complete request/response examples"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" },
+    { "key": "superAdminToken", "value": "", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" },
+    { "key": "adminRefreshToken", "value": "", "type": "string" },
+    { "key": "superAdminId", "value": "507f1f77bcf86cd799439011", "type": "string" },
+    { "key": "adminId", "value": "507f1f77bcf86cd799439012", "type": "string" },
+    { "key": "userId", "value": "507f1f77bcf86cd799439014", "type": "string" },
+    { "key": "pharmacyId", "value": "507f1f77bcf86cd799439015", "type": "string" },
+    { "key": "driverId", "value": "507f1f77bcf86cd799439017", "type": "string" },
+    { "key": "medicineId", "value": "507f1f77bcf86cd799439016", "type": "string" },
+    { "key": "alertId", "value": "507f1f77bcf86cd799439018", "type": "string" },
+    { "key": "orderId", "value": "507f1f77bcf86cd799439020", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "AUTH - Admin Login/Logout",
+      "item": [
+        {
+          "name": "Login - Super Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.collectionVariables.set('superAdminToken', data.accessToken);",
+                  "  pm.collectionVariables.set('adminRefreshToken', data.refreshToken);",
+                  "  pm.collectionVariables.set('superAdminId', data.admin.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@medcare-et.com\",\n  \"password\": \"Admin@12345\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Super Admin Login Success",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"admin\": {\n      \"id\": \"507f1f77bcf86cd799439011\",\n      \"fullName\": \"Super Admin\",\n      \"email\": \"superadmin@medcare-et.com\",\n      \"role\": \"super_admin\",\n      \"mfaEnabled\": false\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login - Platform Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.collectionVariables.set('adminToken', data.accessToken);",
+                  "  pm.collectionVariables.set('adminId', data.admin.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@medcare-et.com\",\n  \"password\": \"Admin@12345\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Admin Login Success",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"admin\": {\n      \"id\": \"507f1f77bcf86cd799439012\",\n      \"fullName\": \"Platform Admin\",\n      \"email\": \"admin@medcare-et.com\",\n      \"role\": \"admin\",\n      \"mfaEnabled\": false\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Refresh Access Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "auth", "refresh"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{adminRefreshToken}}\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Token Refreshed",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "auth", "logout"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{adminRefreshToken}}\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Logout Success",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"loggedOut\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "MFA Setup",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/auth/mfa/setup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "auth", "mfa", "setup"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - MFA Secret Generated",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"secret\": \"JBSWY3DPEBLW64TMMQ======\",\n    \"otpauth\": \"otpauth://totp/superadmin@medcare-et.com?secret=JBSWY3DPEBLW64TMMQ=====&issuer=MED-CARE\",\n    \"qrCodeDataUrl\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "MFA Verify Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/auth/mfa/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "auth", "mfa", "verify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - MFA Enabled",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"mfaEnabled\": true\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ADMIN MANAGEMENT",
+      "item": [
+        {
+          "name": "Create New Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/admins/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "admins", "create"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Review Moderator\",\n  \"email\": \"moderator@medcare-et.com\",\n  \"password\": \"Admin@12345\",\n  \"role\": \"moderator\",\n  \"permissions\": [\"analytics.read\", \"users.flag\", \"activity.view\"]\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "201 - Admin Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439013\",\n    \"email\": \"moderator@medcare-et.com\",\n    \"role\": \"moderator\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "List All Admins",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/admins?page=1&limit=20&role=admin",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "admins"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "role", "value": "admin" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Admins List",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"507f1f77bcf86cd799439012\",\n      \"fullName\": \"Platform Admin\",\n      \"email\": \"admin@medcare-et.com\",\n      \"role\": \"admin\",\n      \"status\": \"active\",\n      \"mfa\": { \"enabled\": false },\n      \"createdAt\": \"2026-04-17T00:00:00Z\"\n    }\n  ],\n  \"meta\": { \"page\": 1, \"limit\": 20, \"total\": 1 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Admin Role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/admins/{{adminId}}/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "admins", "{{adminId}}", "role"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Role Updated",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439012\",\n    \"role\": \"admin\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Suspend Admin (MFA Required)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" },
+              { "key": "x-mfa-verified", "value": "true" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/admins/{{adminId}}/suspend",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "admins", "{{adminId}}", "suspend"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Policy violation and inactive for 90 days\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Admin Suspended",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439013\",\n    \"status\": \"suspended\",\n    \"reason\": \"Policy violation and inactive for 90 days\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Soft Delete Admin (MFA Required)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" },
+              { "key": "x-mfa-verified", "value": "true" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/admins/{{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "admins", "{{adminId}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Admin Deleted",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439013\",\n    \"deleted\": true\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "USERS MANAGEMENT",
+      "item": [
+        {
+          "name": "List All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users?search=Abel&isBanned=false&region=Addis%20Ababa&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users"],
+              "query": [
+                { "key": "search", "value": "Abel" },
+                { "key": "isBanned", "value": "false" },
+                { "key": "region", "value": "Addis Ababa" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Users List",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"507f1f77bcf86cd799439014\",\n      \"fullName\": \"Abel Demo\",\n      \"phone\": \"+251911000111\",\n      \"email\": \"abel.user@medcare-et.com\",\n      \"role\": \"end_user\",\n      \"region\": \"Addis Ababa\",\n      \"city\": \"Addis Ababa\",\n      \"status\": \"active\",\n      \"ban\": { \"isBanned\": false },\n      \"warningCount\": 0,\n      \"trustScore\": 100,\n      \"isVerified\": true,\n      \"createdAt\": \"2026-04-17T00:00:00Z\"\n    }\n  ],\n  \"meta\": { \"page\": 1, \"limit\": 20, \"total\": 1 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Banned Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/banned?type=temporary&region=Addis%20Ababa",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "banned"],
+              "query": [
+                { "key": "type", "value": "temporary" },
+                { "key": "region", "value": "Addis Ababa" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Banned Users",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get User Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{userId}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - User Detail",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"_id\": \"507f1f77bcf86cd799439014\",\n    \"fullName\": \"Abel Demo\",\n    \"phone\": \"+251911000111\",\n    \"email\": \"abel.user@medcare-et.com\",\n    \"role\": \"end_user\",\n    \"region\": \"Addis Ababa\",\n    \"status\": \"active\",\n    \"ban\": { \"isBanned\": false },\n    \"warningCount\": 0,\n    \"trustScore\": 100,\n    \"isVerified\": true,\n    \"orderHistory\": [\n      {\n        \"_id\": \"507f1f77bcf86cd799439020\",\n        \"orderId\": \"MC-SEED-0001\",\n        \"status\": \"out_for_delivery\",\n        \"totalAmount\": 8,\n        \"createdAt\": \"2026-04-17T00:00:00Z\"\n      }\n    ],\n    \"reports\": 0,\n    \"flags\": []\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ban User Temporarily (MFA Required)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "x-mfa-verified", "value": "true" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{userId}}/ban",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{userId}}", "ban"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"temporary\",\n  \"reason\": \"Abusive language and harassment\",\n  \"expiresAt\": \"2026-05-17T00:00:00.000Z\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - User Banned",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439014\",\n    \"isBanned\": true,\n    \"type\": \"temporary\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ban User Permanently (MFA Required)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "x-mfa-verified", "value": "true" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{userId}}/ban",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{userId}}", "ban"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"permanent\",\n  \"reason\": \"Fraud - Multiple fake orders detected\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - User Banned Permanently",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439014\",\n    \"isBanned\": true,\n    \"type\": \"permanent\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Unban User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{userId}}/unban",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{userId}}", "unban"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - User Unbanned",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439014\",\n    \"isBanned\": false\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Warn User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{userId}}/warn",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{userId}}", "warn"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Submitted incorrect/false reports\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - User Warned",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439014\",\n    \"warningCount\": 1,\n    \"autoBanned\": false\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Flag User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{userId}}/flag",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{userId}}", "flag"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Suspicious payment patterns\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - User Flagged",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439014\",\n    \"flags\": 1\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PHARMACY MANAGEMENT",
+      "item": [
+        {
+          "name": "List All Pharmacies",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pharmacies?status=active&region=Addis%20Ababa&license=verified",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pharmacies"],
+              "query": [
+                { "key": "status", "value": "active" },
+                { "key": "region", "value": "Addis Ababa" },
+                { "key": "license", "value": "verified" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Pharmacies List",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"507f1f77bcf86cd799439015\",\n      \"businessName\": \"MED-CARE Pharmacy\",\n      \"ownerName\": \"Selam Owner\",\n      \"email\": \"pharmacy1@medcare-et.com\",\n      \"phone\": \"+251922000222\",\n      \"address\": {\n        \"region\": \"Addis Ababa\",\n        \"city\": \"Addis Ababa\",\n        \"street\": \"Bole Road\"\n      },\n      \"license\": {\n        \"licenseNumber\": \"LIC-ETH-0001\",\n        \"status\": \"verified\",\n        \"expiryDate\": \"2026-10-15T00:00:00Z\"\n      },\n      \"status\": \"active\",\n      \"isVerifiedBadge\": true,\n      \"rating\": 4.8,\n      \"totalRatings\": 44,\n      \"totalOrders\": 120,\n      \"totalRevenue\": 760000\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Unverified Pharmacies",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pharmacies/unverified",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pharmacies", "unverified"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Unverified Pharmacies",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Pharmacy Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pharmacies/{{pharmacyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pharmacies", "{{pharmacyId}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Pharmacy Detail",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"_id\": \"507f1f77bcf86cd799439015\",\n    \"businessName\": \"MED-CARE Pharmacy\",\n    \"ownerName\": \"Selam Owner\",\n    \"email\": \"pharmacy1@medcare-et.com\",\n    \"phone\": \"+251922000222\",\n    \"address\": {\n      \"region\": \"Addis Ababa\",\n      \"city\": \"Addis Ababa\",\n      \"street\": \"Bole Road\",\n      \"coordinates\": { \"lat\": 8.9806, \"lng\": 38.7578 }\n    },\n    \"license\": {\n      \"licenseNumber\": \"LIC-ETH-0001\",\n      \"licenseImageUrl\": \"https://example.com/license1.jpg\",\n      \"tinNumber\": \"TIN-001\",\n      \"expiryDate\": \"2026-10-15T00:00:00Z\",\n      \"status\": \"verified\",\n      \"reviewedBy\": \"507f1f77bcf86cd799439012\",\n      \"reviewedAt\": \"2026-04-17T00:00:00Z\"\n    },\n    \"status\": \"active\",\n    \"isVerifiedBadge\": true,\n    \"rating\": 4.8,\n    \"totalRatings\": 44,\n    \"operatingHours\": {\n      \"open\": \"08:00\",\n      \"close\": \"22:00\",\n      \"days\": [\"Mon\", \"Tue\", \"Wed\", \"Thu\", \"Fri\", \"Sat\"]\n    },\n    \"mfa\": { \"enabled\": false },\n    \"totalOrders\": 120,\n    \"totalRevenue\": 760000,\n    \"inventorySummary\": { \"items\": 45, \"lowStock\": 3 },\n    \"orders\": [],\n    \"reviews\": []\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Suspend Pharmacy (MFA Required)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "x-mfa-verified", "value": "true" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pharmacies/{{pharmacyId}}/suspend",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pharmacies", "{{pharmacyId}}", "suspend"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Regulatory compliance issues - failed inspection\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Pharmacy Suspended",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439015\",\n    \"status\": \"suspended\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Activate Pharmacy",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pharmacies/{{pharmacyId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pharmacies", "{{pharmacyId}}", "activate"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Pharmacy Activated",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439015\",\n    \"status\": \"active\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Pharmacy (MFA Required)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "x-mfa-verified", "value": "true" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pharmacies/{{pharmacyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pharmacies", "{{pharmacyId}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Pharmacy Deleted",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439015\",\n    \"deleted\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Pharmacy Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pharmacies/{{pharmacyId}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pharmacies", "{{pharmacyId}}", "orders"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Pharmacy Orders",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"507f1f77bcf86cd799439020\",\n      \"orderId\": \"MC-SEED-0001\",\n      \"patientId\": \"507f1f77bcf86cd799439014\",\n      \"pharmacyId\": \"507f1f77bcf86cd799439015\",\n      \"totalAmount\": 8,\n      \"status\": \"out_for_delivery\",\n      \"createdAt\": \"2026-04-17T00:00:00Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Pharmacy Reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pharmacies/{{pharmacyId}}/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pharmacies", "{{pharmacyId}}", "reviews"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Pharmacy Reviews",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [],\n  \"meta\": { \"canFlag\": true }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Toggle Verified Badge",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/pharmacies/{{pharmacyId}}/badge",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "pharmacies", "{{pharmacyId}}", "badge"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Badge Updated",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439015\",\n    \"isVerifiedBadge\": true\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LICENSE VERIFICATION",
+      "item": [
+        {
+          "name": "List Licenses",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/licenses?status=pending&region=Addis%20Ababa&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "licenses"],
+              "query": [
+                { "key": "status", "value": "pending" },
+                { "key": "region", "value": "Addis Ababa" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Licenses List",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [],\n  \"meta\": { \"page\": 1, \"limit\": 20, \"total\": 0 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Licenses Expiring in 30 Days",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/licenses/expiring",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "licenses", "expiring"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Expiring Licenses",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get License for Pharmacy",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/licenses/{{pharmacyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "licenses", "{{pharmacyId}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - License Detail",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"pharmacyId\": \"507f1f77bcf86cd799439015\",\n    \"businessName\": \"MED-CARE Pharmacy\",\n    \"license\": {\n      \"licenseNumber\": \"LIC-ETH-0001\",\n      \"licenseImageUrl\": \"https://example.com/license1.jpg\",\n      \"tinNumber\": \"TIN-001\",\n      \"expiryDate\": \"2026-10-15T00:00:00Z\",\n      \"status\": \"verified\",\n      \"reviewedBy\": \"507f1f77bcf86cd799439012\",\n      \"reviewedAt\": \"2026-04-17T00:00:00Z\"\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Approve License",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/licenses/{{pharmacyId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "licenses", "{{pharmacyId}}", "approve"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - License Approved",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439015\",\n    \"status\": \"verified\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Reject License",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/licenses/{{pharmacyId}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "licenses", "{{pharmacyId}}", "reject"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Low resolution license image - please resubmit\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - License Rejected",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439015\",\n    \"status\": \"rejected\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Revoke License (MFA Required)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "x-mfa-verified", "value": "true" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/licenses/{{pharmacyId}}/revoke",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "licenses", "{{pharmacyId}}", "revoke"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Fraud investigation - fake license document\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - License Revoked",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439015\",\n    \"status\": \"revoked\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Add License Verification Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/licenses/{{pharmacyId}}/note",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "licenses", "{{pharmacyId}}", "note"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Awaiting pharmacist credentials verification\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Note Added",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439015\",\n    \"notes\": [\"Awaiting pharmacist credentials verification\"]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DRIVER MANAGEMENT",
+      "item": [
+        {
+          "name": "List All Drivers",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/drivers?status=available&region=Addis%20Ababa",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "drivers"],
+              "query": [
+                { "key": "status", "value": "available" },
+                { "key": "region", "value": "Addis Ababa" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Drivers List",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"507f1f77bcf86cd799439017\",\n      \"fullName\": \"Demo Driver\",\n      \"phone\": \"+251933000333\",\n      \"email\": \"driver1@medcare-et.com\",\n      \"nationalId\": \"NID-001\",\n      \"licenseNumber\": \"DRV-001\",\n      \"vehicle\": { \"type\": \"motorcycle\", \"plate\": \"AA-12345\" },\n      \"region\": \"Addis Ababa\",\n      \"city\": \"Addis Ababa\",\n      \"assignedPharmacyId\": \"507f1f77bcf86cd799439015\",\n      \"status\": \"available\",\n      \"backgroundCheck\": { \"status\": \"cleared\" },\n      \"isSuspended\": false,\n      \"rating\": 4.7,\n      \"totalDeliveries\": 310\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Driver Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/drivers/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "drivers", "stats"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Driver Stats",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"Addis Ababa\",\n      \"total\": 1,\n      \"active\": 1,\n      \"suspended\": 0\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Driver Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/drivers/{{driverId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "drivers", "{{driverId}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Driver Detail",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"_id\": \"507f1f77bcf86cd799439017\",\n    \"fullName\": \"Demo Driver\",\n    \"phone\": \"+251933000333\",\n    \"email\": \"driver1@medcare-et.com\",\n    \"nationalId\": \"NID-001\",\n    \"licenseNumber\": \"DRV-001\",\n    \"licenseImageUrl\": \"https://example.com/driver-license.jpg\",\n    \"vehicle\": { \"type\": \"motorcycle\", \"plate\": \"AA-12345\" },\n    \"region\": \"Addis Ababa\",\n    \"city\": \"Addis Ababa\",\n    \"assignedPharmacyId\": \"507f1f77bcf86cd799439015\",\n    \"status\": \"available\",\n    \"backgroundCheck\": {\n      \"status\": \"cleared\",\n      \"reviewedBy\": \"507f1f77bcf86cd799439012\",\n      \"reviewedAt\": \"2026-04-17T00:00:00Z\"\n    },\n    \"isSuspended\": false,\n    \"rating\": 4.7,\n    \"totalDeliveries\": 310\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Set Background Check Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/drivers/{{driverId}}/background-check",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "drivers", "{{driverId}}", "background-check"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"cleared\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Background Check Updated",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439017\",\n    \"backgroundCheckStatus\": \"cleared\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Suspend Driver (MFA Required)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "x-mfa-verified", "value": "true" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/drivers/{{driverId}}/suspend",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "drivers", "{{driverId}}", "suspend"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Safety issue - reckless driving complaints\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Driver Suspended",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439017\",\n    \"status\": \"suspended\",\n    \"isSuspended\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Activate Driver",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/drivers/{{driverId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "drivers", "{{driverId}}", "activate"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Driver Activated",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439017\",\n    \"status\": \"available\",\n    \"isSuspended\": false\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Driver Deliveries",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/drivers/{{driverId}}/deliveries",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "drivers", "{{driverId}}", "deliveries"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Driver Deliveries",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"507f1f77bcf86cd799439020\",\n      \"orderId\": \"MC-SEED-0001\",\n      \"patientId\": \"507f1f77bcf86cd799439014\",\n      \"pharmacyId\": \"507f1f77bcf86cd799439015\",\n      \"driverId\": \"507f1f77bcf86cd799439017\",\n      \"status\": \"out_for_delivery\",\n      \"totalAmount\": 8,\n      \"createdAt\": \"2026-04-17T00:00:00Z\"\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DISEASE ALERTS",
+      "item": [
+        {
+          "name": "Create Disease Alert",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/alerts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "alerts"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Cholera Outbreak Alert\",\n  \"description\": \"Multiple cholera cases reported. Boil and treat all drinking water before use. Maintain hygiene standards.\",\n  \"alertType\": \"cholera\",\n  \"severity\": \"high\",\n  \"affectedRegions\": [\"Addis Ababa\", \"Oromia\"],\n  \"affectedCities\": [\"Addis Ababa\", \"Adama\"],\n  \"expiresAt\": \"2026-12-31T00:00:00.000Z\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "201 - Alert Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"_id\": \"507f1f77bcf86cd799439018\",\n    \"title\": \"Cholera Outbreak Alert\",\n    \"description\": \"Multiple cholera cases reported...\",\n    \"alertType\": \"cholera\",\n    \"severity\": \"high\",\n    \"affectedRegions\": [\"Addis Ababa\", \"Oromia\"],\n    \"isActive\": true,\n    \"sentCount\": 100,\n    \"deliveredCount\": 92,\n    \"createdAt\": \"2026-04-17T00:00:00Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "List All Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/alerts?severity=high&alertType=cholera&isActive=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "alerts"],
+              "query": [
+                { "key": "severity", "value": "high" },
+                { "key": "alertType", "value": "cholera" },
+                { "key": "isActive", "value": "true" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Alerts List",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"507f1f77bcf86cd799439018\",\n      \"title\": \"Cholera Outbreak Alert\",\n      \"alertType\": \"cholera\",\n      \"severity\": \"high\",\n      \"affectedRegions\": [\"Addis Ababa\", \"Oromia\"],\n      \"isActive\": true,\n      \"sentCount\": 100,\n      \"deliveredCount\": 92,\n      \"createdAt\": \"2026-04-17T00:00:00Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Alert",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/alerts/{{alertId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "alerts", "{{alertId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"severity\": \"critical\",\n  \"description\": \"CRITICAL: Cholera confirmed. All water sources must be boiled.\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Alert Updated",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"_id\": \"507f1f77bcf86cd799439018\",\n    \"severity\": \"critical\",\n    \"description\": \"CRITICAL: Cholera confirmed...\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Deactivate Alert",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/alerts/{{alertId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "alerts", "{{alertId}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Alert Deactivated",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439018\",\n    \"isActive\": false\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Alert Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/alerts/{{alertId}}/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "alerts", "{{alertId}}", "stats"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Alert Stats",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"507f1f77bcf86cd799439018\",\n    \"sentCount\": 100,\n    \"deliveredCount\": 92,\n    \"deliveryRate\": 92\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ANALYTICS & REPORTS",
+      "item": [
+        {
+          "name": "Get Platform Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/analytics/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "analytics", "overview"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Overview Stats",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"totalUsers\": 1,\n    \"totalPharmacies\": 1,\n    \"totalDrivers\": 1,\n    \"totalOrders\": 1,\n    \"totalRevenue\": 8\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Users Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/analytics/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "analytics", "users"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Users Analytics",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"signupsOverTime\": [\n      { \"_id\": \"2026-04\", \"count\": 1 }\n    ],\n    \"banRates\": [\n      { \"_id\": false, \"count\": 1 }\n    ],\n    \"regionBreakdown\": [\n      { \"_id\": \"Addis Ababa\", \"count\": 1 }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Pharmacies Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/analytics/pharmacies",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "analytics", "pharmacies"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Pharmacies Analytics",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"status\": {\n      \"active\": 1,\n      \"suspended\": 0\n    },\n    \"ordersPerPharmacy\": [\n      { \"_id\": \"507f1f77bcf86cd799439015\", \"orders\": 1 }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Orders Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/analytics/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "analytics", "orders"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Orders Analytics",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"byStatus\": [\n      { \"_id\": \"out_for_delivery\", \"count\": 1 }\n    ],\n    \"revenueTrends\": [\n      { \"_id\": \"2026-04\", \"revenue\": 8 }\n    ],\n    \"peakHours\": []\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Licenses Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/analytics/licenses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "analytics", "licenses"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Licenses Analytics",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"counts\": [\n      { \"_id\": \"verified\", \"count\": 1 }\n    ],\n    \"avgReviewTimeHours\": 2.5\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Drivers Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/analytics/drivers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "analytics", "drivers"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Drivers Analytics",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"activeDrivers\": 1,\n    \"deliverySuccessRate\": 100\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Alerts Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/analytics/alerts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "analytics", "alerts"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Alerts Analytics",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"totalAlerts\": 0,\n    \"regionMentions\": []\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Export Data as CSV",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports/export?type=licenses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "reports", "export"],
+              "query": [
+                { "key": "type", "value": "licenses" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - CSV Export",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AUDIT LOGS",
+      "item": [
+        {
+          "name": "Get Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/audit-logs?page=1&limit=50&adminId=&action=auth.login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "audit-logs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" },
+                { "key": "adminId", "value": "", "disabled": true },
+                { "key": "action", "value": "auth.login", "disabled": true }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Audit Logs",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"507f1f77bcf86cd799439019\",\n      \"adminId\": \"507f1f77bcf86cd799439012\",\n      \"action\": \"auth.login\",\n      \"entityType\": \"Admin\",\n      \"entityId\": \"507f1f77bcf86cd799439012\",\n      \"details\": { \"role\": \"admin\" },\n      \"ipAddress\": \"127.0.0.1\",\n      \"userAgent\": \"PostmanRuntime/7.32.3\",\n      \"timestamp\": \"2026-04-17T00:00:00Z\"\n    }\n  ],\n  \"meta\": { \"page\": 1, \"limit\": 50, \"total\": 1 }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "HEALTH & SETUP",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - API Healthy",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"status\": \"ok\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
