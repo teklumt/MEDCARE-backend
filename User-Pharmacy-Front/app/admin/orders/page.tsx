@@ -8,6 +8,7 @@ import {
   CreditCard, Clock, MessageSquare, Flag, RefreshCw, XCircle 
 } from 'lucide-react';
 import Image from 'next/image';
+import { adminApi } from '@/lib/admin-api';
 
 const TRANSLATIONS = {
   en: {
@@ -180,6 +181,84 @@ export default function AdminOrdersPage() {
   };
 
   const t = TRANSLATIONS[language];
+
+  useEffect(() => {
+    const loadOrders = async () => {
+      try {
+        const data = await adminApi.getOrders();
+        const mapped = data.map((order: any) => {
+          const placedAt = order.createdAt ? new Date(order.createdAt) : null;
+          const deliveryAddress = order.deliveryAddress || {};
+          const deliveryMethod = order.deliveryMethod === 'delivery' ? 'Home Delivery' : 'Pickup';
+          const timeline = (order.statusHistory || []).map((entry: any) => ({
+            status: entry.status,
+            timestamp: entry.createdAt ? new Date(entry.createdAt).toLocaleString() : '-',
+            actor: entry.actorId ? 'User' : 'System',
+            notes: entry.note || '',
+          }));
+
+          return {
+            id: order.ref || order._id,
+            patient: {
+              name: deliveryAddress.recipientName || 'Unknown',
+              phone: deliveryAddress.phone || '-',
+              id: order.patientId || '-',
+              status: 'Active',
+              orderCount: 0,
+            },
+            pharmacy: {
+              name: order.pharmacyId || 'Unknown Pharmacy',
+              phone: '-',
+              address: order.deliveryAddress?.city || '-',
+              id: order.pharmacyId || '-',
+              status: 'Verified',
+              rating: 0,
+            },
+            items: (order.items || []).map((item: any) => ({
+              name: item.medicationName,
+              nameAm: item.medicationName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              subtotal: item.subtotal,
+              requiresPrescription: item.requiresPrescription,
+              rxImage: null,
+            })),
+            delivery: {
+              method: deliveryMethod,
+              address: [deliveryAddress.street, deliveryAddress.subCity, deliveryAddress.city].filter(Boolean).join(', '),
+              instructions: order.deliveryInstructions || null,
+              agent: order.deliveryAgentId ? { name: order.deliveryAgentId, phone: '-', activeCount: 0 } : null,
+              estimatedTime: order.estimatedDeliveryAt ? new Date(order.estimatedDeliveryAt).toLocaleString() : null,
+              actualTime: order.deliveredAt ? new Date(order.deliveredAt).toLocaleString() : null,
+            },
+            payment: {
+              method: order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Chapa',
+              status: order.paymentStatus,
+              refId: order.paymentId || null,
+              timestamp: placedAt ? placedAt.toLocaleString() : null,
+            },
+            timeline,
+            notifications: [],
+            chat: { count: 0, firstMessage: null, lastMessage: null },
+            complaints: [],
+            total: order.totalAmount,
+            subtotal: order.subtotal,
+            deliveryFee: order.deliveryFee,
+            status: order.status,
+            time: placedAt ? `${Math.max(1, Math.floor((Date.now() - placedAt.getTime()) / 60000))} mins ago` : '-',
+            placedAt: placedAt ? placedAt.toLocaleString() : '-',
+            stuck: false,
+            flag: null,
+          };
+        });
+        if (mapped.length) setOrders(mapped);
+      } catch (error) {
+        console.error('Failed to load orders', error);
+      }
+    };
+
+    loadOrders();
+  }, []);
 
   // Admin Actions
   const handleFlagOrder = () => {

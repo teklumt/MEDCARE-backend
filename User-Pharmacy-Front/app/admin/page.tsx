@@ -11,6 +11,8 @@ import {
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
+import { adminApi } from '@/lib/admin-api';
+import { authApi } from '@/lib/auth-api';
 
 const TRANSLATIONS = {
   en: {
@@ -135,6 +137,76 @@ export default function AdminDashboardPage() {
   
   const [verifications, setVerifications] = useState(INITIAL_VERIFICATIONS);
   const [complaints, setComplaints] = useState(INITIAL_COMPLAINTS);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Load dashboard data from backend
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch analytics data
+        const analytics = await adminApi.getAnalytics();
+        
+        // Fetch recent data
+        const [users, pharmacies, orders, pendingVerifications, activeComplaints] = await Promise.all([
+          adminApi.getUsers({ limit: 5 }),
+          adminApi.getPharmacies({ limit: 5 }),
+          adminApi.getOrders({ limit: 5 }),
+          adminApi.getVerifications({ status: 'pending', limit: 10 }),
+          adminApi.getComplaints({ status: 'open', limit: 5 })
+        ]);
+
+        setDashboardData({
+          analytics,
+          users,
+          pharmacies,
+          orders,
+          totalUsers: users.length,
+          activePharmacies: pharmacies.filter((p: any) => p.isActive).length,
+          ordersToday: orders.filter((o: any) => {
+            const today = new Date().toDateString();
+            return new Date(o.createdAt).toDateString() === today;
+          }).length
+        });
+
+        // Update verifications with real data
+        if (pendingVerifications.length > 0) {
+          setVerifications(pendingVerifications.map((v: any) => ({
+            id: v._id,
+            name: v.businessName,
+            location: v.location,
+            time: new Date(v.createdAt).toLocaleString(),
+            status: v.verification?.status || 'pending'
+          })));
+        }
+
+        // Update complaints with real data
+        if (activeComplaints.length > 0) {
+          setComplaints(activeComplaints.map((c: any) => ({
+            id: c._id,
+            target: c.targetName || 'System',
+            issue: c.subject,
+            reporter: c.reporterName || 'Anonymous',
+            severity: c.severity || 'medium',
+            time: new Date(c.createdAt).toLocaleString()
+          })));
+        }
+
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+        // Keep using mock data if API fails
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Only load data if user is authenticated
+    if (authApi.isAuthenticated()) {
+      loadDashboardData();
+    }
+  }, []);
   
   
   const toggleLanguage = (lang: 'en' | 'am') => {
@@ -158,9 +230,21 @@ export default function AdminDashboardPage() {
     setShowVerificationModal(true);
   };
 
-  const handleBroadcastAlert = () => {
+  const handleBroadcastAlert = async () => {
+    if (!alertMessage.trim()) return;
+    
     setIsBroadcasting(true);
-    setTimeout(() => {
+    
+    try {
+      await adminApi.createAlert({
+        type: alertType,
+        region: alertRegion,
+        message: alertMessage,
+        details: alertDetails,
+        youtubeLink: youtubeLink
+      });
+
+      // Also store locally for immediate UI feedback
       localStorage.setItem('medcare_broadcast_alert', JSON.stringify({
         type: alertType,
         region: alertRegion,
@@ -170,16 +254,22 @@ export default function AdminDashboardPage() {
         timestamp: Date.now(),
         active: true
       }));
-      setIsBroadcasting(false);
+
       setHasBroadcasted(true);
-      setAlertMessage(''); // Clear message
+      setAlertMessage('');
       setAlertDetails('');
       setYoutubeLink('');
       
       setTimeout(() => {
         setHasBroadcasted(false);
       }, 3000);
-    }, 800);
+
+    } catch (error) {
+      console.error('Failed to broadcast alert:', error);
+      alert('Failed to broadcast alert. Please try again.');
+    } finally {
+      setIsBroadcasting(false);
+    }
   };
 
   const handleReviewAction = (action: string) => {
@@ -233,12 +323,58 @@ export default function AdminDashboardPage() {
 
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <MetricCard title={t.totalUsers} value="124.5k" icon={Users} trend="+12%" color="blue" />
-        <MetricCard title={t.activePharmacies} value="842" icon={Store} trend="+5%" color="emerald" />
-        <MetricCard title={t.ordersToday} value="12,405" icon={ShoppingCart} trend="+18%" color="brand" />
-        <MetricCard title={t.pendingVerifs} value="24" icon={FileCheck} color="amber" />
-        <MetricCard title={t.activeComplaints} value="12" icon={AlertOctagon} color="red" />
-        <MetricCard title={t.systemUptime} value="99.99%" icon={Activity} color="purple" />
+        {loading ? (
+          // Loading skeleton
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm animate-pulse">
+              <div className="w-10 h-10 bg-gray-200 rounded-xl mb-4"></div>
+              <div className="h-4 bg-gray-200 rounded mb-2"></div>
+              <div className="h-8 bg-gray-200 rounded"></div>
+            </div>
+          ))
+        ) : (
+          <>
+            <MetricCard 
+              title={t.totalUsers} 
+              value={dashboardData?.totalUsers?.toLocaleString() || "124.5k"} 
+              icon={Users} 
+              trend="+12%" 
+              color="blue" 
+            />
+            <MetricCard 
+              title={t.activePharmacies} 
+              value={dashboardData?.activePharmacies?.toString() || "842"} 
+              icon={Store} 
+              trend="+5%" 
+              color="emerald" 
+            />
+            <MetricCard 
+              title={t.ordersToday} 
+              value={dashboardData?.ordersToday?.toLocaleString() || "12,405"} 
+              icon={ShoppingCart} 
+              trend="+18%" 
+              color="brand" 
+            />
+            <MetricCard 
+              title={t.pendingVerifs} 
+              value={verifications.length.toString()} 
+              icon={FileCheck} 
+              color="amber" 
+            />
+            <MetricCard 
+              title={t.activeComplaints} 
+              value={complaints.length.toString()} 
+              icon={AlertOctagon} 
+              color="red" 
+            />
+            <MetricCard 
+              title={t.systemUptime} 
+              value="99.99%" 
+              icon={Activity} 
+              color="purple" 
+            />
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">

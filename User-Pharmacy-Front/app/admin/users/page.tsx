@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { Search, ShieldAlert, UserX, MessageSquare, Edit, Trash2, Globe, ChevronDown } from 'lucide-react';
+import { adminApi } from '@/lib/admin-api';
 
 const TRANSLATIONS = {
   en: {
@@ -115,16 +116,49 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this user?")) {
-      setUsers(prev => prev.filter(u => u.id !== id));
+      try {
+        await adminApi.deleteUser(id);
+        setUsers(prev => prev.filter(u => u.id !== id));
+      } catch (error) {
+        alert((error as Error).message);
+      }
     }
   };
 
-  const handleToggleStatus = (id: string, currentStatus: string) => {
+  const handleToggleStatus = async (id: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'Active' ? 'Suspended' : 'Active';
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: nextStatus } : u));
+    try {
+      await adminApi.updateUserStatus(id, nextStatus === 'Active');
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, status: nextStatus } : u));
+    } catch (error) {
+      alert((error as Error).message);
+    }
   };
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const data = await adminApi.getUsers();
+        const mapped = data.map((user: any) => ({
+          id: user._id,
+          name: user.username,
+          phone: user.phone,
+          email: user.email,
+          role: user.role === 'patient' ? 'Patient' : user.role === 'pharmacy' ? 'Provider' : user.role,
+          status: user.isActive ? 'Active' : 'Suspended',
+          joinDate: user.createdAt ? new Date(user.createdAt).toISOString().slice(0, 10) : '-',
+          warnings: 0,
+        }));
+        setUsers(mapped);
+      } catch (error) {
+        console.error('Failed to load users', error);
+      }
+    };
+
+    loadUsers();
+  }, []);
 
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6">

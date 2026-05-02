@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { Search, AlertTriangle, MessageSquare, Filter, CheckCircle2, Globe, ChevronDown, X } from 'lucide-react';
+import { adminApi } from '@/lib/admin-api';
 import { motion, AnimatePresence } from 'motion/react';
 
 const TRANSLATIONS = {
@@ -110,10 +111,45 @@ export default function AdminComplaintsPage() {
     }
   };
 
-  const updateComplaintStatus = (id: string, newStatus: string) => {
-    setComplaints(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
-    setSelectedComplaint((prev: any) => ({ ...prev, status: newStatus }));
+  const updateComplaintStatus = async (id: string, newStatus: string) => {
+    const statusMap: Record<string, 'open' | 'resolved' | 'dismissed'> = {
+      'Open': 'open',
+      'In Progress': 'dismissed',
+      'Resolved': 'resolved',
+    };
+
+    try {
+      await adminApi.updateComplaint(id, statusMap[newStatus] ?? 'open');
+      setComplaints(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+      setSelectedComplaint((prev: any) => ({ ...prev, status: newStatus }));
+    } catch (error) {
+      alert((error as Error).message);
+    }
   };
+
+  useEffect(() => {
+    const loadComplaints = async () => {
+      try {
+        const data = await adminApi.getComplaints();
+        const mapped = data.map((complaint: any) => ({
+          id: complaint.ref || complaint._id,
+          user: complaint.reporterName,
+          type: complaint.targetType === 'pharmacy' ? 'Pharmacy' : 'Patient',
+          target: complaint.targetName || complaint.targetType,
+          subject: complaint.issue,
+          description: complaint.details || '-',
+          status: complaint.status === 'open' ? 'Open' : complaint.status === 'resolved' ? 'Resolved' : 'In Progress',
+          priority: complaint.severity === 'high' ? 'High' : complaint.severity === 'medium' ? 'Medium' : 'Low',
+          date: complaint.createdAt ? new Date(complaint.createdAt).toLocaleString() : '-',
+        }));
+        if (mapped.length) setComplaints(mapped);
+      } catch (error) {
+        console.error('Failed to load complaints', error);
+      }
+    };
+
+    loadComplaints();
+  }, []);
 
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6">
@@ -158,17 +194,17 @@ export default function AdminComplaintsPage() {
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.openComplaints}</h3>
           <p className="text-3xl font-bold text-brand-950 flex items-center gap-2">
-            14 <AlertTriangle className="w-5 h-5 text-amber-500" />
+            {complaints.filter(c => c.status === 'Open').length} <AlertTriangle className="w-5 h-5 text-amber-500" />
           </p>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.inProgress}</h3>
-          <p className="text-3xl font-bold text-brand-950">8</p>
+          <p className="text-3xl font-bold text-brand-950">{complaints.filter(c => c.status === 'In Progress').length}</p>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.resolvedThisWeek}</h3>
           <p className="text-3xl font-bold text-brand-950 flex items-center gap-2">
-            42 <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+            {complaints.filter(c => c.status === 'Resolved').length} <CheckCircle2 className="w-5 h-5 text-emerald-500" />
           </p>
         </div>
       </div>

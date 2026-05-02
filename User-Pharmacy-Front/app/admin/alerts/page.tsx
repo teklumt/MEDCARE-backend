@@ -1,15 +1,47 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ShieldAlert, Activity, Bell } from 'lucide-react';
+import { adminApi } from '@/lib/admin-api';
 
 const ALERTS = [
-  { id: 1, type: 'Security', message: 'Multiple failed login attempts from IP 192.168.1.45', time: '10 mins ago', severity: 'High' },
-  { id: 2, type: 'System', message: 'Payment gateway API latency > 2000ms', time: '1 hour ago', severity: 'Medium' },
-  { id: 3, type: 'Operational', message: 'Unusually high order volume detected in Bole area', time: '2 hours ago', severity: 'Low' },
-  { id: 4, type: 'Compliance', message: '3 pharmacies have licenses expiring in 7 days', time: '1 day ago', severity: 'High' },
+  { id: 1, type: 'System', message: 'No alerts yet.', time: 'just now', severity: 'Low' },
 ];
 
 export default function AdminAlertsPage() {
+  const [alerts, setAlerts] = useState(ALERTS);
+
+  useEffect(() => {
+    const loadAlerts = async () => {
+      try {
+        const data = await adminApi.getAlerts();
+        const mapped = data.map((alert: any) => {
+          const severity = alert.type?.includes('Emergency') ? 'High' : alert.type?.includes('Recall') ? 'Medium' : 'Low';
+          return {
+            id: alert._id,
+            type: alert.type,
+            message: alert.message,
+            time: alert.createdAt ? new Date(alert.createdAt).toLocaleString() : '-',
+            severity,
+          };
+        });
+        if (mapped.length) setAlerts(mapped);
+      } catch (error) {
+        console.error('Failed to load alerts', error);
+      }
+    };
+
+    loadAlerts();
+  }, []);
+
+  const summary = useMemo(() => {
+    const counts = { High: 0, Medium: 0, Low: 0 } as Record<string, number>;
+    alerts.forEach((alert) => {
+      counts[alert.severity] = (counts[alert.severity] ?? 0) + 1;
+    });
+    return counts;
+  }, [alerts]);
+
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6">
       <div>
@@ -20,7 +52,7 @@ export default function AdminAlertsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Alerts List */}
         <div className="lg:col-span-2 space-y-4">
-          {ALERTS.map((alert) => (
+          {alerts.map((alert) => (
             <div key={alert.id} className={`bg-white rounded-2xl border shadow-sm p-5 flex items-start gap-4 ${
               alert.severity === 'High' ? 'border-red-200' : 
               alert.severity === 'Medium' ? 'border-amber-200' : 'border-gray-200'
@@ -29,8 +61,8 @@ export default function AdminAlertsPage() {
                 alert.severity === 'High' ? 'bg-red-50 text-red-600' : 
                 alert.severity === 'Medium' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'
               }`}>
-                {alert.type === 'Security' ? <ShieldAlert className="w-6 h-6" /> :
-                 alert.type === 'System' ? <Activity className="w-6 h-6" /> :
+                 {alert.type === 'Security' ? <ShieldAlert className="w-6 h-6" /> :
+                  alert.type === 'System' ? <Activity className="w-6 h-6" /> :
                  <Bell className="w-6 h-6" />}
               </div>
               <div className="flex-1">
@@ -59,15 +91,15 @@ export default function AdminAlertsPage() {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> High Severity</span>
-                <span className="font-bold text-brand-950">2</span>
+                <span className="font-bold text-brand-950">{summary.High}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Medium Severity</span>
-                <span className="font-bold text-brand-950">1</span>
+                <span className="font-bold text-brand-950">{summary.Medium}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Low Severity</span>
-                <span className="font-bold text-brand-950">1</span>
+                <span className="font-bold text-brand-950">{summary.Low}</span>
               </div>
             </div>
           </div>

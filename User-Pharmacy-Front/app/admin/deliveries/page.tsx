@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { MapPin, AlertCircle, Globe, ChevronDown } from 'lucide-react';
+import { adminApi } from '@/lib/admin-api';
 
 const TRANSLATIONS = {
   en: {
@@ -38,6 +39,7 @@ const TRANSLATIONS = {
 export default function AdminDeliveriesPage() {
   const { language, setLanguage } = useLanguage();
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+  const [activeAssignments, setActiveAssignments] = useState(0);
   
   
   const toggleLanguage = (lang: 'en' | 'am') => {
@@ -46,6 +48,19 @@ export default function AdminDeliveriesPage() {
   };
 
   const t = TRANSLATIONS[language];
+
+  useEffect(() => {
+    const loadDeliveries = async () => {
+      try {
+        const data = await adminApi.getDeliveries({ status: 'in_progress' });
+        setActiveAssignments(data.length);
+      } catch (error) {
+        console.error('Failed to load deliveries', error);
+      }
+    };
+
+    loadDeliveries();
+  }, []);
 
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6 h-[calc(100vh-2rem)] flex flex-col">
@@ -92,7 +107,9 @@ export default function AdminDeliveriesPage() {
           <div className="text-center relative z-10 bg-white/90 p-6 rounded-2xl shadow-sm backdrop-blur-sm">
             <MapPin className="w-8 h-8 text-brand-600 mx-auto mb-2" />
             <p className="font-bold text-brand-950">{t.liveMap}</p>
-            <p className="text-sm text-gray-500">{t.trackingAgents}</p>
+            <p className="text-sm text-gray-500">
+              {t.trackingAgents.replace('142', String(activeAssignments || 0))}
+            </p>
           </div>
         </div>
 

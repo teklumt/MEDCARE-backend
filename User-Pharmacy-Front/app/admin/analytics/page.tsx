@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Download, TrendingUp, Users, ShoppingBag, Activity, Globe, ChevronDown } from 'lucide-react';
+import { adminApi } from '@/lib/admin-api';
 
 const TRANSLATIONS = {
   en: {
@@ -59,6 +60,11 @@ const USER_GROWTH = [
 export default function AdminAnalyticsPage() {
   const { language, setLanguage } = useLanguage();
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+  const [metrics, setMetrics] = useState({
+    totalRevenue: 0,
+    totalUsers: 0,
+    totalOrders: 0,
+  });
   
   
   const toggleLanguage = (lang: 'en' | 'am') => {
@@ -67,6 +73,23 @@ export default function AdminAnalyticsPage() {
   };
 
   const t = TRANSLATIONS[language];
+
+  useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        const data = await adminApi.getAnalytics();
+        setMetrics({
+          totalRevenue: Number((data as any).totalRevenue ?? 0),
+          totalUsers: Number((data as any).totalUsers ?? 0),
+          totalOrders: Number((data as any).totalOrders ?? 0),
+        });
+      } catch (error) {
+        console.error('Failed to load analytics', error);
+      }
+    };
+
+    loadMetrics();
+  }, []);
 
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6">
@@ -127,7 +150,9 @@ export default function AdminAnalyticsPage() {
             </span>
           </div>
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.totalPlatformRevenue}</h3>
-          <p className="text-3xl font-bold text-brand-950">12.4M <span className="text-lg text-gray-500 font-normal">{t.etb}</span></p>
+          <p className="text-3xl font-bold text-brand-950">
+            {metrics.totalRevenue.toLocaleString()} <span className="text-lg text-gray-500 font-normal">{t.etb}</span>
+          </p>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
@@ -140,7 +165,7 @@ export default function AdminAnalyticsPage() {
             </span>
           </div>
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.activePatients}</h3>
-          <p className="text-3xl font-bold text-brand-950">5,500</p>
+          <p className="text-3xl font-bold text-brand-950">{metrics.totalUsers.toLocaleString()}</p>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
@@ -153,7 +178,7 @@ export default function AdminAnalyticsPage() {
             </span>
           </div>
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.totalOrders}</h3>
-          <p className="text-3xl font-bold text-brand-950">142.5k</p>
+          <p className="text-3xl font-bold text-brand-950">{metrics.totalOrders.toLocaleString()}</p>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">

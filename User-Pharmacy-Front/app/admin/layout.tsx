@@ -8,6 +8,7 @@ import {
   Truck, AlertOctagon, BarChart2, Activity, Settings, 
   Bell, Search, LogOut, ShieldCheck, Server
 } from 'lucide-react';
+import { authApi } from '@/lib/auth-api';
 
 const NAV_ITEMS = [
   { label: 'Overview', href: '/admin', icon: LayoutDashboard },
@@ -29,19 +30,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [adminName, setAdminName] = useState('Admin');
 
   useEffect(() => {
-    const role = localStorage.getItem('medcare_role');
-    if (role !== 'admin') {
-      router.push('/signup');
-    } else {
-      const storedName = localStorage.getItem('medcare_username');
-      if (storedName) setAdminName(storedName);
+    // Check if user is authenticated with backend
+    if (!authApi.isAuthenticated()) {
+      router.push('/login');
+      return;
+    }
+
+    const userData = authApi.getCurrentUser();
+    if (userData) {
+      setAdminName(userData.username || userData.email.split('@')[0]);
       setIsAuthorized(true);
+    } else {
+      router.push('/login');
     }
   }, [router]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('medcare_role');
-    localStorage.removeItem('medcare_username');
+  const handleLogout = async () => {
+    await authApi.logout();
     router.push('/');
   };
 
