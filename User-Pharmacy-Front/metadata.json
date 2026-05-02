@@ -1,0 +1,5 @@
+{
+  "name": "MED-CARE Ethiopia",
+  "description": "AI-Powered Web Platform for Healthcare Navigation and Medication Access in Ethiopia",
+  "requestFramePermissions": ["camera", "microphone", "geolocation"]
+}

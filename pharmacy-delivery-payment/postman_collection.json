@@ -47,7 +47,7 @@
       "type": "string"
     },
     {
-      "key": "driver_id",
+      "key": "refresh_token",
       "value": "",
       "type": "string"
     }
@@ -84,77 +84,204 @@
       ]
     },
     {
-      "name": "Test Data (Seeded)",
+      "name": "Authentication",
       "item": [
         {
-          "name": "Get All Pharmacies",
+          "name": "User Signup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('auth_token', response.data.accessToken);",
+                  "    pm.collectionVariables.set('refresh_token', response.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"phone\": \"+251911234567\",\n  \"password\": \"password123\",\n  \"region\": \"Addis Ababa\",\n  \"city\": \"Addis Ababa\"\n}"
+            },
             "url": {
-              "raw": "{{base_url}}/test/pharmacies",
+              "raw": "{{base_url}}/auth/user/signup",
               "host": ["{{base_url}}"],
-              "path": ["test", "pharmacies"]
+              "path": ["auth", "user", "signup"]
             }
           }
         },
         {
-          "name": "Get All Medications",
+          "name": "Pharmacy Signup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('auth_token', response.data.accessToken);",
+                  "    pm.collectionVariables.set('refresh_token', response.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Abebe Kebede\",\n  \"email\": \"abebe@pharmacy.com\",\n  \"phone\": \"+251911234567\",\n  \"password\": \"password123\",\n  \"businessName\": \"Abebe Pharmacy\",\n  \"businessNameAmharic\": \"አበበ ፋርማሲ\",\n  \"licenseNumber\": \"LIC-2024-001\",\n  \"licenseImageUrl\": \"https://cloudinary.com/sample-license.jpg\",\n  \"tinNumber\": \"TIN-123456\",\n  \"address\": {\n    \"region\": \"Addis Ababa\",\n    \"city\": \"Addis Ababa\",\n    \"street\": \"Bole Road\",\n    \"coordinates\": {\n      \"lat\": 9.0192,\n      \"lng\": 38.7525\n    }\n  }\n}"
+            },
             "url": {
-              "raw": "{{base_url}}/test/medications",
+              "raw": "{{base_url}}/auth/pharmacy/signup",
               "host": ["{{base_url}}"],
-              "path": ["test", "medications"]
+              "path": ["auth", "pharmacy", "signup"]
             }
           }
         },
         {
-          "name": "Get All Inventory",
+          "name": "Delivery Signup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('auth_token', response.data.accessToken);",
+                  "    pm.collectionVariables.set('refresh_token', response.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Dawit Tesfaye\",\n  \"email\": \"dawit@delivery.com\",\n  \"phone\": \"+251922345678\",\n  \"password\": \"password123\",\n  \"vehicleType\": \"motorcycle\",\n  \"vehiclePlate\": \"AA-12345\",\n  \"nationalId\": \"ID123456\",\n  \"driverLicenseNumber\": \"DL-2024-001\"\n}"
+            },
             "url": {
-              "raw": "{{base_url}}/test/inventory",
+              "raw": "{{base_url}}/auth/delivery/signup",
               "host": ["{{base_url}}"],
-              "path": ["test", "inventory"]
+              "path": ["auth", "delivery", "signup"]
             }
           }
         },
         {
-          "name": "Get All Orders",
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('auth_token', response.data.accessToken);",
+                  "    pm.collectionVariables.set('refresh_token', response.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
             "url": {
-              "raw": "{{base_url}}/test/orders",
+              "raw": "{{base_url}}/auth/login",
               "host": ["{{base_url}}"],
-              "path": ["test", "orders"]
+              "path": ["auth", "login"]
             }
           }
         },
         {
-          "name": "Get All Users",
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('auth_token', response.data.accessToken);",
+                  "    pm.collectionVariables.set('refresh_token', response.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
             "url": {
-              "raw": "{{base_url}}/test/users",
+              "raw": "{{base_url}}/auth/refresh-token",
               "host": ["{{base_url}}"],
-              "path": ["test", "users"]
+              "path": ["auth", "refresh-token"]
             }
           }
         },
         {
-          "name": "Get All Drivers",
+          "name": "Get Profile",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/test/drivers",
+              "raw": "{{base_url}}/auth/profile",
               "host": ["{{base_url}}"],
-              "path": ["test", "drivers"]
+              "path": ["auth", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
             }
           }
         }

@@ -1,0 +1,446 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { Search, Plus, Upload, AlertTriangle, Clock, MoreVertical, Edit, Trash2, Globe, ChevronDown } from 'lucide-react';
+import AddStockPanel from '../../components/pharmacy/AddStockPanel';
+import BulkUploadModal from '../../components/pharmacy/BulkUploadModal';
+
+const INITIAL_INVENTORY = [
+  { id: '1', name: 'Amoxicillin 500mg', amharicName: 'አሞክሲሲሊን', category: 'Antibiotic', quantity: 150, price: 120.00, expiry: '2025-10-15', batch: 'B-8821', status: 'In Stock' },
+  { id: '2', name: 'Paracetamol 500mg', amharicName: 'ፓራሲታሞል', category: 'Painkiller', quantity: 12, price: 45.00, expiry: '2024-05-20', batch: 'B-8822', status: 'Low Stock' },
+  { id: '3', name: 'Azithromycin 250mg', amharicName: 'አዚትሮማይሲን', category: 'Antibiotic', quantity: 0, price: 250.00, expiry: '2026-01-10', batch: 'B-8823', status: 'Out of Stock' },
+  { id: '4', name: 'Vitamin C 1000mg', amharicName: 'ቫይታሚን ሲ', category: 'Supplement', quantity: 85, price: 300.00, expiry: '2024-04-25', batch: 'B-8824', status: 'Expiring Soon' },
+];
+
+const TRANSLATIONS = {
+  en: {
+    inventoryManagement: 'Inventory Management',
+    inventorySubtitle: 'Manage your medication stock, prices, and track expirations.',
+    bulkUploadCSV: 'Bulk Upload CSV',
+    addNewItem: 'Add New Item',
+    itemsLowStock: 'items low on stock',
+    itemsOutOfStock: 'items out of stock',
+    itemsExpiring: 'items expiring within 30 days',
+    searchPlaceholder: 'Search medications by name or batch...',
+    allCategories: 'All Categories',
+    antibiotic: 'Antibiotic',
+    painkiller: 'Painkiller',
+    supplement: 'Supplement',
+    allStatuses: 'All Statuses',
+    allInventory: 'All Inventory',
+    inStock: 'In Stock',
+    lowStock: 'Low Stock',
+    outOfStock: 'Out of Stock',
+    expiringSoon: 'Expiring Soon',
+    medication: 'Medication',
+    category: 'Category',
+    quantity: 'Quantity',
+    priceETB: 'Price (ETB)',
+    expiryDate: 'Expiry Date',
+    status: 'Status',
+    actions: 'Actions',
+    batch: 'Batch'
+  },
+  am: {
+    inventoryManagement: 'የክምችት አስተዳደር',
+    inventorySubtitle: 'የመድሃኒት ክምችትዎን፣ ዋጋዎን ያስተዳድሩ፣ እና የሚያበቃበትን ጊዜ ይከታተሉ።',
+    bulkUploadCSV: 'የጅምላ ጭነት CSV',
+    addNewItem: 'አዲስ እቃ ጨምር',
+    itemsLowStock: 'እቃዎች ክምችት ያነሳቸው',
+    itemsOutOfStock: 'እቃዎች ክምችት ያቋረጡ',
+    itemsExpiring: 'እቃዎች በ30 ቀናት ውስጥ የሚያበቁ',
+    searchPlaceholder: 'መድሃኒቶችን በስም ወይም በባች ይፈልጉ...',
+    allCategories: 'ሁሉም ምድቦች',
+    antibiotic: 'ፀረ-ባክቴሪያ',
+    painkiller: 'ማስታገሻ',
+    supplement: 'ማሟያ',
+    allStatuses: 'ሁሉም ሁኔታዎች',
+    allInventory: 'ሁሉም ክምችት',
+    inStock: 'በክምችት አለ',
+    lowStock: 'አነስተኛ ክምችት',
+    outOfStock: 'ክምችት አልቋል',
+    expiringSoon: 'በቅርቡ የሚያበቃ',
+    medication: 'መድሃኒት',
+    category: 'ምድብ',
+    quantity: 'ብዛት',
+    priceETB: 'ዋጋ (ብር)',
+    expiryDate: 'የሚያበቃበት ቀን',
+    status: 'ሁኔታ',
+    actions: 'እርምጃዎች',
+    batch: 'ባች'
+  }
+};
+
+export default function InventoryPage() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All Categories');
+  const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [alertFilter, setAlertFilter] = useState('All');
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('medcare_inventory');
+    if (saved) {
+      setInventoryItems(JSON.parse(saved));
+    } else {
+      setInventoryItems(INITIAL_INVENTORY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (inventoryItems.length > 0) {
+      localStorage.setItem('medcare_inventory', JSON.stringify(inventoryItems));
+    }
+  }, [inventoryItems]);
+
+  const [isAddStockOpen, setIsAddStockOpen] = useState(false);
+  const [editItem, setEditItem] = useState<any>(null);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const { language, setLanguage } = useLanguage();
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+
+  
+  const toggleLanguage = (lang: 'en' | 'am') => {
+    setLanguage(lang);
+        setIsLangDropdownOpen(false);
+  };
+
+  const t = TRANSLATIONS[language];
+
+  const handleAddStock = (newItem: any) => {
+    if (editItem) {
+      setInventoryItems(prev => prev.map(item => item.id === editItem.id ? { ...newItem, id: editItem.id, pharmacyName: item.pharmacyName } : item));
+      setEditItem(null);
+    } else {
+      const pharmacyName = localStorage.getItem('medcare_user_name') || localStorage.getItem('medcare_username') || 'Unknown Pharmacy';
+      const itemWithPharmacy = { ...newItem, pharmacyName };
+      setInventoryItems(prev => [itemWithPharmacy, ...prev]);
+    }
+  };
+
+  const handleUpdateItem = (id: string, field: string, value: string | number) => {
+    setInventoryItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const handleEditIcon = (item: any) => {
+    setEditItem(item);
+    setIsAddStockOpen(true);
+  };
+
+  const handleDeleteIcon = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteConfirmId) {
+      setInventoryItems(prev => prev.filter(i => i.id !== deleteConfirmId));
+      setDeleteConfirmId(null);
+    }
+  };
+
+  const lowStockCount = inventoryItems.filter(i => i.status === 'Low Stock').length;
+  const outOfStockCount = inventoryItems.filter(i => i.status === 'Out of Stock').length;
+  const expiringCount = inventoryItems.filter(i => i.status === 'Expiring Soon').length;
+
+  const translateStatus = (status: string) => {
+    switch(status) {
+      case 'In Stock': return t.inStock;
+      case 'Low Stock': return t.lowStock;
+      case 'Out of Stock': return t.outOfStock;
+      case 'Expiring Soon': return t.expiringSoon;
+      default: return status;
+    }
+  };
+  
+  const translateCategory = (cat: string) => {
+    switch(cat) {
+      case 'Antibiotic': return t.antibiotic;
+      case 'Painkiller': return t.painkiller;
+      case 'Supplement': return t.supplement;
+      default: return cat;
+    }
+  };
+
+  const filteredItems = inventoryItems.filter(item => {
+    const query = searchTerm.toLowerCase();
+    const searchMatch = !query || 
+      item.name.toLowerCase().includes(query) || 
+      (item.amharicName && item.amharicName.toLowerCase().includes(query)) ||
+      item.batch.toLowerCase().includes(query);
+
+    const catMatch = categoryFilter === 'All Categories' || item.category === categoryFilter || categoryFilter === t.allCategories;
+    
+    // Convert 'All Statuses' translated to literal string matching since inventory stores English base statuses
+    const isStatusAll = statusFilter === 'All Statuses' || statusFilter === t.allStatuses;
+    const statusMatch = isStatusAll || item.status === statusFilter || translateStatus(item.status) === statusFilter;
+
+    let alertMatch = true;
+    if (alertFilter === 'Low Stock') alertMatch = item.status === 'Low Stock';
+    if (alertFilter === 'Out of Stock') alertMatch = item.status === 'Out of Stock';
+    if (alertFilter === 'Expiring Soon') alertMatch = item.status === 'Expiring Soon';
+
+    return searchMatch && catMatch && statusMatch && alertMatch;
+  });
+
+  return (
+    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-serif font-bold text-brand-950 mb-1">{t.inventoryManagement}</h1>
+          <p className="text-gray-500 font-medium">{t.inventorySubtitle}</p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative z-10 mr-2">
+            <button 
+              onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
+              className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
+            >
+              <Globe className="w-4 h-4 text-brand-600" />
+              <span className="text-sm font-bold text-brand-950">{language === 'en' ? 'EN' : 'አማ'}</span>
+              <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {isLangDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
+                <button 
+                  onClick={() => toggleLanguage('en')}
+                  className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'en' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
+                >
+                  English
+                </button>
+                <button 
+                  onClick={() => toggleLanguage('am')}
+                  className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'am' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
+                >
+                  አማርኛ
+                </button>
+              </div>
+            )}
+          </div>
+          <button 
+            onClick={() => setIsBulkUploadOpen(true)}
+            className="flex items-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-brand-950 px-4 py-2.5 rounded-xl font-bold transition-colors shadow-sm"
+          >
+            <Upload className="w-4 h-4" />
+            {t.bulkUploadCSV}
+          </button>
+          <button 
+            onClick={() => setIsAddStockOpen(true)}
+            className="flex items-center gap-2 bg-brand-900 hover:bg-brand-800 text-white px-5 py-2.5 rounded-xl font-bold transition-colors shadow-sm"
+          >
+            <Plus className="w-5 h-5" />
+            {t.addNewItem}
+          </button>
+        </div>
+      </div>
+
+      {/* Alert Summary Strip */}
+      <div className="flex flex-wrap gap-3">
+        <button 
+          onClick={() => setAlertFilter('All')} 
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${alertFilter === 'All' ? 'bg-brand-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+        >
+          {t.allInventory}
+        </button>
+        <button 
+          onClick={() => setAlertFilter('Low Stock')}
+          className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-bold transition-colors ${alertFilter === 'Low Stock' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}
+        >
+          <AlertTriangle className="w-4 h-4" />
+          {lowStockCount} {t.itemsLowStock}
+        </button>
+        <button 
+          onClick={() => setAlertFilter('Out of Stock')}
+          className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-bold transition-colors ${alertFilter === 'Out of Stock' ? 'bg-red-100 text-red-800 border-red-300' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'}`}
+        >
+          <div className="w-2 h-2 rounded-full bg-red-600"></div>
+          {outOfStockCount} {t.itemsOutOfStock}
+        </button>
+        <button 
+          onClick={() => setAlertFilter('Expiring Soon')}
+          className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-bold transition-colors ${alertFilter === 'Expiring Soon' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}
+        >
+          <Clock className="w-4 h-4" />
+          {expiringCount} {t.itemsExpiring}
+        </button>
+      </div>
+
+      {/* Filters and Search */}
+      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4">
+        <div className="flex-1 relative">
+          <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input 
+            type="text" 
+            placeholder={t.searchPlaceholder} 
+            className="w-full pl-10 pr-4 py-2.5 bg-accent-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-3">
+          <select 
+            className="bg-accent-50 border border-gray-200 text-brand-950 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="All Categories">{t.allCategories}</option>
+            <option value="Antibiotic">{t.antibiotic}</option>
+            <option value="Painkiller">{t.painkiller}</option>
+            <option value="Supplement">{t.supplement}</option>
+          </select>
+          <select 
+            className="bg-accent-50 border border-gray-200 text-brand-950 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="All Statuses">{t.allStatuses}</option>
+            <option value="In Stock">{t.inStock}</option>
+            <option value="Low Stock">{t.lowStock}</option>
+            <option value="Out of Stock">{t.outOfStock}</option>
+            <option value="Expiring Soon">{t.expiringSoon}</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Inventory Table */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-accent-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                <th className="p-4 font-medium">{t.medication}</th>
+                <th className="p-4 font-medium">{t.category}</th>
+                <th className="p-4 font-medium">{t.quantity}</th>
+                <th className="p-4 font-medium">{t.priceETB}</th>
+                <th className="p-4 font-medium">{t.expiryDate}</th>
+                <th className="p-4 font-medium">{t.status}</th>
+                <th className="p-4 font-medium text-right">{t.actions}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredItems.map((item) => (
+                <tr key={item.id} className={`hover:bg-accent-50/50 transition-colors ${item.status === 'Out of Stock' ? 'bg-red-50/30' : item.status === 'Expiring Soon' ? 'bg-amber-50/30' : ''}`}>
+                  <td className="p-4">
+                    <p className="font-bold text-brand-950 text-sm">{language === 'am' && item.amharicName ? item.amharicName : item.name}</p>
+                    <p className="text-xs text-gray-500">{language === 'en' && item.amharicName ? item.amharicName : item.name} • {t.batch}: {item.batch}</p>
+                  </td>
+                  <td className="p-4 text-sm text-gray-600">{translateCategory(item.category)}</td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
+                       <input 
+                         type="number" 
+                         value={item.quantity} 
+                         onChange={(e) => handleUpdateItem(item.id, 'quantity', Number(e.target.value))}
+                         className="w-20 px-2 py-1 border border-gray-200 rounded-lg text-sm" 
+                       />
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
+                       <input 
+                         type="number" 
+                         value={item.price} 
+                         onChange={(e) => handleUpdateItem(item.id, 'price', Number(e.target.value))}
+                         className="w-24 px-2 py-1 border border-gray-200 rounded-lg text-sm" 
+                       />
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <span className={`text-sm ${item.status === 'Expiring Soon' ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                      {item.expiry}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${
+                      item.status === 'In Stock' ? 'bg-emerald-50 text-emerald-700' :
+                      item.status === 'Low Stock' ? 'bg-amber-50 text-amber-700' :
+                      item.status === 'Out of Stock' ? 'bg-red-50 text-red-700' :
+                      item.status === 'Hidden' ? 'bg-gray-100 text-gray-600' :
+                      'bg-orange-50 text-orange-700'
+                    }`}>
+                      {translateStatus(item.status)}
+                    </span>
+                  </td>
+                  <td className="p-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => handleEditIcon(item)}
+                        title="Edit Name"
+                        className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteIcon(item.id)}
+                        title="Delete Item"
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredItems.length === 0 && (
+                <tr>
+                   <td colSpan={7} className="p-8 text-center text-gray-500">
+                      No items found matching your filters.
+                   </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <AddStockPanel 
+        isOpen={isAddStockOpen} 
+        onClose={() => {
+          setIsAddStockOpen(false);
+          setEditItem(null);
+        }} 
+        onAdd={handleAddStock}
+        editItem={editItem}
+      />
+      
+      <BulkUploadModal 
+        isOpen={isBulkUploadOpen} 
+        onClose={() => setIsBulkUploadOpen(false)} 
+      />
+
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setDeleteConfirmId(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                {language === 'en' ? 'Delete Item' : 'እቃ መሰረዝ'}
+              </h3>
+              <p className="text-gray-600 mb-6">
+                {language === 'en' ? 'Are you sure you want to delete this item? This action cannot be undone.' : 'ይህን እቃ መሰረዝ እንደሚፈልጉ እርግጠኛ ነዎት? ይሄ ድርጊት ወደኋላ መመለስ አይቻልም።'}
+              </p>
+              <div className="flex justify-center gap-3">
+                <button 
+                  onClick={() => setDeleteConfirmId(null)} 
+                  className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors w-full"
+                >
+                  {language === 'en' ? 'Cancel' : 'ሰርዝ'}
+                </button>
+                <button 
+                  onClick={confirmDelete} 
+                  className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors w-full"
+                >
+                  {language === 'en' ? 'Delete' : 'አጥፋ'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
