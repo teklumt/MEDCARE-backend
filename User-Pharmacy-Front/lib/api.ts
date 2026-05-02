@@ -15,7 +15,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/a
 
 const getToken = () => {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('medcare_access_token');
+  // Try admin token first (from Admin-Backend login), then fall back to medcare token
+  return localStorage.getItem('admin_access_token') || localStorage.getItem('medcare_access_token');
 };
 
 const buildUrl = (path: string, params?: Record<string, string | number | undefined>) => {

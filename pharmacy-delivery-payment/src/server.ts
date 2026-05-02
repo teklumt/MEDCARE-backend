@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import path from 'path';
 import connectDB from './config/database';
 import authRoutes from './routes/auth.routes';
 import usersRoutes from './routes/users.routes';
@@ -26,6 +27,9 @@ const app: Application = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files for uploaded prescriptions (local storage)
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Basic health check route
 app.get('/health', (_req: Request, res: Response) => {

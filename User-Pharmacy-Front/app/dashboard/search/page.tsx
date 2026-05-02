@@ -47,9 +47,9 @@ function MedicationCard({ medication }: { medication: any }) {
     addToCart({
       id: medication.id,
       name: medication.brandName,
-      price: medication.price || 150.00, // Use dynamic price or fallback
+      price: medication.price || 150.00,
       quantity: 1,
-      requiresPrescription: true, // Mock requirement
+      requiresPrescription: medication.requiresPrescription !== undefined ? medication.requiresPrescription : true,
       pharmacyName: medication.pharmacyName || t('findPharmacies.mockName'),
       image: medication.image,
     });
@@ -106,8 +106,77 @@ function MedicationCard({ medication }: { medication: any }) {
 export default function FindMedicationsPage() {
   const { t } = useLanguage();
   const [categories, setCategories] = React.useState(getMedicationCategories(t));
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    const fetchMedications = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Fetch medications from backend API
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1'}/search?type=medication`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('admin_access_token') || localStorage.getItem('medcare_access_token')}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch medications');
+        }
+
+        const data = await response.json();
+        
+        if (data.success && data.data && data.data.length > 0) {
+          // Group medications by category
+          const medicationsByCategory: { [key: string]: any[] } = {};
+          
+          data.data.forEach((med: any) => {
+            const category = med.category || 'Other';
+            if (!medicationsByCategory[category]) {
+              medicationsByCategory[category] = [];
+            }
+            
+            medicationsByCategory[category].push({
+              id: med._id,
+              brandName: med.name,
+              genericName: med.genericName || med.name,
+              drugClass: med.category,
+              approvalHistory: med.description || 'Available from verified pharmacy',
+              image: med.imageUrl || 'https://picsum.photos/seed/med/800/600',
+              pharmacyName: med.pharmacyName || 'Partner Pharmacy',
+              price: med.price || 150.00,
+              stockStatus: med.stockStatus,
+              requiresPrescription: med.requiresPrescription || false,
+            });
+          });
+
+          // Convert to categories array
+          const realCategories = Object.entries(medicationsByCategory).map(([title, medications]) => ({
+            title,
+            medications
+          }));
+
+          // Combine with mock data
+          setCategories([...realCategories, ...getMedicationCategories(t)]);
+        } else {
+          // If no real data, just use mock data
+          setCategories(getMedicationCategories(t));
+        }
+      } catch (err: any) {
+        console.error('Error fetching medications:', err);
+        setError(err.message);
+        // Fall back to mock data on error
+        setCategories(getMedicationCategories(t));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMedications();
+
+    // Also check localStorage for any cached inventory
     try {
       const stored = localStorage.getItem('medcare_inventory');
       if (stored) {
@@ -121,14 +190,14 @@ export default function FindMedicationsPage() {
               genericName: i.amharicName || i.name,
               drugClass: i.category,
               approvalHistory: i.description || 'Verified stock from partner pharmacy.',
-              image: 'https://picsum.photos/seed/med/800/600', // Use placeholder or real image if possible
+              image: 'https://picsum.photos/seed/med/800/600',
               pharmacyName: i.pharmacyName,
               price: i.price,
+              requiresPrescription: true,
             }));
           
           if (availableMedications.length > 0) {
             setCategories(prev => {
-              // Ensure we don't duplicate the dynamic category
               const base = prev.filter(c => c.title !== 'Live Pharmacy Inventory');
               return [
                 {
@@ -142,9 +211,9 @@ export default function FindMedicationsPage() {
         }
       }
     } catch (error) {
-      console.error(error);
+      console.error('Error loading cached inventory:', error);
     }
-  }, []);
+  }, [t]);
 
   return (
     <main className="min-h-screen flex flex-col bg-accent-50 pb-20 md:pb-0">
@@ -160,8 +229,37 @@ export default function FindMedicationsPage() {
           <DashboardSearch />
         </div>
 
+        {/* Loading State */}
+        {isLoading && (
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="w-12 h-12 border-4 border-brand-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-gray-500 font-medium">Loading medications...</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !isLoading && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-8">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+                <Pill className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-amber-900 mb-1">Unable to load live inventory</h3>
+                <p className="text-sm text-amber-700 mb-3">Showing sample medications. {error}</p>
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="text-sm font-bold text-amber-700 hover:text-amber-900 underline"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Medication Categories */}
-        {categories.map((category, sectionIndex) => (
+        {!isLoading && categories.map((category, sectionIndex) => (
           <section key={category.title} className="mb-12">
             <div className="flex justify-between items-end mb-6">
               <h2 className="text-2xl font-serif font-bold text-gray-900">{category.title}</h2>

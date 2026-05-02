@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import PrescriptionUpload from '../models/PrescriptionUpload';
 import { AuthRequest } from '../middleware/auth';
+import { getFileUrl } from '../config/upload';
 
 export const uploadPrescription = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -9,10 +10,38 @@ export const uploadPrescription = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
+    // Check if file was uploaded via multer
+    if (req.file) {
+      const { orderId } = req.body;
+      
+      // Get file URL (works for both Cloudinary and local storage)
+      const fileUrl = getFileUrl(req.file);
+      const fileType = req.file.mimetype.startsWith('image/') ? 'image' : 'pdf';
+
+      const upload = await PrescriptionUpload.create({
+        patientId: req.user.userId,
+        orderId: orderId || null,
+        fileUrl,
+        fileType,
+        uploadedAt: new Date()
+      });
+
+      res.status(201).json({ 
+        success: true, 
+        message: 'Prescription uploaded successfully', 
+        data: upload 
+      });
+      return;
+    }
+
+    // Fallback: Accept fileUrl directly (for pre-uploaded files)
     const { fileUrl, fileType, orderId } = req.body;
 
     if (!fileUrl || !fileType) {
-      res.status(400).json({ success: false, error: 'fileUrl and fileType are required' });
+      res.status(400).json({ 
+        success: false, 
+        error: 'Please upload a file or provide fileUrl and fileType' 
+      });
       return;
     }
 
@@ -24,9 +53,18 @@ export const uploadPrescription = async (req: AuthRequest, res: Response): Promi
       uploadedAt: new Date()
     });
 
-    res.status(201).json({ success: true, message: 'Prescription uploaded', data: upload });
+    res.status(201).json({ 
+      success: true, 
+      message: 'Prescription uploaded successfully', 
+      data: upload 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to upload prescription', details: (error as Error).message });
+    console.error('Prescription upload error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to upload prescription', 
+      details: (error as Error).message 
+    });
   }
 };
 

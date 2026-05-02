@@ -96,6 +96,53 @@
 
 ---
 
+### 5. ✅ Prescription File Upload
+**Files:** 
+- `pharmacy-delivery-payment/src/config/upload.ts` (NEW)
+- `pharmacy-delivery-payment/src/controllers/prescriptions.controller.ts`
+- `pharmacy-delivery-payment/src/routes/prescriptions.routes.ts`
+- `pharmacy-delivery-payment/src/server.ts`
+
+**Problem:** 
+- Backend expected `fileUrl` and `fileType` (pre-uploaded URL)
+- Frontend was sending actual file via FormData
+- Backend wasn't handling file uploads
+- Error: "fileUrl and fileType are required"
+
+**Fix Applied:**
+1. **Created Dual Storage System** (`config/upload.ts`):
+   - Cloudinary storage (if credentials configured)
+   - Local storage fallback (default)
+   - Automatic detection and switching
+   - File validation (JPEG, PNG, PDF only, max 5MB)
+
+2. **Updated Prescription Controller**:
+   - Added `getFileUrl()` helper import
+   - Fixed duplicate import statements
+   - Handles both file uploads AND pre-uploaded URLs
+   - Proper error handling
+
+3. **Updated Prescription Routes**:
+   - Changed import from `config/cloudinary` to `config/upload`
+   - Uses new dual-storage multer configuration
+
+4. **Added Static File Serving** (server.ts):
+   - Added `path` import
+   - Added middleware: `app.use('/uploads', express.static(...))`
+   - Serves files from `/uploads/prescriptions/` directory
+
+**Result:** 
+- ✅ File upload working with local storage
+- ✅ Files accessible at `http://localhost:5000/uploads/prescriptions/{filename}`
+- ✅ Ready to switch to Cloudinary when credentials configured
+- ✅ Frontend integration already in place
+
+**Storage Mode:** Local (Cloudinary credentials not configured)
+
+**See:** `PRESCRIPTION_UPLOAD_FIX.md` for detailed documentation
+
+---
+
 ## 🎉 Current Status: ALL SYSTEMS GO!
 
 ### ✅ Backend (pharmacy-delivery-payment)

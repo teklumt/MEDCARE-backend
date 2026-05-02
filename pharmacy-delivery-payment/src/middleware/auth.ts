@@ -1,13 +1,30 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../utils/jwt';
+import jwt from 'jsonwebtoken';
 
 export interface AuthRequest extends Request {
   user?: {
     userId: string;
-    email: string;
-    role: 'patient' | 'pharmacy';
+    email?: string;
+    role: 'patient' | 'pharmacy' | 'admin' | 'delivery';
   };
   file?: Express.Multer.File;
+}
+
+// Admin-Backend token format
+interface AdminTokenPayload {
+  sub: string;
+  role: string;
+  mfa: boolean;
+  permissions: string[];
+  iss?: string;
+  aud?: string;
+}
+
+// Main backend token format (legacy)
+interface MainTokenPayload {
+  userId: string;
+  email: string;
+  role: 'patient' | 'pharmacy';
 }
 
 export const authenticate = (req: AuthRequest, res: Response, next: NextFunction): void => {
@@ -24,8 +41,28 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
 
     const token = authHeader.substring(7);
 
-    const decoded = verifyAccessToken(token);
-    req.user = decoded;
+    try {
+      // Try to verify with Admin-Backend format first
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string, {
+        issuer: process.env.APP_URL || 'http://localhost:5000',
+        audience: process.env.APP_URL || 'http://localhost:5000',
+      }) as AdminTokenPayload;
+
+      // Convert Admin-Backend format to our format
+      req.user = {
+        userId: decoded.sub,
+        role: decoded.role as any,
+      };
+    } catch (adminError) {
+      // If Admin-Backend format fails, try main backend format (without issuer/audience)
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as MainTokenPayload;
+      
+      req.user = {
+        userId: decoded.userId,
+        email: decoded.email,
+        role: decoded.role,
+      };
+    }
     
     next();
   } catch (error) {
@@ -44,7 +81,7 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
   }
 };
 
-export const authorizeRoles = (...roles: Array<'patient' | 'pharmacy'>) => {
+export const authorizeRoles = (...roles: Array<'patient' | 'pharmacy' | 'admin' | 'delivery'>) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({
@@ -54,7 +91,7 @@ export const authorizeRoles = (...roles: Array<'patient' | 'pharmacy'>) => {
       return;
     }
 
-    if (!roles.includes(req.user.role)) {
+    if (!roles.includes(req.user.role as any)) {
       res.status(403).json({
         success: false,
         error: `Access denied. Required role: ${roles.join(' or ')}`

@@ -114,12 +114,17 @@ export const authApi = {
       }
     }
 
-    // Clear local storage
+    // Clear all auth-related data from localStorage
     localStorage.removeItem('admin_access_token');
     localStorage.removeItem('admin_refresh_token');
     localStorage.removeItem('medcare_role');
     localStorage.removeItem('medcare_username');
+    localStorage.removeItem('medcare_user_name');
     localStorage.removeItem('medcare_user_data');
+    localStorage.removeItem('medcare_user_email');
+    localStorage.removeItem('medcare_first_name');
+    localStorage.removeItem('medcare_last_name');
+    localStorage.removeItem('medcare_user_photo');
   },
 
   getCurrentUser: () => {
@@ -141,11 +146,32 @@ export const authApi = {
   storeAuthData: (loginResponse: LoginResponse) => {
     const { user, tokens } = loginResponse.data;
     
+    // Store tokens
     localStorage.setItem('admin_access_token', tokens.accessToken);
     localStorage.setItem('admin_refresh_token', tokens.refreshToken);
+    
+    // Store user data in multiple formats for compatibility
     localStorage.setItem('medcare_role', user.role);
     localStorage.setItem('medcare_username', user.username);
+    localStorage.setItem('medcare_user_name', user.username); // For navbar
     localStorage.setItem('medcare_user_data', JSON.stringify(user));
+    
+    // Store email if available
+    if (user.email) {
+      localStorage.setItem('medcare_user_email', user.email);
+    }
+    
+    // Parse username to get first name (if format is firstname_lastname)
+    const nameParts = user.username.split('_');
+    if (nameParts.length > 0) {
+      const firstName = nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1);
+      localStorage.setItem('medcare_first_name', firstName);
+      
+      if (nameParts.length > 1) {
+        const lastName = nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1);
+        localStorage.setItem('medcare_last_name', lastName);
+      }
+    }
   }
 };
 
