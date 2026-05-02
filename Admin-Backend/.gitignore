@@ -1,0 +1,14 @@
+# Ignore all Markdown files...
+*.md
+
+# ...except readme.md
+!readme.md
+!README.md
+
+/node_modules
+/dist
+/.env
+/coverage
+.DS_Store
+*.log
+*.lock
