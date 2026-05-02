@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import DashboardNavbar from '@/components/DashboardNavbar';
-import OfflineBanner from '@/components/dashboard/OfflineBanner';
+import { apiGet } from '@/lib/api';import OfflineBanner from '@/components/dashboard/OfflineBanner';
 import Greeting from '@/components/dashboard/Greeting';
 import DismissibleAlert from '@/components/dashboard/DismissibleAlert';
 import DashboardSearch from '@/components/dashboard/DashboardSearch';
@@ -17,18 +17,18 @@ export default function DashboardPage() {
   const [broadcastAlert, setBroadcastAlert] = useState<{type: string, region: string, message: string, details?: string, youtubeLink?: string} | null>(null);
 
   useEffect(() => {
-    // Check for broadcasted alert
-    const storedAlert = localStorage.getItem('medcare_broadcast_alert');
-    if (storedAlert) {
+    const loadAlert = async () => {
       try {
-        const parsed = JSON.parse(storedAlert);
-        if (parsed && parsed.active) {
-           setBroadcastAlert(parsed);
+        const response = await apiGet<any>('/alerts/active');
+        if (response.data?.isActive) {
+          setBroadcastAlert(response.data);
         }
-      } catch (e) {
-        console.error("Failed to parse alert", e);
+      } catch (error) {
+        console.error(error);
       }
-    }
+    };
+
+    loadAlert();
   }, []);
   
   return (

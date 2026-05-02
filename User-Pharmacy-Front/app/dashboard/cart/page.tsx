@@ -6,21 +6,103 @@ import { motion } from 'motion/react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Trash2, Plus, Minus, Upload, Camera, MapPin, Store, CheckCircle2, AlertCircle, CreditCard, Clock, ShoppingCart, Pill, FileText, Search } from 'lucide-react';
+import { ChevronLeft, Trash2, Plus, Minus, Upload, MapPin, Store, CheckCircle2, AlertCircle, CreditCard, Clock, ShoppingCart, Pill, FileText, Loader2 } from 'lucide-react';
 import { useCart } from '@/lib/CartContext';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { apiPost } from '@/lib/api';
 
 export default function CartPage() {
   const { t } = useLanguage();
   const { items, updateQuantity, removeFromCart, cartTotal, itemCount, clearCart } = useCart();
   const [deliveryMethod, setDeliveryMethod] = useState<'pickup' | 'delivery'>('pickup');
   const [prescriptionUploaded, setPrescriptionUploaded] = useState(false);
+  const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'chapa' | 'cod'>('chapa');
   const router = useRouter();
 
   const deliveryFee = deliveryMethod === 'delivery' ? 50.00 : 0;
   const finalTotal = cartTotal + deliveryFee;
 
   const requiresPrescription = items.some(item => item.requiresPrescription);
+
+  // Mock pharmacy ID - in real app, this would come from the items
+  const selectedPharmacyId = '507f1f77bcf86cd799439011';
+
+  const handlePrescriptionUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPrescriptionFile(file);
+      setPrescriptionUploaded(true);
+    }
+  };
+
+  const handleCheckout = async () => {
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      // 1. Upload prescription if required
+      let prescriptionUploadId = null;
+      if (requiresPrescription && prescriptionFile) {
+        const formData = new FormData();
+        formData.append('file', prescriptionFile);
+        
+        try {
+          const uploadRes = await apiPost<{ _id: string }>('/prescriptions/upload', formData);
+          prescriptionUploadId = uploadRes.data?._id;
+        } catch (err: any) {
+          throw new Error('Failed to upload prescription. Please try again.');
+        }
+      }
+
+      // 2. Get user address (mock for now - should come from user profile)
+      const deliveryAddress = deliveryMethod === 'delivery' ? {
+        recipientName: 'Abebe Kebede',
+        phone: '0911234567',
+        street: 'Bole Road, Dembel City Center',
+        subCity: 'Bole',
+        city: 'Addis Ababa',
+        additionalInfo: 'Green gate'
+      } : undefined;
+
+      // 3. Create order with payment
+      const orderData = {
+        pharmacyId: selectedPharmacyId,
+        deliveryMethod,
+        deliveryAddress,
+        deliveryInstructions: '',
+        items: items.map(item => ({
+          medicationId: item.id,
+          quantity: item.quantity
+        })),
+        paymentMethod,
+        deliveryFee,
+        discount: 0,
+        prescriptionUploadId
+      };
+
+      const response = await apiPost<{ order: { _id: string }; payment: { checkoutUrl?: string } }>('/orders', orderData);
+      const { order, payment } = response.data || {};
+
+      // 4. Clear cart
+      clearCart();
+
+      // 5. Redirect based on payment method
+      if (paymentMethod === 'chapa' && payment?.checkoutUrl) {
+        // Redirect to Chapa checkout
+        window.location.href = payment.checkoutUrl;
+      } else if (order?._id) {
+        // COD order - redirect to order page
+        router.push(`/dashboard/orders/${order._id}`);
+      }
+    } catch (err: any) {
+      console.error('Checkout error:', err);
+      setError(err.message || 'Checkout failed. Please try again.');
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <main className="min-h-screen flex flex-col bg-accent-50 pb-20 md:pb-0">
@@ -35,6 +117,16 @@ export default function CartPage() {
           <h1 className="text-3xl md:text-4xl font-serif text-brand-950 mb-2">{t('cart.title')}</h1>
           <p className="text-gray-500 font-medium">{t('cart.subtitle')}</p>
         </div>
+
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-bold text-red-900 mb-1">Checkout Error</h4>
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
+        )}
 
         {items.length === 0 ? (
           <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center shadow-sm">
@@ -164,27 +256,27 @@ export default function CartPage() {
                       
                       {!prescriptionUploaded ? (
                         <div className="flex flex-wrap gap-3">
-                          <button 
-                            onClick={() => setPrescriptionUploaded(true)}
-                            className="flex items-center gap-2 bg-white border border-gray-200 hover:border-brand-500 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors"
-                          >
+                          <label className="flex items-center gap-2 bg-white border border-gray-200 hover:border-brand-500 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer">
                             <Upload className="w-4 h-4" /> {t('cart.uploadFile')}
-                          </button>
-                          <button 
-                            onClick={() => setPrescriptionUploaded(true)}
-                            className="flex items-center gap-2 bg-white border border-gray-200 hover:border-brand-500 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors"
-                          >
-                            <Camera className="w-4 h-4" /> {t('cart.takePhoto')}
-                          </button>
+                            <input 
+                              type="file" 
+                              accept="image/*,.pdf" 
+                              onChange={handlePrescriptionUpload}
+                              className="hidden"
+                            />
+                          </label>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
                           <div className="flex items-center gap-2 text-emerald-700">
                             <CheckCircle2 className="w-5 h-5" />
-                            <span className="font-medium text-sm">prescription_doc.jpg uploaded</span>
+                            <span className="font-medium text-sm">{prescriptionFile?.name || 'prescription_doc.jpg'} uploaded</span>
                           </div>
                           <button 
-                            onClick={() => setPrescriptionUploaded(false)}
+                            onClick={() => {
+                              setPrescriptionUploaded(false);
+                              setPrescriptionFile(null);
+                            }}
                             className="text-sm font-bold text-emerald-700 hover:text-emerald-900 underline"
                           >
                             {t('cart.replace')}
@@ -272,16 +364,55 @@ export default function CartPage() {
                   </div>
                 </div>
 
+                {/* Payment Method Selection */}
+                <div className="mb-6">
+                  <h4 className="font-bold text-gray-900 text-sm mb-3">Payment Method</h4>
+                  <div className="space-y-2">
+                    <label className={`cursor-pointer rounded-xl border-2 p-3 flex items-center gap-3 transition-all ${paymentMethod === 'chapa' ? 'border-brand-500 bg-brand-50/50' : 'border-gray-100 hover:border-gray-200'}`}>
+                      <input 
+                        type="radio" 
+                        name="paymentMethod" 
+                        value="chapa" 
+                        checked={paymentMethod === 'chapa'} 
+                        onChange={() => setPaymentMethod('chapa')}
+                        className="text-brand-600 focus:ring-brand-500"
+                      />
+                      <div className="flex-1">
+                        <div className="font-bold text-gray-900 text-sm">Online Payment (Chapa)</div>
+                        <div className="text-xs text-gray-500 mt-0.5">Telebirr, CBE Birr, M-Pesa</div>
+                      </div>
+                    </label>
+                    
+                    <label className={`cursor-pointer rounded-xl border-2 p-3 flex items-center gap-3 transition-all ${paymentMethod === 'cod' ? 'border-brand-500 bg-brand-50/50' : 'border-gray-100 hover:border-gray-200'}`}>
+                      <input 
+                        type="radio" 
+                        name="paymentMethod" 
+                        value="cod" 
+                        checked={paymentMethod === 'cod'} 
+                        onChange={() => setPaymentMethod('cod')}
+                        className="text-brand-600 focus:ring-brand-500"
+                      />
+                      <div className="flex-1">
+                        <div className="font-bold text-gray-900 text-sm">Cash on Delivery</div>
+                        <div className="text-xs text-gray-500 mt-0.5">Pay when you receive</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
                 <button 
-                  disabled={requiresPrescription && !prescriptionUploaded}
-                  onClick={() => {
-                    clearCart();
-                    const mockOrderId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
-                    router.push(`/dashboard/orders/${mockOrderId}`);
-                  }}
+                  disabled={requiresPrescription && !prescriptionUploaded || isProcessing}
+                  onClick={handleCheckout}
                   className="w-full bg-brand-900 hover:bg-brand-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 rounded-2xl font-bold text-lg transition-colors flex items-center justify-center gap-2 shadow-sm mb-4"
                 >
-                  {t('cart.payNow')}
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    paymentMethod === 'chapa' ? 'Proceed to Payment' : 'Place Order'
+                  )}
                 </button>
                 
                 {requiresPrescription && !prescriptionUploaded && (
@@ -292,13 +423,9 @@ export default function CartPage() {
 
                 <div className="bg-gray-50 rounded-xl p-4">
                   <div className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <CreditCard className="w-4 h-4 text-gray-400" /> {t('cart.paymentMethods')}
+                    <CreditCard className="w-4 h-4 text-gray-400" /> Secure Payment
                   </div>
-                  <div className="flex gap-2">
-                    <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded text-gray-600 font-medium">Telebirr</span>
-                    <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded text-gray-600 font-medium">CBE Birr</span>
-                    <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded text-gray-600 font-medium">{t('cart.cashOnDelivery')}</span>
-                  </div>
+                  <p className="text-xs text-gray-500">Your payment information is encrypted and secure</p>
                 </div>
               </div>
             </div>

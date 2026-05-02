@@ -1,90 +1,273 @@
 import { Document, Types } from 'mongoose';
 
-// User Types
-export interface IUser extends Document {
-  fullName: string;
-  phone: string;
-  email?: string;
-  passwordHash: string;
-  role: 'end_user';
-  region?: string;
+export interface IUserAddress {
+  _id?: Types.ObjectId;
+  label?: string;
+  recipientName?: string;
+  phone?: string;
+  street?: string;
+  subCity?: string;
   city?: string;
-  status: 'active' | 'banned' | 'suspended';
-  ban: {
-    isBanned: boolean;
-    reason?: string;
-    type?: 'temporary' | 'permanent';
-    expiresAt?: Date;
-    bannedBy?: Types.ObjectId;
-  };
-  warningCount: number;
-  trustScore: number;
-  isVerified: boolean;
-  refreshToken?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  additionalInfo?: string;
+  isDefault?: boolean;
 }
 
-// Pharmacy Types
-export interface IPharmacy extends Document {
-  businessName: string;
-  nameAmharic?: string;
-  ownerName: string;
+export interface IUser extends Document {
+  username: string;
   email: string;
   phone: string;
   passwordHash: string;
-  description?: string;
-  website?: string;
-  profileImageUrl?: string;
-  address: {
-    region?: string;
-    city?: string;
-    street?: string;
-    coordinates?: {
-      lat: number;
-      lng: number;
-    };
-  };
-  license: {
-    licenseNumber?: string;
-    licenseImageUrl?: string;
-    tinNumber?: string;
-    expiryDate?: Date;
-    status: 'not_submitted' | 'pending' | 'verified' | 'rejected' | 'revoked' | 'expired';
-    rejectionReason?: string;
-    reviewedBy?: Types.ObjectId;
-    reviewedAt?: Date;
-  };
-  status: 'active' | 'suspended' | 'deactivated';
-  suspendedReason?: string;
-  suspendedBy?: Types.ObjectId;
-  isVerifiedBadge: boolean;
-  rating: number;
-  totalRatings: number;
-  operatingHours: Array<{
-    day: string;
-    isOpen: boolean;
-    openTime?: string;
-    closeTime?: string;
-    is24Hours: boolean;
-  }>;
-  deliverySettings: {
-    enabled: boolean;
-    radiusKm: number;
-    minOrderForFreeDelivery: number;
-    baseDeliveryFee: number;
-    maxConcurrentDeliveries: number;
-  };
+  role: 'patient' | 'pharmacy' | 'admin';
+  language: 'en' | 'am';
+  isActive: boolean;
+  isLocked: boolean;
+  lockExpiresAt?: Date | null;
+  failedLoginAttempts: number;
   mfa: {
     enabled: boolean;
-    secret?: string;
+    secret?: string | null;
+    backupCodes: string[];
   };
-  refreshToken?: string;
+  addresses: IUserAddress[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Master Medication Types
+export interface IPharmacy extends Document {
+  ownerId: Types.ObjectId;
+  businessName: string;
+  location?: string;
+  address?: string;
+  coordinates: {
+    type: 'Point';
+    coordinates: number[];
+  };
+  phone?: string;
+  email?: string;
+  description?: string;
+  openingHours?: string;
+  deliveryAvailable: boolean;
+  deliveryFee: number;
+  license: {
+    businessLicenseNumber?: string;
+    businessLicenseExpiry?: Date;
+    professionalLicenseExpiry?: Date;
+  };
+  verification: {
+    status: 'pending' | 'reviewing' | 'approved' | 'rejected' | 'needs_docs';
+    verifiedAt?: Date;
+    verifiedById?: Types.ObjectId;
+    rejectionNote?: string | null;
+    documents: {
+      businessRegistration?: { url?: string; status?: string; uploadedAt?: Date };
+      operatingLicense?: { url?: string; status?: string; uploadedAt?: Date };
+      inspectionReport?: { url?: string; status?: string; uploadedAt?: Date };
+    };
+  };
+  stats: {
+    rating: number;
+    reviewCount: number;
+  };
+  isActive: boolean;
+  isOpen: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IMedication extends Document {
+  pharmacyId: Types.ObjectId;
+  name: string;
+  genericName?: string;
+  category?: string;
+  dosageForm?: string;
+  strength?: string;
+  manufacturer?: string;
+  batchNumber?: string;
+  expiryDate: Date;
+  price: number;
+  stockQuantity: number;
+  lowStockThreshold: number;
+  stockStatus: 'adequate' | 'low_stock' | 'out_of_stock';
+  requiresPrescription: boolean;
+  imageUrl?: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IOrderItem {
+  _id?: Types.ObjectId;
+  medicationId: Types.ObjectId;
+  medicationName: string;
+  genericName?: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  requiresPrescription: boolean;
+}
+
+export interface IOrderStatusHistory {
+  status: string;
+  actorId?: Types.ObjectId;
+  note?: string | null;
+  createdAt: Date;
+}
+
+export interface IOrder extends Document {
+  ref?: string;
+  patientId: Types.ObjectId;
+  pharmacyId: Types.ObjectId;
+  paymentId?: Types.ObjectId;
+  deliveryMethod: 'pickup' | 'delivery';
+  deliveryAddress?: {
+    recipientName?: string;
+    phone?: string;
+    street?: string;
+    subCity?: string;
+    city?: string;
+    additionalInfo?: string;
+  };
+  deliveryInstructions?: string;
+  prescriptionUploadId?: Types.ObjectId | null;
+  prescriptionVerified: boolean;
+  status: string;
+  paymentMethod: 'chapa' | 'cod';
+  paymentStatus: string;
+  items: IOrderItem[];
+  subtotal: number;
+  deliveryFee: number;
+  discount: number;
+  totalAmount: number;
+  statusHistory: IOrderStatusHistory[];
+  estimatedReadyAt?: Date;
+  estimatedDeliveryAt?: Date;
+  deliveredAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IPayment extends Document {
+  orderId: Types.ObjectId;
+  patientId: Types.ObjectId;
+  txRef: string;
+  chapaReference?: string;
+  checkoutUrl?: string;
+  amount: number;
+  currency: string;
+  chapaCharge?: number;
+  paymentMethod: string;
+  status: string;
+  chapaStatus?: string;
+  mode?: string;
+  webhookReceivedAt?: Date;
+  verifiedAt?: Date;
+  webhookPayload?: Record<string, unknown>;
+  retryCount: number;
+  lastRetryAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IPrescriptionUpload extends Document {
+  patientId: Types.ObjectId;
+  orderId?: Types.ObjectId;
+  fileUrl: string;
+  fileType: 'image' | 'pdf';
+  verifiedById?: Types.ObjectId | null;
+  verifiedAt?: Date | null;
+  uploadedAt: Date;
+}
+
+export interface IConversation extends Document {
+  relatedOrderId?: Types.ObjectId;
+  participants: Array<{ userId: Types.ObjectId; name: string; role: 'patient' | 'pharmacy' }>;
+  lastMessage?: { content: string; senderId: Types.ObjectId; sentAt: Date };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IMessage extends Document {
+  conversationId: Types.ObjectId;
+  senderId: Types.ObjectId;
+  senderName: string;
+  content: string;
+  isRead: boolean;
+  sentAt: Date;
+}
+
+export interface IReview extends Document {
+  pharmacyId: Types.ObjectId;
+  patientId: Types.ObjectId;
+  patientName?: string;
+  rating: number;
+  comment?: string;
+  createdAt: Date;
+}
+
+export interface IHospital extends Document {
+  name: string;
+  address?: string;
+  phone?: string;
+  specialties: string[];
+  coordinates: {
+    type: 'Point';
+    coordinates: number[];
+  };
+  isActive: boolean;
+  createdAt: Date;
+}
+
+export interface IComplaint extends Document {
+  reporterId: Types.ObjectId;
+  reporterName?: string;
+  targetType: 'pharmacy' | 'system';
+  targetId?: Types.ObjectId;
+  targetName?: string;
+  issue: string;
+  details?: string;
+  severity: 'low' | 'medium' | 'high';
+  status: 'open' | 'resolved' | 'dismissed';
+  resolvedById?: Types.ObjectId | null;
+  resolvedAt?: Date | null;
+  resolution?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IHealthAlert extends Document {
+  createdById: Types.ObjectId;
+  type: 'Disease Outbreak' | 'Medication Recall' | 'Emergency Health Advisory';
+  region: string;
+  message: string;
+  details?: string;
+  youtubeLink?: string;
+  isActive: boolean;
+  createdAt: Date;
+}
+
+export interface IPlatformConfig extends Document {
+  value: string;
+}
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  message?: string;
+  data?: T;
+  error?: string;
+  errors?: any[];
+}
+
+export interface PaginatedResponse<T> extends ApiResponse<T> {
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+// Legacy interfaces retained for compatibility with unused modules
 export interface IMasterMedication extends Document {
   nameEnglish: string;
   nameAmharic: string;
@@ -98,7 +281,6 @@ export interface IMasterMedication extends Document {
   updatedAt: Date;
 }
 
-// Inventory Types
 export interface IInventory extends Document {
   pharmacyId: Types.ObjectId;
   medicationId: Types.ObjectId;
@@ -139,63 +321,6 @@ export interface IInventory extends Document {
   updatedAt: Date;
 }
 
-// Order Types
-export interface IOrder extends Document {
-  orderId: string;
-  patientId: Types.ObjectId;
-  pharmacyId: Types.ObjectId;
-  driverId?: Types.ObjectId;
-  items: Array<{
-    medicineId: Types.ObjectId;
-    medicineName: string;
-    quantity: number;
-    priceAtOrder: number;
-  }>;
-  totalAmount: number;
-  delivery: {
-    method: 'pickup' | 'delivery';
-    address?: {
-      region?: string;
-      city?: string;
-      street?: string;
-      coordinates?: {
-        lat: number;
-        lng: number;
-      };
-    };
-  };
-  payment: {
-    method: 'chapa' | 'cash_on_delivery';
-    status: 'pending' | 'paid' | 'failed' | 'refunded';
-    transactionId?: string;
-  };
-  status: 'pending' | 'accepted' | 'rejected' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled';
-  statusHistory: Array<{
-    status: string;
-    updatedBy?: Types.ObjectId;
-    updatedByRole?: string;
-    note?: string;
-    timestamp: Date;
-  }>;
-  notes: {
-    patient?: string;
-    pharmacist?: string;
-  };
-  prescriptionImageUrl?: string;
-  estimatedPreparationTime?: number;
-  estimatedDeliveryTime?: Date;
-  actualDeliveryTime?: Date;
-  reminderSent: boolean;
-  reminderSentAt?: Date;
-  stockReserved: boolean;
-  deliveredAt?: Date;
-  cancelledAt?: Date;
-  cancelReason?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Driver Types
 export interface IDriver extends Document {
   fullName: string;
   phone: string;
@@ -242,7 +367,6 @@ export interface IDriver extends Document {
   updatedAt: Date;
 }
 
-// Audit Log Types
 export interface IAuditLog extends Document {
   entityType: 'inventory' | 'order' | 'delivery' | 'profile' | 'payment';
   entityId: Types.ObjectId;
@@ -262,7 +386,6 @@ export interface IAuditLog extends Document {
   updatedAt: Date;
 }
 
-// Chat Types
 export interface IChatSession extends Document {
   patientId: Types.ObjectId;
   pharmacyId: Types.ObjectId;
@@ -297,7 +420,6 @@ export interface IChatMessage extends Document {
   updatedAt: Date;
 }
 
-// Admin Types
 export interface IAdmin extends Document {
   fullName: string;
   email: string;
@@ -314,22 +436,4 @@ export interface IAdmin extends Document {
   refreshToken?: string;
   createdAt: Date;
   updatedAt: Date;
-}
-
-// Request/Response Types
-export interface ApiResponse<T = any> {
-  success: boolean;
-  message?: string;
-  data?: T;
-  error?: string;
-  errors?: any[];
-}
-
-export interface PaginatedResponse<T> extends ApiResponse<T> {
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
 }

@@ -4,42 +4,51 @@ import { motion } from 'motion/react';
 import { MapPin, Star, Clock, CheckCircle2, XCircle, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { useEffect, useState } from 'react';
+import { apiGet } from '@/lib/api';
 
-const pharmacies = [
-  {
-    id: 'p1',
-    nameKey: 'pharmacy.kenema',
-    distance: '0.8 km',
-    rating: 4.8,
-    reviews: 124,
-    status: 'open',
-    availability: 'high',
-    addressKey: 'pharmacy.kenemaAddress',
-  },
-  {
-    id: 'p2',
-    nameKey: 'pharmacy.lion',
-    distance: '1.2 km',
-    rating: 4.5,
-    reviews: 89,
-    status: 'open',
-    availability: 'medium',
-    addressKey: 'pharmacy.lionAddress',
-  },
-  {
-    id: 'p3',
-    nameKey: 'pharmacy.addis',
-    distance: '2.5 km',
-    rating: 4.2,
-    reviews: 45,
-    status: 'closed',
-    availability: 'low',
-    addressKey: 'pharmacy.addisAddress',
-  },
-];
+type PharmacyCard = {
+  id: string;
+  name: string;
+  distance: string;
+  rating: number;
+  reviews: number;
+  status: 'open' | 'closed';
+  availability: 'high' | 'medium' | 'low';
+};
+
+const pharmacies: PharmacyCard[] = [];
 
 export default function NearbyPharmacies() {
   const { t } = useLanguage();
+  const [nearby, setNearby] = useState<PharmacyCard[]>(pharmacies);
+
+  useEffect(() => {
+    const loadPharmacies = async () => {
+      try {
+        const response = await apiGet<any[]>('/pharmacies');
+        const mapped = (response.data || []).map((pharmacy: any) => {
+          const rating = pharmacy.stats?.rating || 0;
+          const availability = (rating >= 4.5 ? 'high' : rating >= 4 ? 'medium' : 'low') as 'high' | 'medium' | 'low';
+
+          return {
+            id: pharmacy._id,
+            name: pharmacy.businessName,
+            distance: pharmacy.location || 'Nearby',
+            rating,
+            reviews: pharmacy.stats?.reviewCount || 0,
+            status: (pharmacy.isOpen ? 'open' : 'closed') as 'open' | 'closed',
+            availability
+          };
+        });
+        setNearby(mapped);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadPharmacies();
+  }, []);
 
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-brand-100 p-6 md:p-8">
@@ -54,7 +63,7 @@ export default function NearbyPharmacies() {
       </div>
 
       <div className="space-y-4">
-        {pharmacies.map((pharmacy, index) => (
+        {nearby.map((pharmacy, index) => (
           <motion.div
             key={pharmacy.id}
             initial={{ opacity: 0, x: -20 }}
@@ -67,7 +76,7 @@ export default function NearbyPharmacies() {
                 <MapPin className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900 mb-1">{t(pharmacy.nameKey)}</h3>
+                <h3 className="font-bold text-gray-900 mb-1">{pharmacy.name}</h3>
                 <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-gray-500">
                   <span className="flex items-center gap-1">
                     <MapPin className="w-3 h-3" /> {pharmacy.distance}

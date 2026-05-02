@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useRouter } from 'next/navigation';
+import { apiGet } from '@/lib/api';
 import { 
-  Plus, TrendingUp, TrendingDown, AlertTriangle, 
+  TrendingUp, AlertTriangle, 
   Package, ShoppingCart, DollarSign, Clock, CheckCircle2,
   ShieldCheck, FileText, Calendar, Globe, ChevronDown
 } from 'lucide-react';
@@ -22,19 +23,9 @@ const PERFORMANCE_DATA = [
   { name: 'Sun', nameAm: 'እሁድ', completed: 61, pending: 10 },
 ];
 
-const ACTIVE_ORDERS = [
-  { id: 'ORD-8821', patient: 'Abebe Kebede', items: 'Amoxicillin 500mg, Paracetamol', status: 'new', time: '10 mins ago' },
-  { id: 'ORD-8820', patient: 'Sara Mohammed', items: 'Ibuprofen 400mg', status: 'preparing', time: '25 mins ago' },
-  { id: 'ORD-8819', patient: 'Dawit Tadesse', items: 'Vitamin C, Zinc', status: 'ready', time: '45 mins ago' },
-  { id: 'ORD-8818', patient: 'Helen Girma', items: 'Omeprazole 20mg', status: 'new', time: '1 hour ago' },
-];
+const ACTIVE_ORDERS: Array<{ id: string; patient: string; items: string; status: string; time: string }> = [];
 
-const INVENTORY_ALERTS = [
-  { item: 'Azithromycin 250mg', status: 'out_of_stock', count: 0 },
-  { item: 'Cough Syrup (Adult)', status: 'low_stock', count: 12 },
-  { item: 'Digital Thermometer', status: 'low_stock', count: 5 },
-  { item: 'Face Masks (Box of 50)', status: 'adequate', count: 45 },
-];
+const INVENTORY_ALERTS: Array<{ item: string; status: string; count: number }> = [];
 
 const TRANSLATIONS = {
   en: {
@@ -131,21 +122,74 @@ export default function PharmacyDashboardPage() {
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [licenseInfo, setLicenseInfo] = useState({ number: 'EFDA-LIC-2024-8891', expiry: 'Dec 31, 2026', profExpiry: 'Jun 30, 2025' });
+  const [orders, setOrders] = useState(ACTIVE_ORDERS);
+  const [alerts, setAlerts] = useState(INVENTORY_ALERTS);
+  const [metrics, setMetrics] = useState({ ordersToday: 0, pendingOrders: 0, revenue: 0 });
 
   useEffect(() => {
-            
-    // Check local storage for dynamic license
-    const storedLicense = localStorage.getItem('medcare_pharmacy_license');
-    const storedExpiry = localStorage.getItem('medcare_pharmacy_expiry_date');
-    if (storedLicense || storedExpiry) {
-      setLicenseInfo({
-        number: storedLicense || 'EFDA-LIC-2024-8891',
-        expiry: storedExpiry || 'Dec 31, 2026',
-        profExpiry: 'Jun 30, 2025'
-      });
-    }
+    const loadDashboard = async () => {
+      try {
+        const [profileRes, alertsRes, analyticsRes, ordersRes] = await Promise.all([
+          apiGet<any>('/pharmacy/me'),
+          apiGet<any>('/pharmacy/me/inventory/alerts'),
+          apiGet<any>('/pharmacy/me/analytics', { period: '30d' }),
+          apiGet<any[]>('/pharmacy/me/orders')
+        ]);
 
-    setMounted(true);
+        const profile = profileRes.data;
+        if (profile?.license) {
+          setLicenseInfo({
+            number: profile.license.businessLicenseNumber || 'EFDA-LIC-2024-8891',
+            expiry: profile.license.businessLicenseExpiry
+              ? new Date(profile.license.businessLicenseExpiry).toLocaleDateString()
+              : 'Dec 31, 2026',
+            profExpiry: profile.license.professionalLicenseExpiry
+              ? new Date(profile.license.professionalLicenseExpiry).toLocaleDateString()
+              : 'Jun 30, 2025'
+          });
+        }
+
+        const alertsData = alertsRes.data || {};
+        setAlerts([
+          { item: 'Low stock', status: 'low_stock', count: alertsData.lowStockCount || 0 },
+          { item: 'Out of stock', status: 'out_of_stock', count: alertsData.outOfStockCount || 0 }
+        ]);
+
+        const statusMap: Record<string, string> = {
+          pending: 'new',
+          confirmed: 'new',
+          preparing: 'preparing',
+          ready: 'ready',
+          dispatched: 'ready',
+          delivered: 'ready'
+        };
+
+        const ordersData = (ordersRes.data || []).map((order: any) => ({
+          id: order.ref || order._id,
+          patient: order.deliveryAddress?.recipientName || 'Patient',
+          items: (order.items || []).map((item: any) => item.medicationName).join(', '),
+          status: statusMap[order.status] || 'new',
+          time: order.createdAt ? new Date(order.createdAt).toLocaleTimeString() : ''
+        }));
+        setOrders(ordersData.slice(0, 4));
+
+        const pendingCount = (ordersRes.data || []).filter((order: any) =>
+          ['pending', 'confirmed', 'preparing'].includes(order.status)
+        ).length;
+
+        setMetrics({
+          ordersToday: analyticsRes.data?.orderCount || ordersRes.data?.length || 0,
+          pendingOrders: pendingCount,
+          revenue: analyticsRes.data?.revenue || 0
+        });
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setMounted(true);
+      }
+    };
+
+    loadDashboard();
   }, []);
 
   const toggleLanguage = (lang: 'en' | 'am') => {
@@ -228,7 +272,7 @@ export default function PharmacyDashboardPage() {
             </span>
           </div>
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.ordersToday}</h3>
-          <p className="text-3xl font-bold text-brand-950">142</p>
+          <p className="text-3xl font-bold text-brand-950">{metrics.ordersToday}</p>
         </div>
 
         {/* Pending Orders */}
@@ -239,8 +283,8 @@ export default function PharmacyDashboardPage() {
             </div>
           </div>
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.pendingOrders}</h3>
-          <p className="text-3xl font-bold text-brand-950">24</p>
-          <p className="text-xs text-amber-600 font-medium mt-2">5 {t.urgentItems}</p>
+          <p className="text-3xl font-bold text-brand-950">{metrics.pendingOrders}</p>
+          <p className="text-xs text-amber-600 font-medium mt-2">{metrics.pendingOrders} {t.urgentItems}</p>
         </div>
 
         {/* Low Stock */}
@@ -251,7 +295,7 @@ export default function PharmacyDashboardPage() {
             </div>
           </div>
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.lowStock}</h3>
-          <p className="text-3xl font-bold text-brand-950">18</p>
+          <p className="text-3xl font-bold text-brand-950">{alerts.reduce((sum, alert) => sum + alert.count, 0)}</p>
           <p className="text-xs text-red-600 font-medium mt-2">{t.requiresRestocking}</p>
         </div>
 
@@ -266,7 +310,7 @@ export default function PharmacyDashboardPage() {
             </span>
           </div>
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.revenueToday}</h3>
-          <p className="text-3xl font-bold text-brand-950">12.4{language === 'am' ? 'ሺ' : 'k'} <span className="text-lg text-gray-500 font-normal">{language === 'am' ? 'ብር' : 'ETB'}</span></p>
+          <p className="text-3xl font-bold text-brand-950">{(metrics.revenue / 1000).toFixed(1)}{language === 'am' ? 'ሺ' : 'k'} <span className="text-lg text-gray-500 font-normal">{language === 'am' ? 'ብር' : 'ETB'}</span></p>
         </div>
 
       </div>
@@ -299,7 +343,7 @@ export default function PharmacyDashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {ACTIVE_ORDERS.map((order) => (
+                  {orders.map((order) => (
                     <tr key={order.id} className="hover:bg-accent-50/50 transition-colors">
                       <td className="p-4">
                         <p className="font-bold text-brand-950 text-sm">{order.id}</p>
@@ -378,7 +422,7 @@ export default function PharmacyDashboardPage() {
               <h2 className="text-lg font-bold text-brand-950">{t.inventoryAlerts}</h2>
             </div>
             <div className="p-2">
-              {INVENTORY_ALERTS.map((alert, idx) => (
+              {alerts.map((alert, idx) => (
                 <div key={idx} className="flex items-center justify-between p-3 hover:bg-accent-50 rounded-xl transition-colors">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${

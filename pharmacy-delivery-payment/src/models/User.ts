@@ -1,37 +1,45 @@
 import mongoose, { Schema } from 'mongoose';
 import { IUser } from '../types';
 
-const userSchema = new Schema<IUser>({
-  fullName: { type: String, required: true, trim: true },
-  phone: { type: String, required: true, unique: true },
-  email: { type: String, unique: true, sparse: true },
-  passwordHash: { type: String, required: true },
-  role: { type: String, enum: ['end_user'], default: 'end_user' },
-  region: { type: String },
-  city: { type: String },
-
-  status: {
-    type: String,
-    enum: ['active', 'banned', 'suspended'],
-    default: 'active'
+const addressSchema = new Schema(
+  {
+    label: { type: String },
+    recipientName: { type: String },
+    phone: { type: String },
+    street: { type: String },
+    subCity: { type: String },
+    city: { type: String },
+    additionalInfo: { type: String },
+    isDefault: { type: Boolean, default: false }
   },
-  
-  ban: {
-    isBanned: { type: Boolean, default: false },
-    reason: { type: String },
-    type: { type: String, enum: ['temporary', 'permanent'] },
-    expiresAt: { type: Date },
-    bannedBy: { type: Schema.Types.ObjectId, ref: 'Admin' }
+  { _id: true }
+);
+
+const userSchema = new Schema<IUser>(
+  {
+    username: { type: String, required: true, unique: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    phone: { type: String, required: true, unique: true, trim: true },
+    passwordHash: { type: String, required: true },
+    role: { type: String, enum: ['patient', 'pharmacy', 'admin'], default: 'patient' },
+    language: { type: String, enum: ['en', 'am'], default: 'en' },
+    isActive: { type: Boolean, default: true },
+    isLocked: { type: Boolean, default: false },
+    lockExpiresAt: { type: Date, default: null },
+    failedLoginAttempts: { type: Number, default: 0 },
+    mfa: {
+      enabled: { type: Boolean, default: false },
+      secret: { type: String, default: null },
+      backupCodes: { type: [String], default: [] }
+    },
+    addresses: { type: [addressSchema], default: [] }
   },
+  { timestamps: true }
+);
 
-  warningCount: { type: Number, default: 0 },
-  trustScore: { type: Number, default: 100 },
-  isVerified: { type: Boolean, default: false },
-  refreshToken: { type: String }
-}, { timestamps: true });
-
-// Indexes
-userSchema.index({ phone: 1 });
-userSchema.index({ 'ban.isBanned': 1 });
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ phone: 1 }, { unique: true });
+userSchema.index({ username: 1 }, { unique: true });
+userSchema.index({ role: 1 });
 
 export default mongoose.model<IUser>('User', userSchema);
