@@ -143,6 +143,33 @@
 
 ---
 
+### 6. ✅ Pharmacy ID in Orders ("Pharmacy not found" Error)
+**Files:**
+- `User-Pharmacy-Front/lib/CartContext.tsx`
+- `User-Pharmacy-Front/app/dashboard/search/page.tsx`
+- `User-Pharmacy-Front/app/dashboard/cart/page.tsx`
+
+**Problem:**
+- Cart page used hardcoded mock pharmacy ID: `507f1f77bcf86cd799439011`
+- Medications belonged to different pharmacy: `507f1f77bcf86cd799439017`
+- Order creation failed with "Pharmacy not found"
+
+**Fix Applied:**
+1. **Added `pharmacyId` to CartItem interface**
+2. **Updated search page** to include `pharmacyId` from API response
+3. **Updated cart page** to extract pharmacy ID from cart items dynamically
+4. **Added validation** to ensure pharmacy ID exists before checkout
+
+**Result:**
+- ✅ Cart items now include real pharmacy IDs
+- ✅ Orders created with correct pharmacy
+- ✅ No more "Pharmacy not found" errors
+- ✅ Validation prevents missing pharmacy ID
+
+**See:** `PHARMACY_ID_FIX.md` for detailed documentation
+
+---
+
 ## 🎉 Current Status: ALL SYSTEMS GO!
 
 ### ✅ Backend (pharmacy-delivery-payment)

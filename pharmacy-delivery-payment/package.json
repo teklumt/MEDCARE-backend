@@ -8,11 +8,12 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "nodemon",
-    "dev:ts-node": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev:ts-node": "ts-node-dev --respawn --transpile-only --prefer-ts-exts src/server.ts",
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
     "type-check": "tsc --noEmit",
-    "seed": "ts-node src/scripts/seed.ts"
+    "seed": "ts-node src/scripts/seed.ts",
+    "fix-schema": "ts-node src/scripts/fix-order-schema.ts"
   },
   "keywords": [
     "pharmacy",

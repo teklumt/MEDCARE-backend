@@ -8,6 +8,7 @@ export interface CartItem {
   price: number;
   quantity: number;
   requiresPrescription: boolean;
+  pharmacyId: string;
   pharmacyName: string;
   image?: string;
 }

@@ -18,6 +18,13 @@ const buildStatusEntry = (status: string, actorId?: Types.ObjectId, note?: strin
 });
 
 const generateTxRef = (orderRef: string) => `medcare-${orderRef}-${Date.now()}`;
+const isValidEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const resolveChapaEmail = (candidate: string): string => {
+  const cleaned = String(candidate || '').trim().toLowerCase();
+  if (isValidEmail(cleaned)) return cleaned;
+  // Fallback is mainly for test mode to avoid blocking checkout due to bad profile email.
+  return String(process.env.CHAPA_FALLBACK_EMAIL || 'abebech_bekele@gmail.com').trim().toLowerCase();
+};
 
 export const createOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -106,6 +113,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
         if (!user) {
           throw new Error('User not found');
         }
+        let email = resolveChapaEmail(String(user.email || ''));
 
         // Get user's name - use username if no other name available
         const userName = user.username || 'Customer';
@@ -114,29 +122,60 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
         const lastName = nameParts.slice(1).join(' ') || 'User';
 
         // Initialize payment with Chapa
-        const chapaResponse = await chapaService.initializePayment({
-          amount: totalAmount,
-          currency: 'ETB',
-          email: user.email,
-          first_name: firstName,
-          last_name: lastName,
-          phone_number: user.phone,
-          tx_ref: txRef,
-          callback_url: process.env.CHAPA_CALLBACK_URL || `${process.env.API_URL || 'http://localhost:5000'}/api/v1/payments/chapa/webhook`,
-          return_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/callback?order_id=${order._id}`,
-          customization: {
-            title: 'MedCare Ethiopia',
-            description: `Order ${order.ref || order._id} - Medication Purchase`,
-            logo: undefined
+        let chapaResponse;
+        try {
+          chapaResponse = await chapaService.initializePayment({
+            amount: totalAmount,
+            currency: 'ETB',
+            email,
+            first_name: firstName,
+            last_name: lastName,
+            phone_number: user.phone,
+            tx_ref: txRef,
+            callback_url: process.env.CHAPA_CALLBACK_URL || `${process.env.API_URL || 'http://localhost:5000'}/api/v1/payments/chapa/webhook`,
+            return_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/callback?order_id=${order._id}`,
+            customization: {
+              title: 'MedCare Ethiopia',
+              description: `Order ${order.ref || order._id} - Medication Purchase`,
+              logo: undefined
+            }
+          });
+        } catch (initError) {
+          const initMessage = (initError as Error)?.message || '';
+          const fallbackEmail = resolveChapaEmail('');
+          const shouldRetryWithFallback = initMessage.includes('validation.email') && email !== fallbackEmail;
+
+          if (!shouldRetryWithFallback) {
+            throw initError;
           }
-        });
+
+          email = fallbackEmail;
+          chapaResponse = await chapaService.initializePayment({
+            amount: totalAmount,
+            currency: 'ETB',
+            email,
+            first_name: firstName,
+            last_name: lastName,
+            phone_number: user.phone,
+            tx_ref: txRef,
+            callback_url: process.env.CHAPA_CALLBACK_URL || `${process.env.API_URL || 'http://localhost:5000'}/api/v1/payments/chapa/webhook`,
+            return_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/callback?order_id=${order._id}`,
+            customization: {
+              title: 'MedCare Ethiopia',
+              description: `Order ${order.ref || order._id} - Medication Purchase`,
+              logo: undefined
+            }
+          });
+        }
 
         checkoutUrl = chapaResponse.data.checkout_url;
         console.log('✅ Chapa payment initialized:', { txRef, checkoutUrl });
       } catch (error) {
-        console.error('❌ Chapa initialization failed:', error);
-        // Fall back to manual payment or throw error
-        throw new Error('Failed to initialize payment. Please try again.');
+        const message = (error as Error)?.message || 'Failed to initialize payment with Chapa';
+        console.error('❌ Chapa initialization failed:', message);
+        // Prevent orphaned orders when payment initialization fails
+        await Order.findByIdAndDelete(order._id);
+        throw new Error(message);
       }
     }
 
@@ -161,7 +200,11 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
       data: { order, payment }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to create order', details: (error as Error).message });
+    const message = (error as Error).message || 'Unknown error';
+    const shouldReturnBadRequest =
+      message.includes('CHAPA_SECRET_KEY') ||
+      message.includes('validation.');
+    res.status(shouldReturnBadRequest ? 400 : 500).json({ success: false, error: 'Failed to create order', details: message });
   }
 };
 

@@ -115,6 +115,7 @@ export interface IOrderStatusHistory {
 }
 
 export interface IOrder extends Document {
+  orderId?: string;
   ref?: string;
   patientId: Types.ObjectId;
   pharmacyId: Types.ObjectId;

@@ -51,6 +51,35 @@ interface ChapaVerifyResponse {
   };
 }
 
+const formatErrorValue = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item)).join(', ');
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return 'Unknown validation error';
+    return entries
+      .map(([field, fieldValue]) => `${field}: ${formatErrorValue(fieldValue)}`)
+      .join('; ');
+  }
+  return String(value);
+};
+
+const extractChapaErrorMessage = (error: any): string => {
+  const data = error?.response?.data;
+  const rawMessage = data?.message;
+  if (typeof rawMessage === 'string' && rawMessage.trim()) {
+    return rawMessage;
+  }
+  if (rawMessage && typeof rawMessage === 'object') {
+    return formatErrorValue(rawMessage);
+  }
+  if (typeof error?.message === 'string' && error.message.trim()) {
+    return error.message;
+  }
+  return 'Failed to initialize payment with Chapa';
+};
+
 export class ChapaService {
   private apiKey: string;
   private baseUrl: string;
@@ -58,33 +87,44 @@ export class ChapaService {
   private axiosInstance?: AxiosInstance;
 
   constructor() {
-    this.apiKey = process.env.CHAPA_SECRET_KEY || '';
-    this.mode = process.env.CHAPA_MODE || 'test';
+    this.apiKey = '';
+    this.mode = 'test';
     this.baseUrl = 'https://api.chapa.co/v1';
+  }
 
-    // Don't throw error in constructor, check when methods are called
-    if (this.apiKey) {
+  private getClient(): AxiosInstance {
+    const currentKey = process.env.CHAPA_SECRET_KEY || '';
+    const currentMode = process.env.CHAPA_MODE || 'test';
+    if (!currentKey) {
+      throw new Error('CHAPA_SECRET_KEY is not configured. Please add it to your .env file.');
+    }
+
+    // Lazily initialize or refresh client if env changed
+    if (!this.axiosInstance || this.apiKey !== currentKey) {
+      this.apiKey = currentKey;
+      this.mode = currentMode;
       this.axiosInstance = axios.create({
         baseURL: this.baseUrl,
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 30000 // 30 seconds
+        timeout: 30000
       });
+    } else {
+      this.mode = currentMode;
     }
+
+    return this.axiosInstance;
   }
 
   /**
    * Initialize a payment transaction with Chapa
    */
   async initializePayment(data: ChapaInitializePaymentData): Promise<ChapaInitializeResponse> {
-    if (!this.apiKey || !this.axiosInstance) {
-      throw new Error('CHAPA_SECRET_KEY is not configured. Please add it to your .env file.');
-    }
-
     try {
-      const response = await this.axiosInstance.post<ChapaInitializeResponse>(
+      const client = this.getClient();
+      const response = await client.post<ChapaInitializeResponse>(
         '/transaction/initialize',
         data
       );
@@ -92,10 +132,7 @@ export class ChapaService {
       return response.data;
     } catch (error: any) {
       console.error('Chapa initialization error:', error.response?.data || error.message);
-      throw new Error(
-        error.response?.data?.message || 
-        'Failed to initialize payment with Chapa'
-      );
+      throw new Error(extractChapaErrorMessage(error));
     }
   }
 
@@ -103,22 +140,16 @@ export class ChapaService {
    * Verify a payment transaction with Chapa
    */
   async verifyPayment(txRef: string): Promise<ChapaVerifyResponse> {
-    if (!this.apiKey || !this.axiosInstance) {
-      throw new Error('CHAPA_SECRET_KEY is not configured. Please add it to your .env file.');
-    }
-
     try {
-      const response = await this.axiosInstance.get<ChapaVerifyResponse>(
+      const client = this.getClient();
+      const response = await client.get<ChapaVerifyResponse>(
         `/transaction/verify/${txRef}`
       );
 
       return response.data;
     } catch (error: any) {
       console.error('Chapa verification error:', error.response?.data || error.message);
-      throw new Error(
-        error.response?.data?.message || 
-        'Failed to verify payment with Chapa'
-      );
+      throw new Error(extractChapaErrorMessage(error));
     }
   }
 
@@ -133,7 +164,7 @@ export class ChapaService {
    * Check if Chapa is properly configured
    */
   isConfigured(): boolean {
-    return Boolean(this.apiKey && this.apiKey.length > 0);
+    return Boolean((process.env.CHAPA_SECRET_KEY || '').length > 0);
   }
 
   /**

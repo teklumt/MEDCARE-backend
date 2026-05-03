@@ -27,8 +27,8 @@ export default function CartPage() {
 
   const requiresPrescription = items.some(item => item.requiresPrescription);
 
-  // Mock pharmacy ID - in real app, this would come from the items
-  const selectedPharmacyId = '507f1f77bcf86cd799439011';
+  // Get pharmacy ID from cart items (all items should be from same pharmacy)
+  const selectedPharmacyId = items.length > 0 ? items[0].pharmacyId : null;
 
   const handlePrescriptionUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -43,6 +43,11 @@ export default function CartPage() {
     setError(null);
 
     try {
+      // Validate pharmacy ID
+      if (!selectedPharmacyId) {
+        throw new Error('Unable to determine pharmacy. Please try adding items to cart again.');
+      }
+
       // 1. Upload prescription if required
       let prescriptionUploadId = null;
       if (requiresPrescription && prescriptionFile) {

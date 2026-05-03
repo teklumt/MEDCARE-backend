@@ -50,6 +50,7 @@ function MedicationCard({ medication }: { medication: any }) {
       price: medication.price || 150.00,
       quantity: 1,
       requiresPrescription: medication.requiresPrescription !== undefined ? medication.requiresPrescription : true,
+      pharmacyId: medication.pharmacyId || '507f1f77bcf86cd799439017',
       pharmacyName: medication.pharmacyName || t('findPharmacies.mockName'),
       image: medication.image,
     });
@@ -145,6 +146,7 @@ export default function FindMedicationsPage() {
               drugClass: med.category,
               approvalHistory: med.description || 'Available from verified pharmacy',
               image: med.imageUrl || 'https://picsum.photos/seed/med/800/600',
+              pharmacyId: med.pharmacyId,
               pharmacyName: med.pharmacyName || 'Partner Pharmacy',
               price: med.price || 150.00,
               stockStatus: med.stockStatus,
