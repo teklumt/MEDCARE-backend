@@ -24,6 +24,7 @@ function FitRouteBounds({ points }: { points: RouteMapPoint[] }) {
   const map = useMap();
 
   useEffect(() => {
+    // @ts-ignore
     if (!map || typeof google === 'undefined' || points.length === 0) return;
 
     if (points.length === 1) {
@@ -32,6 +33,7 @@ function FitRouteBounds({ points }: { points: RouteMapPoint[] }) {
       return;
     }
 
+    // @ts-ignore
     const bounds = new google.maps.LatLngBounds();
     points.forEach((p) => bounds.extend(p.position));
     map.fitBounds(bounds, { top: 48, right: 48, bottom: 64, left: 48 });
@@ -43,6 +45,7 @@ function FitRouteBounds({ points }: { points: RouteMapPoint[] }) {
 function RouteKindMarker({ point, zIndex }: { point: RouteMapPoint; zIndex: number }) {
   const map = useMap();
   const icon = useMemo(() => {
+    // @ts-ignore
     if (typeof google !== 'undefined' && map) {
       return routeMarkerIcon(point.kind);
     }
