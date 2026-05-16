@@ -19,6 +19,7 @@ export interface IPharmacy extends Document {
     businessLicenseNumber?: string;
     businessLicenseExpiry?: Date;
     professionalLicenseExpiry?: Date;
+    issuingAuthority?: string;
   };
   verification: {
     status: "pending" | "reviewing" | "approved" | "rejected" | "needs_docs";
@@ -65,6 +66,7 @@ const pharmacySchema = new Schema<IPharmacy>(
       businessLicenseNumber: { type: String },
       businessLicenseExpiry: { type: Date },
       professionalLicenseExpiry: { type: Date },
+      issuingAuthority: { type: String },
     },
     verification: {
       status: {
@@ -98,8 +100,8 @@ const pharmacySchema = new Schema<IPharmacy>(
       rating: { type: Number, default: 0 },
       reviewCount: { type: Number, default: 0 },
     },
-    isActive: { type: Boolean, default: true },
-    isOpen: { type: Boolean, default: true },
+    isActive: { type: Boolean, default: false },
+    isOpen: { type: Boolean, default: false },
   },
   { timestamps: true, strict: false, minimize: false },
 );

@@ -1,10 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { Search, MapPin, Clock, CheckCircle2, XCircle, AlertTriangle, MessageSquare, ClipboardList, Globe, ChevronDown } from 'lucide-react';
-import { apiGet, apiPatch } from '@/lib/api';
+import { Search, MapPin, Clock, CheckCircle2, XCircle, AlertTriangle, MessageSquare, ClipboardList, Globe, ChevronDown, FileText } from 'lucide-react';
+import { apiGet, apiPatch, getMyDeliveryAgents, getMyPharmacy, getPrescriptionUpload, verifyPrescriptionUpload, rejectPrescriptionUpload, createConversation as ensureConversation, getConversationMessages, sendConversationMessage, markConversationRead, type PharmacyDeliveryAgent, type ConversationMessage, type DeliveryAddressPayload, type MyPharmacyProfile } from '@/lib/api';
+import OrderRouteMapPanel from '@/components/pharmacy/OrderRouteMapPanel';
+import { formatDeliveryAddressText } from '@/lib/mapGeo';
+
+function fileLabelFromUrl(fileUrl: string): string {
+  try {
+    const u = new URL(fileUrl);
+    const seg = u.pathname.split('/').filter(Boolean).pop();
+    if (seg) return decodeURIComponent(seg);
+  } catch {
+    /* non-absolute URL fallback below */
+    const slash = fileUrl.split('/').filter(Boolean).pop();
+    if (slash) return decodeURIComponent(slash.replace(/\?.*$/, ''));
+  }
+  return 'prescription.pdf';
+}
 
 type OrderEntry = {
   id: string;
@@ -18,6 +33,16 @@ type OrderEntry = {
   payment: string;
   status: string;
   hasPrescription: boolean;
+  driverHandoffAt?: string | null;
+  deliveryAgentId?: string | null;
+  prescriptionUploadMongoId?: string | null;
+  prescriptionVerified?: boolean;
+  paymentStatus?: string;
+  needsRxReview?: boolean;
+  awaitingPatientPaymentAfterRx?: boolean;
+  patientId: string;
+  deliveryAddress?: DeliveryAddressPayload;
+  tripStartedAt?: string | null;
 };
 
 const ORDERS: OrderEntry[] = [];
@@ -29,7 +54,7 @@ const TRANSLATIONS = {
     actionRequired: 'Action Required',
     urgentWarning: '3 orders have been waiting over 30 minutes. Please process them immediately.',
     viewOrders: 'View Orders',
-    tabs: ['All Orders', 'New', 'Accepted', 'Preparing', 'Out for Delivery', 'Delivered'],
+    tabs: ['All Orders', 'New', 'Accepted', 'Preparing', 'Out for Delivery', 'Delivered', 'Prescription review'],
     searchPlaceholder: 'Search by Order ID or Patient Name...',
     allDeliveryMethods: 'All Delivery Methods',
     homeDelivery: 'Home Delivery',
@@ -50,7 +75,12 @@ const TRANSLATIONS = {
     colOrderId: 'ORDER ID',
     colDrug: 'DRUG',
     colStatus: 'STATUS',
-    colAction: 'ACTION'
+    colAction: 'ACTION',
+    awaitingPatient: 'AWAITING PATIENT',
+    awaitingRxVerification: 'Awaiting Rx verification',
+    awaitingPatientPayment: 'Awaiting patient payment',
+    attachedRxFile: 'Attached file',
+    rxModalIntro: 'Review the prescription file below, then accept or reject.'
   },
   am: {
     orderManagement: 'የእዘዛ አስተዳደር',
@@ -58,7 +88,7 @@ const TRANSLATIONS = {
     actionRequired: 'አስቸኳይ እርምጃ ይፈልጋል',
     urgentWarning: '3 ትዕዛዞች ከ30 ደቂቃ በላይ እየጠበቁ ናቸው። እባክዎ ወዲያውኑ ያስተናግዷቸው።',
     viewOrders: 'ትዕዛዞችን ይመልከቱ',
-    tabs: ['ሁሉም ትዕዛዞች', 'አዲስ', 'ተቀባይነት ያገኙ', 'በመዘጋጀት ላይ', 'በመንገድ ላይ', 'የደረሱ'],
+    tabs: ['ሁሉም ትዕዛዞች', 'አዲስ', 'ተቀባይነት ያገኙ', 'በመዘጋጀት ላይ', 'በመንገድ ላይ', 'የደረሱ', 'የመድሃኒት ማረጋገጫ'],
     searchPlaceholder: 'በትዕዛዝ መለያ ወይም በታካሚ ስም ይፈልጉ...',
     allDeliveryMethods: 'ሁሉም የአቅርቦት ዘዴዎች',
     homeDelivery: 'የቤት አቅርቦት',
@@ -79,7 +109,12 @@ const TRANSLATIONS = {
     colOrderId: 'የትዕዛዝ መለያ',
     colDrug: 'መድሃኒት',
     colStatus: 'ሁኔታ',
-    colAction: 'እርምጃ'
+    colAction: 'እርምጃ',
+    awaitingPatient: 'ታካሚ እየተጠበቀ ነው',
+    awaitingRxVerification: 'የመዛው ማረጋገጫ በመጠባበቅ ላይ',
+    awaitingPatientPayment: 'የታካሚ ክፍያ በመጠባበቅ ላይ',
+    attachedRxFile: 'የተያያዘ ፋይል',
+    rxModalIntro: 'ከስር ያለውን የመድሃኒት የዶክተር ትዕዛዝ ተመልከት፣ ከዚያ ተቀበል ወይም ውድቅ።'
   }
 };
 
@@ -93,12 +128,21 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderEntry[]>(ORDERS);
   const [acceptModalOrder, setAcceptModalOrder] = useState<string | null>(null);
   const [rejectModalOrder, setRejectModalOrder] = useState<string | null>(null);
+  const [rxReviewModalOrder, setRxReviewModalOrder] = useState<string | null>(null);
+  const [rxRejectNote, setRxRejectNote] = useState('');
   const [markReadyModalOrder, setMarkReadyModalOrder] = useState<string | null>(null);
   const [assignDeliveryModalOrder, setAssignDeliveryModalOrder] = useState<string | null>(null);
   const [codWarningModalOrder, setCodWarningModalOrder] = useState<string | null>(null);
   const [trackModalOrder, setTrackModalOrder] = useState<string | null>(null);
   const [chatModalOrder, setChatModalOrder] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState('');
+  const [orderChatConversationId, setOrderChatConversationId] = useState<string | null>(null);
+  const [orderChatMessages, setOrderChatMessages] = useState<ConversationMessage[]>([]);
+  const [orderChatLoading, setOrderChatLoading] = useState(false);
+  const [orderChatSending, setOrderChatSending] = useState(false);
+  const orderChatMessagesRef = useRef<ConversationMessage[]>([]);
+  const orderChatConvIdRef = useRef<string | null>(null);
+  const chatEndAnchorRef = useRef<HTMLDivElement>(null);
   
   const [preparationTime, setPreparationTime] = useState('15');
   const [rejectReason, setRejectReason] = useState('');
@@ -106,16 +150,20 @@ export default function OrdersPage() {
   
   const [isAccepting, setIsAccepting] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
-  
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const MOCK_AGENTS = [
-    { id: '1', name: 'Amanuel Tesfaye', capacity: 2, maxCapacity: 5, status: 'Available', eta: '12 min', photo: 'https://i.pravatar.cc/150?u=amanuel', phone: '+251 911 234 567' },
-    { id: '2', name: 'Biniam Getachew', capacity: 5, maxCapacity: 5, status: 'At capacity', eta: '-', photo: 'https://i.pravatar.cc/150?u=biniam', phone: '+251 911 345 678' },
-    { id: '3', name: 'Selamawit Alemu', capacity: 4, maxCapacity: 5, status: 'Busy', eta: '25 min', photo: 'https://i.pravatar.cc/150?u=selamawit', phone: '+251 911 456 789' },
-  ];
-  
+  const [rxActionLoading, setRxActionLoading] = useState(false);
+  const [rxModalFile, setRxModalFile] = useState<{ url: string; label: string } | null>(null);
+  const [rxModalFileLoading, setRxModalFileLoading] = useState(false);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  
+
+  const [deliveryAgents, setDeliveryAgents] = useState<PharmacyDeliveryAgent[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
+  const [pharmacyProfile, setPharmacyProfile] = useState<MyPharmacyProfile | null>(null);
+
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -134,11 +182,28 @@ export default function OrdersPage() {
     };
 
     const method = order.deliveryMethod === 'delivery' ? 'Home Delivery' : 'Pickup';
-    const payment = order.paymentMethod === 'cod' || order.paymentStatus?.includes('cod')
-      ? 'Pending (Cash)'
-      : order.paymentStatus === 'success'
-        ? 'Paid (Chapa)'
-        : 'Pending (Chapa)';
+    const awaitingPatientPaymentAfterRx =
+      order.paymentStatus === 'pending_prescription_review' &&
+      Boolean(order.prescriptionVerified) &&
+      order.status !== 'cancelled' &&
+      order.status !== 'rejected';
+
+    const payment = awaitingPatientPaymentAfterRx
+      ? 'Awaiting patient payment'
+      : order.paymentStatus === 'pending_prescription_review' && !order.prescriptionVerified
+        ? 'Awaiting Rx verification'
+        : order.paymentMethod === 'cod' || order.paymentStatus?.includes('cod')
+          ? 'Pending (Cash)'
+          : order.paymentStatus === 'success'
+            ? 'Paid (Chapa)'
+            : 'Pending (Chapa)';
+
+    const baseStatus = statusMap[order.status] || 'new';
+    const awaitingPatient =
+      order.status === 'dispatched' &&
+      method === 'Home Delivery' &&
+      order.deliveryAgentId &&
+      order.driverHandoffAt;
 
     return {
       id: order.ref || order._id,
@@ -150,10 +215,32 @@ export default function OrdersPage() {
       method,
       time: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
       payment,
-      status: statusMap[order.status] || 'new',
-      hasPrescription: Boolean(order.prescriptionUploadId)
+      status: awaitingPatient ? 'awaiting_patient' : baseStatus,
+      hasPrescription: Boolean(order.prescriptionUploadId),
+      driverHandoffAt: order.driverHandoffAt ? String(order.driverHandoffAt) : null,
+      deliveryAgentId: order.deliveryAgentId ? String(order.deliveryAgentId) : null,
+      prescriptionUploadMongoId: order.prescriptionUploadId ? String(order.prescriptionUploadId) : null,
+      prescriptionVerified: Boolean(order.prescriptionVerified),
+      paymentStatus: order.paymentStatus,
+      needsRxReview: Boolean(
+        order.prescriptionUploadId &&
+          !order.prescriptionVerified &&
+          order.paymentStatus === 'pending_prescription_review' &&
+          order.status !== 'cancelled' &&
+          order.status !== 'rejected'
+      ),
+      awaitingPatientPaymentAfterRx,
+      patientId: order.patientId != null ? String(order.patientId) : '',
+      deliveryAddress: order.deliveryAddress,
+      tripStartedAt: order.tripStartedAt ? String(order.tripStartedAt) : null
     };
   };
+
+  useEffect(() => {
+    void getMyPharmacy()
+      .then(setPharmacyProfile)
+      .catch(() => setPharmacyProfile(null));
+  }, []);
 
   useEffect(() => {
     const loadOrders = async () => {
@@ -169,10 +256,182 @@ export default function OrdersPage() {
     loadOrders();
   }, []);
 
-  const applyStatusChange = async (order: OrderEntry, nextStatus: string, localStatus: string) => {
+  useEffect(() => {
+    if (!assignDeliveryModalOrder) {
+      return;
+    }
+    let cancelled = false;
+    setSelectedAgent(null);
+    setAgentsLoading(true);
+    setAgentsError(null);
+    (async () => {
+      try {
+        const agents = await getMyDeliveryAgents();
+        if (!cancelled) setDeliveryAgents(agents);
+      } catch (e) {
+        if (!cancelled) {
+          setAgentsError(e instanceof Error ? e.message : 'Failed to load drivers');
+          setDeliveryAgents([]);
+        }
+      } finally {
+        if (!cancelled) setAgentsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assignDeliveryModalOrder]);
+
+  function mergeConversationMessages(prev: ConversationMessage[], incoming: ConversationMessage[]) {
+    if (!incoming.length) return prev;
+    const map = new Map(prev.map((m) => [m._id, m]));
+    for (const m of incoming) map.set(m._id, m);
+    return [...map.values()].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+  }
+
+  useEffect(() => {
+    orderChatMessagesRef.current = orderChatMessages;
+  }, [orderChatMessages]);
+
+  useEffect(() => {
+    orderChatConvIdRef.current = orderChatConversationId;
+  }, [orderChatConversationId]);
+
+  useEffect(() => {
+    if (!chatModalOrder) {
+      setOrderChatConversationId(null);
+      setOrderChatMessages([]);
+      orderChatConvIdRef.current = null;
+      orderChatMessagesRef.current = [];
+      setOrderChatLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      const orderRow = orders.find((o) => o.id === chatModalOrder);
+      if (!orderRow?.patientId) {
+        showToast('Cannot chat: missing patient reference on this order');
+        setChatModalOrder(null);
+        return;
+      }
+
+      setOrderChatLoading(true);
+      setOrderChatMessages([]);
+      setOrderChatConversationId(null);
+
+      try {
+        const conv = await ensureConversation({
+          participantId: orderRow.patientId,
+          orderId: orderRow.backendId,
+        });
+        if (cancelled) return;
+        const cid = String(conv._id);
+        setOrderChatConversationId(cid);
+        orderChatConvIdRef.current = cid;
+
+        await markConversationRead(cid).catch(() => {});
+
+        const { messages: pageMessages } = await getConversationMessages(cid, { page: 1 });
+        if (cancelled) return;
+        const chronological = [...pageMessages].reverse();
+        setOrderChatMessages(chronological);
+      } catch (e) {
+        if (!cancelled) {
+          showToast(e instanceof Error ? e.message : 'Could not open chat');
+        }
+      } finally {
+        if (!cancelled) setOrderChatLoading(false);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally only when opening/closing chat; avoid re-bootstrap on orders list refresh.
+  }, [chatModalOrder]);
+
+  useEffect(() => {
+    if (!chatModalOrder || !orderChatConversationId) return;
+
+    const POLL_MS = 8000;
+
+    const poll = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const cid = orderChatConvIdRef.current;
+      if (!cid) return;
+      try {
+        const list = orderChatMessagesRef.current;
+        if (list.length === 0) {
+          const { messages } = await getConversationMessages(cid, { page: 1 });
+          if (messages.length) {
+            setOrderChatMessages([...messages].reverse());
+          }
+          return;
+        }
+        let latest = list[0];
+        for (let i = 1; i < list.length; i++) {
+          if (new Date(list[i].sentAt).getTime() > new Date(latest.sentAt).getTime()) latest = list[i];
+        }
+        const { messages: inc } = await getConversationMessages(cid, { since: latest.sentAt });
+        if (inc.length) {
+          setOrderChatMessages((prev) => mergeConversationMessages(prev, inc));
+        }
+      } catch {
+        /* ignore transient poll failures */
+      }
+    };
+
+    const interval = setInterval(poll, POLL_MS);
+    poll();
+    return () => clearInterval(interval);
+  }, [chatModalOrder, orderChatConversationId]);
+
+  useEffect(() => {
+    chatEndAnchorRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [orderChatMessages, orderChatLoading]);
+
+  const handleSendOrderChat = async () => {
+    const trimmed = chatMessage.trim();
+    if (!orderChatConversationId || !trimmed || orderChatSending) return;
+
+    setOrderChatSending(true);
     try {
-      await apiPatch(`/orders/${order.backendId}/status`, { status: nextStatus });
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: localStatus } : o)));
+      const sent = await sendConversationMessage(orderChatConversationId, trimmed);
+      setChatMessage('');
+      setOrderChatMessages((prev) => mergeConversationMessages(prev, [sent]));
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not send message');
+    } finally {
+      setOrderChatSending(false);
+    }
+  };
+
+  const applyStatusChange = async (
+    order: OrderEntry,
+    nextStatus: string,
+    localStatus: string,
+    extraBody?: Record<string, unknown>,
+  ) => {
+    try {
+      await apiPatch(`/orders/${order.backendId}/status`, { status: nextStatus, ...(extraBody || {}) });
+      await reloadOrders();
+      return true;
+    } catch (error) {
+      console.error(error);
+      showToast(error instanceof Error ? error.message : 'Could not update order');
+      return false;
+    }
+  };
+
+  const reloadOrders = async () => {
+    try {
+      const response = await apiGet<any[]>('/pharmacy/me/orders');
+      const mapped = (response.data || []).map(mapOrder);
+      setOrders(mapped);
     } catch (error) {
       console.error(error);
     }
@@ -232,14 +491,25 @@ export default function OrdersPage() {
 
   const handleAssignDelivery = async () => {
     if (!assignDeliveryModalOrder || !selectedAgent) return;
-    const agent = MOCK_AGENTS.find((a) => a.id === selectedAgent);
+    const agent = deliveryAgents.find((a) => a.id === selectedAgent);
     const order = orders.find((o) => o.id === assignDeliveryModalOrder);
     if (!order) return;
 
-    await applyStatusChange(order, 'dispatched', 'out_for_delivery');
+    const orderRef = assignDeliveryModalOrder;
+    const label =
+      agent?.username?.trim() || agent?.phone?.trim() || agent?.email?.trim() || selectedAgent;
+
+    setAssignSubmitting(true);
+    const ok = await applyStatusChange(order, 'dispatched', 'out_for_delivery', {
+      deliveryAgentId: selectedAgent,
+    });
+    setAssignSubmitting(false);
+    if (!ok) return;
+
     setAssignDeliveryModalOrder(null);
     setSelectedAgent(null);
-    showToast(`Delivery assigned to ${agent?.name} for Order ${assignDeliveryModalOrder}.`);
+    await reloadOrders();
+    showToast(`Delivery assigned to ${label} for Order ${orderRef}.`);
   };
 
   const handleTrackDelivery = (id: string) => {
@@ -263,6 +533,8 @@ export default function OrdersPage() {
   const translatePayment = (pmt: string) => {
     if (pmt === 'Paid (Chapa)') return t.paidChapa;
     if (pmt === 'Pending (Cash)') return t.pendingCash;
+    if (pmt === 'Awaiting Rx verification') return t.awaitingRxVerification;
+    if (pmt === 'Awaiting patient payment') return t.awaitingPatientPayment;
     return pmt;
   };
 
@@ -271,6 +543,7 @@ export default function OrdersPage() {
     if (st === 'preparing') return t.statusPreparing;
     if (st === 'accepted') return t.statusAccepted;
     if (st === 'out_for_delivery') return t.statusOutForDelivery;
+    if (st === 'awaiting_patient') return t.awaitingPatient;
     if (st === 'ready_for_pickup') return 'READY FOR PICKUP';
     if (st === 'rejected') return 'REJECTED';
     return st.replace('_', ' ').toUpperCase();
@@ -292,8 +565,9 @@ export default function OrdersPage() {
     else if (activeTab === 1) matchesTab = order.status === 'new';
     else if (activeTab === 2) matchesTab = order.status === 'accepted';
     else if (activeTab === 3) matchesTab = order.status === 'preparing';
-    else if (activeTab === 4) matchesTab = order.status === 'out_for_delivery';
+    else if (activeTab === 4) matchesTab = order.status === 'out_for_delivery' || order.status === 'awaiting_patient';
     else if (activeTab === 5) matchesTab = order.status === 'delivered';
+    else if (activeTab === 6) matchesTab = Boolean(order.needsRxReview);
 
     return matchesSearch && matchesDelivery && matchesTab;
   });
@@ -305,6 +579,76 @@ export default function OrdersPage() {
   const activeOrderForCodWarning = orders.find(o => o.id === codWarningModalOrder);
   const activeOrderForTrack = orders.find(o => o.id === trackModalOrder);
   const activeOrderForChat = orders.find(o => o.id === chatModalOrder);
+  const activeOrderForRxReview = orders.find((o) => o.id === rxReviewModalOrder);
+  const rxReviewQueueCount = orders.filter((o) => o.needsRxReview).length;
+
+  useEffect(() => {
+    const uploadId = activeOrderForRxReview?.prescriptionUploadMongoId;
+    if (!rxReviewModalOrder || !uploadId) {
+      setRxModalFile(null);
+      setRxModalFileLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setRxModalFile(null);
+    setRxModalFileLoading(true);
+
+    void (async () => {
+      try {
+        const doc = await getPrescriptionUpload(uploadId);
+        if (!cancelled) {
+          setRxModalFile({ url: doc.fileUrl, label: fileLabelFromUrl(doc.fileUrl) });
+        }
+      } catch {
+        if (!cancelled) {
+          setRxModalFile(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setRxModalFileLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rxReviewModalOrder, activeOrderForRxReview?.prescriptionUploadMongoId]);
+
+  const handleVerifyRx = async () => {
+    const entry = activeOrderForRxReview;
+    if (!entry?.prescriptionUploadMongoId) return;
+    setRxActionLoading(true);
+    try {
+      await verifyPrescriptionUpload(entry.prescriptionUploadMongoId);
+      await reloadOrders();
+      setRxReviewModalOrder(null);
+      setRxRejectNote('');
+      showToast('Prescription verified');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Verify failed');
+    } finally {
+      setRxActionLoading(false);
+    }
+  };
+
+  const handleRejectRx = async () => {
+    const entry = activeOrderForRxReview;
+    if (!entry?.prescriptionUploadMongoId) return;
+    setRxActionLoading(true);
+    try {
+      await rejectPrescriptionUpload(entry.prescriptionUploadMongoId, rxRejectNote.trim() || undefined);
+      await reloadOrders();
+      setRxReviewModalOrder(null);
+      setRxRejectNote('');
+      showToast('Prescription rejected — order cancelled');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Reject failed');
+    } finally {
+      setRxActionLoading(false);
+    }
+  };
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
@@ -359,7 +703,8 @@ export default function OrdersPage() {
       {/* Tabs */}
       <div className="flex overflow-x-auto scrollbar-hide border-b border-gray-200">
         {t.tabs.map((tab, idx) => {
-          const count = idx === 1 ? orders.filter(o => o.status === 'new').length : 0;
+          const count =
+            idx === 1 ? orders.filter((o) => o.status === 'new').length : idx === 6 ? rxReviewQueueCount : 0;
           return (
             <button 
               key={idx}
@@ -368,7 +713,7 @@ export default function OrdersPage() {
                 activeTab === idx ? 'border-brand-600 text-brand-900' : 'border-transparent text-gray-500 hover:text-brand-700'
               }`}
             >
-              {tab} {idx === 1 && count > 0 ? `(${count})` : ''}
+              {tab} {(idx === 1 || idx === 6) && count > 0 ? `(${count})` : ''}
             </button>
           );
         })}
@@ -432,6 +777,7 @@ export default function OrdersPage() {
                       order.status === 'new' ? 'bg-blue-50 text-blue-700' :
                       order.status === 'preparing' ? 'bg-amber-50 text-amber-700' :
                       order.status === 'accepted' ? 'bg-emerald-50 text-emerald-700' :
+                      order.status === 'awaiting_patient' ? 'bg-slate-100 text-slate-800' :
                       'bg-purple-50 text-purple-700'
                     }`}>
                       {translateStatus(order.status)}
@@ -439,6 +785,13 @@ export default function OrdersPage() {
                     <div className="mt-2 text-xs font-medium text-gray-700">
                        {order.total} ETB • {translatePayment(order.payment)}
                     </div>
+                    {order.awaitingPatientPaymentAfterRx && (
+                      <div className="mt-1.5">
+                        <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide bg-slate-100 text-slate-500">
+                          {t.awaitingPatientPayment}
+                        </span>
+                      </div>
+                    )}
                  </td>
                  <td className="p-4 align-top text-right">
                     <div className="flex justify-end items-center gap-2">
@@ -450,7 +803,19 @@ export default function OrdersPage() {
                          <MessageSquare className="w-5 h-5" />
                       </button>
                       
-                      {order.status === 'new' && (
+                      {order.status === 'new' && order.needsRxReview && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRxRejectNote('');
+                            setRxReviewModalOrder(order.id);
+                          }}
+                          className="px-4 py-2 text-xs font-bold text-violet-800 bg-violet-100 hover:bg-violet-200 rounded-xl transition-colors"
+                        >
+                          Review Rx
+                        </button>
+                      )}
+                      {order.status === 'new' && !order.needsRxReview && !order.awaitingPatientPaymentAfterRx && (
                         <>
                           <button onClick={() => setRejectModalOrder(order.id)} className="px-4 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors">{t.reject}</button>
                           <button onClick={() => setAcceptModalOrder(order.id)} className="px-4 py-2 text-xs font-bold text-white bg-brand-900 hover:bg-brand-800 rounded-xl transition-colors shadow-sm">{t.accept}</button>
@@ -473,7 +838,7 @@ export default function OrdersPage() {
                           <button onClick={() => attemptAssignDelivery(order.id)} className="px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-xl transition-colors whitespace-nowrap">{t.assignDelivery}</button>
                         )
                       )}
-                      {order.status === 'out_for_delivery' && (
+                      {(order.status === 'out_for_delivery' || order.status === 'awaiting_patient') && (
                         <button onClick={() => handleTrackDelivery(order.id)} className="px-4 py-2 text-xs font-bold text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-xl transition-colors">{t.track}</button>
                       )}
                       {order.status === 'ready_for_pickup' && (
@@ -496,6 +861,80 @@ export default function OrdersPage() {
           <div className="p-12 text-center text-gray-500 font-medium">No orders found matching your criteria.</div>
         )}
       </div>
+
+      {/* Prescription review modal */}
+      {rxReviewModalOrder && activeOrderForRxReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl relative">
+            <div className="p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+                <FileText className="w-6 h-6 text-brand-600" />
+                Prescription review
+              </h3>
+              <div className="mb-4 bg-gray-50 rounded-xl p-4 border border-gray-100 text-sm">
+                <div className="font-mono text-xs text-gray-500 mb-1">{activeOrderForRxReview.id}</div>
+                <div className="font-bold text-gray-900">{activeOrderForRxReview.patient}</div>
+                <p className="text-gray-600 mt-1 line-clamp-2">
+                  {language === 'am' ? activeOrderForRxReview.itemsAm : activeOrderForRxReview.items}
+                </p>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">{t.rxModalIntro}</p>
+              <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm">
+                <div className="font-bold text-gray-700">{t.attachedRxFile}</div>
+                {rxModalFileLoading && <p className="mt-1 text-gray-500">Loading…</p>}
+                {!rxModalFileLoading && rxModalFile && (
+                  <a
+                    href={rxModalFile.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 block break-all text-brand-700 underline underline-offset-2 hover:text-brand-900"
+                  >
+                    {rxModalFile.label}
+                  </a>
+                )}
+                {!rxModalFileLoading && !rxModalFile && activeOrderForRxReview.prescriptionUploadMongoId && (
+                  <p className="mt-1 text-xs text-gray-500">Could not load file.</p>
+                )}
+              </div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Rejection note (optional)</label>
+              <textarea
+                value={rxRejectNote}
+                onChange={(e) => setRxRejectNote(e.target.value)}
+                rows={2}
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none mb-4 resize-none text-sm"
+                placeholder="Reason if rejecting…"
+              />
+              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+                <button
+                  type="button"
+                  disabled={rxActionLoading}
+                  onClick={() => void handleRejectRx()}
+                  className="sm:flex-initial flex-1 min-w-[120px] px-4 py-2.5 text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {t.reject}
+                </button>
+                <button
+                  type="button"
+                  disabled={rxActionLoading}
+                  onClick={() => void handleVerifyRx()}
+                  className="sm:flex-initial flex-1 min-w-[120px] px-4 py-2.5 text-sm font-bold text-white bg-brand-900 hover:bg-brand-800 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {rxActionLoading ? '…' : t.accept}
+                </button>
+              </div>
+            </div>
+            {!rxActionLoading && (
+              <button
+                type="button"
+                onClick={() => setRxReviewModalOrder(null)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Accept Modal */}
       {acceptModalOrder && activeOrderForAccept && (
@@ -698,7 +1137,13 @@ export default function OrdersPage() {
                 <h3 className="text-xl font-bold text-gray-900 mb-1">Assign Delivery</h3>
                 <p className="text-sm text-gray-500 font-medium">Order {activeOrderForAssign.id} • {activeOrderForAssign.patient}</p>
               </div>
-              <button onClick={() => setAssignDeliveryModalOrder(null)} className="text-gray-400 hover:text-gray-600">
+              <button
+                onClick={() => {
+                  setAssignDeliveryModalOrder(null);
+                  setSelectedAgent(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
@@ -707,43 +1152,59 @@ export default function OrdersPage() {
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Select Delivery Agent</h4>
-                  
-                  {MOCK_AGENTS.length === 0 ? (
+
+                  {agentsLoading && (
+                    <div className="bg-white p-6 rounded-xl border border-gray-200 text-center text-sm text-gray-500">
+                      Loading drivers…
+                    </div>
+                  )}
+                  {agentsError && !agentsLoading && (
+                    <div className="bg-red-50 p-4 rounded-xl border border-red-200 text-sm text-red-700">{agentsError}</div>
+                  )}
+                  {!agentsLoading && !agentsError && deliveryAgents.length === 0 && (
                     <div className="bg-white p-6 rounded-xl border border-gray-200 text-center">
-                      <p className="text-sm text-gray-500 mb-3">You have no delivery agents set up. Add delivery personnel in your Deliveries section before assigning orders.</p>
-                      <Link href="/pharmacy/deliveries" className="text-sm font-bold text-brand-600 hover:text-brand-800">Go to Deliveries</Link>
+                      <p className="text-sm text-gray-500 mb-3">
+                        No delivery drivers are linked to your pharmacy yet. Drivers must complete registration and select
+                        your pharmacy as their employer.
+                      </p>
+                      <Link href="/pharmacy/deliveries" className="text-sm font-bold text-brand-600 hover:text-brand-800">
+                        Go to Deliveries
+                      </Link>
                     </div>
-                  ) : MOCK_AGENTS.every(a => a.capacity >= a.maxCapacity) ? (
-                    <div className="bg-amber-50 p-6 rounded-xl border border-amber-200 text-center">
-                      <p className="text-sm text-amber-800 font-medium">All your delivery agents are currently at full capacity. Wait for an active delivery to complete or add a new delivery agent before assigning this order.</p>
-                    </div>
-                  ) : (
+                  )}
+                  {!agentsLoading && !agentsError && deliveryAgents.length > 0 && (
                     <div className="space-y-3">
-                      {MOCK_AGENTS.map(agent => {
-                        const isFull = agent.capacity >= agent.maxCapacity;
+                      {deliveryAgents.map((agent) => {
+                        const displayName =
+                          agent.username?.trim() || agent.phone?.trim() || agent.email?.trim() || agent.id;
+                        const sub =
+                          [agent.phone, agent.email].filter(Boolean).join(' · ') ||
+                          (agent.vehicleType ? `Vehicle: ${agent.vehicleType}` : '');
                         return (
-                          <div 
+                          <div
                             key={agent.id}
-                            onClick={() => !isFull && setSelectedAgent(agent.id)}
+                            onClick={() => setSelectedAgent(agent.id)}
                             className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer bg-white ${
-                              isFull ? 'opacity-50 cursor-not-allowed border-gray-100' :
-                              selectedAgent === agent.id ? 'border-brand-500 shadow-sm bg-brand-50/10' : 'border-gray-100 hover:border-gray-300'
+                              selectedAgent === agent.id
+                                ? 'border-brand-500 shadow-sm bg-brand-50/10'
+                                : 'border-gray-100 hover:border-gray-300'
                             }`}
-                            title={isFull ? 'This agent has reached the maximum delivery limit. Assign to another agent.' : ''}
                           >
-                            <img src={agent.photo} alt={agent.name} className="w-12 h-12 rounded-full object-cover bg-gray-100" />
-                            <div className="flex-1">
-                              <div className="flex justify-between items-start mb-1">
-                                <span className="font-bold text-gray-900">{agent.name}</span>
-                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                                  agent.status === 'Available' ? 'bg-emerald-100 text-emerald-700' :
-                                  agent.status === 'At capacity' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                                }`}>{agent.status}</span>
+                            <div className="w-12 h-12 rounded-full bg-brand-100 text-brand-800 font-bold flex items-center justify-center shrink-0 text-sm">
+                              {displayName.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex justify-between items-start gap-2 mb-1">
+                                <span className="font-bold text-gray-900 truncate">{displayName}</span>
+                                <span
+                                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                                    agent.isOnline ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                                  }`}
+                                >
+                                  {agent.isOnline ? 'Online' : 'Offline'}
+                                </span>
                               </div>
-                              <div className="flex justify-between items-center text-xs text-gray-500 font-medium">
-                                <span>{agent.capacity} / {agent.maxCapacity} active</span>
-                                <span>{agent.eta !== '-' ? `~${agent.eta} away` : ''}</span>
-                              </div>
+                              {sub && <div className="text-xs text-gray-500 font-medium truncate">{sub}</div>}
                             </div>
                           </div>
                         );
@@ -759,7 +1220,7 @@ export default function OrdersPage() {
                       <div className="text-xs text-gray-500 font-medium mb-1">Destination</div>
                       <div className="text-sm font-bold text-gray-900 flex items-start gap-2">
                          <MapPin className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
-                         123 Address Street, Addis Ababa (Mock Location)
+                         {formatDeliveryAddressText(activeOrderForAssign.deliveryAddress)}
                       </div>
                     </div>
                     
@@ -770,24 +1231,33 @@ export default function OrdersPage() {
                       </div>
                     </div>
 
-                    <div className="h-32 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200 overflow-hidden relative">
-                       <MapPin className="w-8 h-8 text-brand-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 drop-shadow-md z-10" />
-                       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-                       <span className="text-xs font-bold text-gray-400 absolute bottom-2 right-2 bg-white/80 px-2 py-1 rounded">Map Preview</span>
-                    </div>
+                                        <OrderRouteMapPanel
+                      orderBackendId={activeOrderForAssign.backendId}
+                      pharmacy={pharmacyProfile}
+                      deliveryAddress={activeOrderForAssign.deliveryAddress}
+                      className="h-40 w-full rounded-lg border border-gray-200"
+                    />
                   </div>
                 </div>
               </div>
             </div>
             
             <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-white">
-              <button onClick={() => setAssignDeliveryModalOrder(null)} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-xl transition-colors">Cancel</button>
-              <button 
-                onClick={handleAssignDelivery} 
-                disabled={!selectedAgent}
+              <button
+                onClick={() => {
+                  setAssignDeliveryModalOrder(null);
+                  setSelectedAgent(null);
+                }}
+                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAssignDelivery}
+                disabled={!selectedAgent || assignSubmitting || agentsLoading || deliveryAgents.length === 0}
                 className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Assign Delivery
+                {assignSubmitting ? 'Assigning…' : 'Assign Delivery'}
               </button>
             </div>
           </div>
@@ -798,26 +1268,14 @@ export default function OrdersPage() {
       {trackModalOrder && activeOrderForTrack && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden shadow-2xl flex flex-col md:flex-row">
-            <div className="flex-1 border-r border-gray-100 flex flex-col relative h-[50vh] md:h-auto bg-gray-100">
-               {/* Map Mock */}
-               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-               <div className="absolute top-8 left-8 flex flex-col items-center">
-                 <div className="bg-white p-2 text-xs font-bold rounded shadow-md mb-2">Kenema Pharmacy</div>
-                 <MapPin className="w-8 h-8 text-brand-600 drop-shadow-md" />
-               </div>
-               <div className="absolute bottom-1/4 right-1/4 flex flex-col items-center">
-                 <div className="bg-white p-2 text-xs font-bold rounded shadow-md mb-2">{activeOrderForTrack.patient}</div>
-                 <MapPin className="w-8 h-8 text-blue-500 drop-shadow-md" />
-               </div>
-               
-               {/* Agent Marker */}
-               <div className="absolute top-1/2 left-1/2 flex flex-col items-center animate-pulse">
-                  <div className="bg-brand-900 text-white p-1 text-[10px] font-bold rounded shadow-md mb-1 px-2 whitespace-nowrap">~12 min remaining</div>
-                  <div className="w-8 h-8 bg-brand-600 rounded-full border-4 border-white shadow-lg flex items-center justify-center">
-                    <span className="text-white text-xs">🚗</span>
-                  </div>
-               </div>
-
+            <div className="flex-1 border-r border-gray-100 flex flex-col relative h-[50vh] md:h-auto min-h-[280px]">
+               <OrderRouteMapPanel
+                 orderBackendId={activeOrderForTrack.backendId}
+                 pharmacy={pharmacyProfile}
+                 deliveryAddress={activeOrderForTrack.deliveryAddress}
+                 pollDriver={Boolean(activeOrderForTrack.tripStartedAt && !activeOrderForTrack.driverHandoffAt)}
+                 className="absolute inset-0 h-full w-full rounded-none"
+               />
                <button onClick={() => setTrackModalOrder(null)} className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm p-2 rounded-xl text-gray-500 hover:text-gray-900 md:hidden z-10">
                  <XCircle className="w-6 h-6" />
                </button>
@@ -919,7 +1377,7 @@ export default function OrdersPage() {
       {chatModalOrder && activeOrderForChat && (
         <>
           <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onClick={() => setChatModalOrder(null)}></div>
-          <div className="fixed inset-y-0 right-0 z-50 w-full md:w-[400px] bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="fixed inset-y-0 right-0 z-50 w-full md:w-[400px] bg-white shadow-2xl flex flex-col min-h-0 animate-in slide-in-from-right duration-300">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-brand-900 text-white">
               <div className="flex items-center gap-3">
                  <div className="w-10 h-10 rounded-full bg-white/20 flex flex-col items-center justify-center font-bold text-sm">
@@ -940,19 +1398,50 @@ export default function OrdersPage() {
               {language === 'am' ? activeOrderForChat.itemsAm : activeOrderForChat.items} • {activeOrderForChat.status.toUpperCase()}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 bg-gray-50/50">
-               <div className="text-center text-xs text-gray-400 font-medium my-2">Today, 14:20 PM</div>
-               <div className="bg-white border border-gray-200 p-3 rounded-2xl rounded-tl-sm self-start max-w-[85%] text-sm text-gray-700 shadow-sm">
-                 Hello, I just placed an order. Can you make sure the paracetamol is drops for baby?
-               </div>
-               <div className="bg-brand-600 text-white p-3 rounded-2xl rounded-tr-sm self-end max-w-[85%] text-sm shadow-sm">
-                 Of course! We have updated it to baby drops. Your order will be ready soon.
-               </div>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-gray-50/50 min-h-0">
+              {orderChatLoading && (
+                <div className="text-center text-xs text-gray-500 py-8">Loading messages…</div>
+              )}
+              {!orderChatLoading && orderChatMessages.length === 0 && (
+                <div className="text-center text-xs text-gray-500 py-8">No messages yet. Say hello!</div>
+              )}
+              {!orderChatLoading &&
+                orderChatMessages.map((msg) => {
+                  const isSystem = msg.senderRole === 'system' || msg.kind === 'system';
+                  if (isSystem) {
+                    return (
+                      <div key={msg._id} className="flex justify-center w-full shrink-0">
+                        <div className="rounded-2xl bg-gray-100 text-gray-600 text-xs px-3 py-2 max-w-[95%] text-center break-words border border-gray-200">
+                          {msg.content}
+                        </div>
+                      </div>
+                    );
+                  }
+                  const mine = msg.senderRole === 'pharmacy';
+                  const timeLabel =
+                    msg.sentAt != null
+                      ? new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : '';
+                  return (
+                    <div
+                      key={msg._id}
+                      className={`p-3 rounded-2xl text-sm shadow-sm max-w-[85%] ${
+                        mine
+                          ? 'bg-brand-600 text-white rounded-tr-sm self-end'
+                          : 'bg-white border border-gray-200 text-gray-700 rounded-tl-sm self-start'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                      <p className={`text-[10px] mt-1.5 ${mine ? 'text-brand-100' : 'text-gray-400'}`}>{timeLabel}</p>
+                    </div>
+                  );
+                })}
+              <div ref={chatEndAnchorRef} className="h-px shrink-0" aria-hidden />
             </div>
 
             <div className="p-4 bg-white border-t border-gray-100">
                <div className="flex items-end gap-2 bg-gray-50 p-1.5 rounded-2xl border border-gray-200 focus-within:ring-2 focus-within:ring-brand-500 transition-shadow">
-                 <button className="p-2.5 text-gray-400 hover:text-brand-600 transition-colors shrink-0">
+                 <button type="button" className="p-2.5 text-gray-400 hover:text-brand-600 transition-colors shrink-0" aria-hidden>
                    <ClipboardList className="w-5 h-5" />
                  </button>
                  <textarea 
@@ -960,10 +1449,26 @@ export default function OrdersPage() {
                    placeholder="Message the patient..." 
                    className="flex-1 max-h-32 bg-transparent border-none outline-none resize-none py-2.5 text-sm"
                    value={chatMessage}
+                   disabled={orderChatLoading || !orderChatConversationId}
                    onChange={e => setChatMessage(e.target.value)}
+                   onKeyDown={(e) => {
+                     if (e.key === 'Enter' && !e.shiftKey) {
+                       e.preventDefault();
+                       void handleSendOrderChat();
+                     }
+                   }}
                  />
-                 <button className={`p-2.5 rounded-xl text-white font-bold text-sm transition-colors shrink-0 mb-0.5 mr-0.5 ${chatMessage.trim() ? 'bg-brand-600 hover:bg-brand-700' : 'bg-gray-300 pointer-events-none'}`}>
-                   Send
+                 <button 
+                   type="button"
+                   disabled={!chatMessage.trim() || orderChatSending || orderChatLoading || !orderChatConversationId}
+                   onClick={() => void handleSendOrderChat()}
+                   className={`p-2.5 rounded-xl text-white font-bold text-sm transition-colors shrink-0 mb-0.5 mr-0.5 ${
+                     chatMessage.trim() && !orderChatSending && orderChatConversationId && !orderChatLoading
+                       ? 'bg-brand-600 hover:bg-brand-700'
+                       : 'bg-gray-300 pointer-events-none'
+                   }`}
+                 >
+                   {orderChatSending ? '…' : 'Send'}
                  </button>
                </div>
             </div>

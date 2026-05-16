@@ -10,6 +10,7 @@ import {
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'motion/react';
+import { clearPrescriptionScanSessionStorage } from '@/lib/prescriptionScanSession';
 
 // Mocks & Types
 type VehicleType = 'Motorcycle' | 'Bicycle' | 'On Foot' | 'Three-Wheeler (Bajaj)' | 'Car';
@@ -239,6 +240,7 @@ export default function DeliveryProfile() {
     }
     
     if (window.confirm("Are you sure you want to sign out?")) {
+      clearPrescriptionScanSessionStorage();
       localStorage.removeItem('medcare_role');
       localStorage.removeItem('medcare_active_delivery');
       router.push('/login');

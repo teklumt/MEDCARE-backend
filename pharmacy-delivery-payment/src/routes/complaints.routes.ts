@@ -1,10 +1,13 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
-import { createComplaint, getComplaint } from '../controllers/complaints.controller';
+import { authenticate, authorizeRoles } from '../middleware/auth';
+import { createComplaint, getComplaint, listMyComplaints } from '../controllers/complaints.controller';
 
 const router = Router();
 
-router.post('/', authenticate, createComplaint);
+const reporterOnly = authorizeRoles('patient', 'pharmacy');
+
+router.post('/', authenticate, reporterOnly, createComplaint);
+router.get('/me', authenticate, reporterOnly, listMyComplaints);
 router.get('/:id', authenticate, getComplaint);
 
 export default router;

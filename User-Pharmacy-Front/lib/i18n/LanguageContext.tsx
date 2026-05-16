@@ -75,6 +75,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'search.uploadPrescription': 'Upload your prescription',
     'search.uploadDesc': 'Our AI will read the handwriting and find your exact medications instantly.',
     'search.chooseFile': 'Choose File',
+    'search.fromPrescription': 'From prescription',
+    'search.scanningPrescription': 'Reading your prescription...',
+    'search.scanTooLarge': 'File is too large. Maximum size is 10 MB.',
+    'search.scanFailed': 'Could not read the prescription. Please try another photo.',
+    'search.scanInvalidRx': 'Image may be unclear—try a sharper photo. You can still search below.',
     
     // Nearby Pharmacies
     'nearby.title': 'Nearby Pharmacies',
@@ -113,6 +118,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'findMeds.subtitle': 'Search for drugs, view detailed medical information, and order instantly.',
     'findMeds.addToCart': 'Add to Cart',
     'findMeds.orderNow': 'Order Now',
+    'findMeds.searchBannerTitle': 'Search results',
+    'findMeds.searchBannerSubtitle': '{count} medication(s) match "{query}".',
+    'findMeds.matchingMedications': 'Matching medications',
+    'findMeds.searchNoResults': 'No medications match "{query}". Try different keywords.',
+    'findMeds.browseAll': 'Browse all medications',
     'findMeds.cat.pain': 'Pain & Fever Relief (Analgesics)',
     'findMeds.cat.antibiotics': 'Antibiotics (Bacterial Infections)',
     'findMeds.cat.cardio': 'Cardiovascular (Heart & Blood Pressure)',
@@ -527,6 +537,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'profile.newPassword': 'New Password',
     'profile.confirmPassword': 'Confirm New Password',
     'profile.updatePassword': 'Update Password',
+    'profile.passwordMismatch': 'New passwords do not match.',
+    'profile.passwordMinLength': 'Password must be at least 8 characters.',
+    'profile.passwordUpdated': 'Password updated successfully.',
+    'profile.passwordUpdateFailed': 'Could not update password. Try again.',
+    'profile.currentPasswordWrong': 'Current password is incorrect.',
     'profile.activeSessions': 'Active Sessions',
     'profile.currentDevice': 'Current device',
     'profile.logoutOther': 'Log Out All Other Devices',
@@ -585,6 +600,18 @@ export const translations: Record<Language, Record<string, string>> = {
     'footer.terms': 'Terms',
     'footer.contact': 'Contact',
     'footer.rights': 'All rights reserved.',
+
+    // Landing — pharmacy partners (anchor #for-pharmacies on home)
+    'landing.pharmacies.title': 'For pharmacies',
+    'landing.pharmacies.intro':
+      'Med-Care helps verified pharmacies reach patients online: manage incoming orders, keep inventory visible in search, coordinate deliveries, and message patients—all from one dashboard.',
+    'landing.pharmacies.orders':
+      'Receive and manage patient orders, including prescription checks and status updates.',
+    'landing.pharmacies.inventory': 'Appear in medication search so nearby patients see what you stock.',
+    'landing.pharmacies.delivery': 'Assign home deliveries and track them with drivers linked to your pharmacy.',
+    'landing.pharmacies.messages': 'Chat with patients about orders, pickup, or delivery details.',
+    'landing.pharmacies.cta': 'Register your pharmacy',
+    'landing.pharmacies.login': 'Pharmacy log in',
   },
   am: {
     // Navbar
@@ -648,6 +675,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'search.uploadPrescription': 'የህክምና ማዘዣዎን ይስቀሉ',
     'search.uploadDesc': 'የእኛ AI የእጅ ጽሑፉን ያነባል እና ትክክለኛ መድሃኒቶችዎን ወዲያውኑ ያገኛል።',
     'search.chooseFile': 'ፋይል ይምረጡ',
+    'search.fromPrescription': 'ከፅሁፍ ማዘዣ የተመረተ',
+    'search.scanningPrescription': 'ማዘዣዎን እየያነብን ነው...',
+    'search.scanTooLarge': 'ፋይል ትልቅ ነው። ከፍተኛው 10 ሜጋ በይት ነው።',
+    'search.scanFailed': 'ማዘዣውን ማንበብ አልተቻለም። ሌላ ፎቶ ይሞክሩ።',
+    'search.scanInvalidRx': 'ምስል ያመቻቻል። ይበልጥ ግልጽ ፎቶ ይሞክሩ። ከታች እንዲህም መፈለግ ይችላሉ።',
     
     // Nearby Pharmacies
     'nearby.title': 'በአቅራቢያ ያሉ ፋርማሲዎች',
@@ -686,6 +718,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'findMeds.subtitle': 'መድሃኒቶችን ይፈልጉ፣ ዝርዝር የህክምና መረጃ ይመልከቱ እና ወዲያውኑ ይዘዙ።',
     'findMeds.addToCart': 'ወደ ዘንቢል ያክሉ',
     'findMeds.orderNow': 'አሁን ይዘዙ',
+    'findMeds.searchBannerTitle': 'የፍለጋ ውጤቶች',
+    'findMeds.searchBannerSubtitle': '"{query}" ከተፈለገው ጋር የሚዛመዱ {count} መድሃኒት።',
+    'findMeds.matchingMedications': 'የተገኙ መድሃኒቶች',
+    'findMeds.searchNoResults': 'ለ"{query}" የሚስማማ መድሃኒት አልተገኘም። ሌላ ቃል ይሞክሩ።',
+    'findMeds.browseAll': 'ሁሉንም መድሃኒቶች ይመልከቱ',
     'findMeds.cat.pain': 'የህመም እና የትኩሳት ማስታገሻ (አናልጀሲክስ)',
     'findMeds.cat.antibiotics': 'አንቲባዮቲክስ (የባክቴሪያ ኢንፌክሽኖች)',
     'findMeds.cat.cardio': 'የልብ እና የደም ግፊት መድሃኒቶች',
@@ -1100,6 +1137,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'profile.newPassword': 'አዲስ የይለፍ ቃል',
     'profile.confirmPassword': 'አዲስ የይለፍ ቃል አረጋግጥ',
     'profile.updatePassword': 'የይለፍ ቃል አዘምን',
+    'profile.passwordMismatch': 'አዲሶቹ የይለፍ ቃሎች አይመሳሰሉም።',
+    'profile.passwordMinLength': 'የይለፍ ቃል ቢያንስ 8 ቁምፊዎች መሆን አለበት።',
+    'profile.passwordUpdated': 'የይለፍ ቃል በተሳካ ሁኔታ ተዘመነ።',
+    'profile.passwordUpdateFailed': 'የይለፍ ቃል ማዘመን አልተቻለም። እንደገና ይሞክሩ።',
+    'profile.currentPasswordWrong': 'የአሁኑ የይለፍ ቃል የተሳሳተ ነው።',
     'profile.activeSessions': 'ንቁ ክፍለ ጊዜዎች',
     'profile.currentDevice': 'የአሁኑ መሣሪያ',
     'profile.logoutOther': 'ከሌሎች መሣሪያዎች ሁሉ ውጣ',
@@ -1158,6 +1200,19 @@ export const translations: Record<Language, Record<string, string>> = {
     'footer.terms': 'ውሎች',
     'footer.contact': 'አግኙን',
     'footer.rights': 'መብቱ በህግ የተጠበቀ ነው።',
+
+    // Landing — pharmacy partners
+    'landing.pharmacies.title': 'ለፋርማሲዎች',
+    'landing.pharmacies.intro':
+      'ሜድ-ኬር ከተረጋገጡ ፋርማሲዎች ጋር ታካሚዎችን በመስመር ላይ እንዲያገኙ ይረዳል፦ የመጡ ትዕዛዞችን ያስተዳድሩ፣ በፍለጋ ውስጥ ክምችትዎን ያሳዩ፣ ማድረሻዎችን ያስተባብሩ እና ከታካሚዎች ጋር ይወያዩ—ሁሉንም በአንድ ዳሽቦርድ።',
+    'landing.pharmacies.orders':
+      'የታካሚ ትዕዛዞችን ይቀበሉ እና ያስተዳድሩ፣ የፅሁፍ ማዘዣ ማረጋገጫ እና የሂደት ሁኔታ ዝመናዎችን ጨምሮ።',
+    'landing.pharmacies.inventory': 'የመድሃኒት ፍለጋ ላይ ይታዩ እንዲሁም በአቅራቢያ ታካሚዎች የሚያስቀምጡትን እንዲያዩ።',
+    'landing.pharmacies.delivery':
+      'ወደ ቤት ማድረሻዎችን ይመድቡ እና ከፋርማሲዎ ጋር የተያያዙ አድራሾች በመጠቀም ይከታተሉ።',
+    'landing.pharmacies.messages': 'ስለ ትዕዛዞች፣ መውሰድ ወይም ማድረሻ ዝርዝሮች ከታካሚዎች ጋር ይወያዩ።',
+    'landing.pharmacies.cta': 'ፋርማሲዎን ያስመዝገቡ',
+    'landing.pharmacies.login': 'የፋርማሲ ግባ',
   }
 };
 

@@ -17,6 +17,7 @@ const TRANSLATIONS = {
     allStatuses: 'All Statuses',
     open: 'Open',
     resolved: 'Resolved',
+    dismissed: 'Dismissed',
     complaintId: 'Complaint ID',
     reporter: 'Reporter',
     subjectTarget: 'Subject / Target',
@@ -30,6 +31,7 @@ const TRANSLATIONS = {
     description: 'Description',
     markInProgress: 'Mark In Progress',
     markResolved: 'Mark Resolved',
+    markDismiss: 'Dismiss',
     close: 'Close',
   },
   am: {
@@ -42,6 +44,7 @@ const TRANSLATIONS = {
     allStatuses: 'ሁሉም ሁኔታዎች',
     open: 'ክፍት',
     resolved: 'የተፈታ',
+    dismissed: 'የተሰረዘ',
     complaintId: 'የቅሬታ መታወቂያ',
     reporter: 'አቅራቢ',
     subjectTarget: 'ርዕስ / ዒላማ',
@@ -55,14 +58,26 @@ const TRANSLATIONS = {
     description: 'መግለጫ',
     markInProgress: 'በሂደት ላይ ምልክት ያድርጉ',
     markResolved: 'የተፈታ ምልክት ያድርጉ',
+    markDismiss: 'ያስወግዱ',
     close: 'ዝጋ',
   }
 };
 
-const INITIAL_COMPLAINTS = [
-  { id: 'CMP-001', user: 'Abebe K.', type: 'Patient', target: 'Selam Pharmacy', subject: 'Late Delivery', description: 'The delivery was over 2 hours late. I have been calling the pharmacy but no response. This is unacceptable as I need the medication urgently.', status: 'Open', priority: 'High', date: '2 hours ago' },
-  { id: 'CMP-002', user: 'Kidus Pharmacy', type: 'Pharmacy', target: 'System', subject: 'Payment not received', description: 'We did not receive payment for order MED-8321. It has been 3 days since the delivery was completed.', status: 'In Progress', priority: 'Medium', date: '1 day ago' },
-  { id: 'CMP-003', user: 'Sara M.', type: 'Patient', target: 'Delivery Agent', subject: 'Rude behavior', description: 'The delivery agent was very rude when I asked him to bring it to the 2nd floor.', status: 'Resolved', priority: 'Low', date: '3 days ago' },
+const INITIAL_COMPLAINTS: Array<{
+  id: string;
+  mongoId?: string;
+  user: string;
+  type: string;
+  target: string;
+  subject: string;
+  description: string;
+  status: string;
+  priority: string;
+  date: string;
+}> = [
+  { id: 'CMP-001', user: 'Abebe K.', type: 'Patient', target: 'Selam Pharmacy', subject: 'Late Delivery', description: 'Sample row (offline demo).', status: 'Open', priority: 'High', date: '2 hours ago' },
+  { id: 'CMP-002', user: 'Kidus Pharmacy', type: 'Pharmacy', target: 'System', subject: 'Payment not received', description: 'Sample row (offline demo).', status: 'Open', priority: 'Medium', date: '1 day ago' },
+  { id: 'CMP-003', user: 'Sara M.', type: 'Patient', target: 'Delivery topic (text)', subject: 'Rude behavior report', description: 'Sample resolved row.', status: 'Resolved', priority: 'Low', date: '3 days ago' },
 ];
 
 export default function AdminComplaintsPage() {
@@ -90,17 +105,26 @@ export default function AdminComplaintsPage() {
       complaint.subject.toLowerCase().includes(query);
 
     const isStatusAll = statusFilter === 'All Statuses' || statusFilter === t.allStatuses;
-    const statusMatch = isStatusAll || complaint.status === statusFilter || (language === 'am' && statusFilter === t.open && complaint.status === 'Open') || (language === 'am' && statusFilter === t.inProgress && complaint.status === 'In Progress') || (language === 'am' && statusFilter === t.resolved && complaint.status === 'Resolved');
+    const statusMatch =
+      isStatusAll ||
+      complaint.status === statusFilter ||
+      (language === 'am' && statusFilter === t.open && complaint.status === 'Open') ||
+      (language === 'am' && statusFilter === t.resolved && complaint.status === 'Resolved') ||
+      (language === 'am' && statusFilter === t.dismissed && complaint.status === 'Dismissed');
 
     return searchMatch && statusMatch;
   });
 
   const translateStatus = (status: string) => {
-    switch(status) {
-      case 'Open': return t.open;
-      case 'In Progress': return t.inProgress;
-      case 'Resolved': return t.resolved;
-      default: return status;
+    switch (status) {
+      case 'Open':
+        return t.open;
+      case 'Resolved':
+        return t.resolved;
+      case 'Dismissed':
+        return t.dismissed;
+      default:
+        return status;
     }
   };
 
@@ -111,17 +135,30 @@ export default function AdminComplaintsPage() {
     }
   };
 
-  const updateComplaintStatus = async (id: string, newStatus: string) => {
+  const updateComplaintStatus = async (displayId: string, newStatus: string) => {
     const statusMap: Record<string, 'open' | 'resolved' | 'dismissed'> = {
-      'Open': 'open',
-      'In Progress': 'dismissed',
-      'Resolved': 'resolved',
+      Open: 'open',
+      Resolved: 'resolved',
+      Dismissed: 'dismissed',
     };
 
+    const apiStatus = statusMap[newStatus] ?? 'open';
+    const row = complaints.find((c) => c.id === displayId);
+
+    const applyLocal = () => {
+      setComplaints((prev) => prev.map((c) => (c.id === displayId ? { ...c, status: newStatus } : c)));
+      setSelectedComplaint((prev: any) => (prev && prev.id === displayId ? { ...prev, status: newStatus } : prev));
+    };
+
+    // Demo rows (INITIAL_COMPLAINTS) have no mongoId — nothing in DB for CMP-001; skip API to avoid 404 noise.
+    if (!row?.mongoId) {
+      applyLocal();
+      return;
+    }
+
     try {
-      await adminApi.updateComplaint(id, statusMap[newStatus] ?? 'open');
-      setComplaints(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
-      setSelectedComplaint((prev: any) => ({ ...prev, status: newStatus }));
+      await adminApi.updateComplaint(row.mongoId, apiStatus);
+      applyLocal();
     } catch (error) {
       alert((error as Error).message);
     }
@@ -131,18 +168,30 @@ export default function AdminComplaintsPage() {
     const loadComplaints = async () => {
       try {
         const data = await adminApi.getComplaints();
-        const mapped = data.map((complaint: any) => ({
-          id: complaint.ref || complaint._id,
-          user: complaint.reporterName,
-          type: complaint.targetType === 'pharmacy' ? 'Pharmacy' : 'Patient',
-          target: complaint.targetName || complaint.targetType,
-          subject: complaint.issue,
-          description: complaint.details || '-',
-          status: complaint.status === 'open' ? 'Open' : complaint.status === 'resolved' ? 'Resolved' : 'In Progress',
-          priority: complaint.severity === 'high' ? 'High' : complaint.severity === 'medium' ? 'Medium' : 'Low',
-          date: complaint.createdAt ? new Date(complaint.createdAt).toLocaleString() : '-',
-        }));
-        if (mapped.length) setComplaints(mapped);
+        const mapped = data.map((complaint: any) => {
+          const rr = complaint.reporterRole as string | undefined;
+          const reporterType =
+            rr === 'pharmacy' ? 'Pharmacy' : rr === 'patient' ? 'Patient' : 'Unknown';
+
+          let displayStatus: string;
+          if (complaint.status === 'resolved') displayStatus = 'Resolved';
+          else if (complaint.status === 'dismissed') displayStatus = 'Dismissed';
+          else displayStatus = 'Open';
+
+          return {
+            mongoId: String(complaint._id),
+            id: complaint.ref || String(complaint._id),
+            user: complaint.reporterName ?? 'Unknown',
+            type: reporterType,
+            target: complaint.targetName || complaint.targetType,
+            subject: complaint.issue,
+            description: complaint.details || '-',
+            status: displayStatus,
+            priority: complaint.severity === 'high' ? 'High' : complaint.severity === 'medium' ? 'Medium' : 'Low',
+            date: complaint.createdAt ? new Date(complaint.createdAt).toLocaleString() : '-',
+          };
+        });
+        setComplaints(mapped.length ? mapped : []);
       } catch (error) {
         console.error('Failed to load complaints', error);
       }
@@ -198,8 +247,8 @@ export default function AdminComplaintsPage() {
           </p>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-          <h3 className="text-gray-500 text-sm font-medium mb-1">{t.inProgress}</h3>
-          <p className="text-3xl font-bold text-brand-950">{complaints.filter(c => c.status === 'In Progress').length}</p>
+          <h3 className="text-gray-500 text-sm font-medium mb-1">{t.dismissed}</h3>
+          <p className="text-3xl font-bold text-brand-950">{complaints.filter((c) => c.status === 'Dismissed').length}</p>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.resolvedThisWeek}</h3>
@@ -230,8 +279,8 @@ export default function AdminComplaintsPage() {
             >
               <option value="All Statuses">{t.allStatuses}</option>
               <option value="Open">{t.open}</option>
-              <option value="In Progress">{t.inProgress}</option>
               <option value="Resolved">{t.resolved}</option>
+              <option value="Dismissed">{t.dismissed}</option>
             </select>
           </div>
         </div>
@@ -274,8 +323,8 @@ export default function AdminComplaintsPage() {
                   <td className="p-4">
                     <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                       complaint.status === 'Open' ? 'bg-blue-50 text-blue-700' :
-                      complaint.status === 'In Progress' ? 'bg-amber-50 text-amber-700' :
-                      'bg-gray-100 text-gray-700'
+                      complaint.status === 'Dismissed' ? 'bg-gray-100 text-gray-600' :
+                      'bg-emerald-50 text-emerald-700'
                     }`}>
                       {translateStatus(complaint.status)}
                     </span>
@@ -347,7 +396,16 @@ export default function AdminComplaintsPage() {
                 </div>
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                   <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{t.status}</p>
-                  <span className={`px-2.5 py-1 inline-block rounded-md text-xs font-bold uppercase tracking-wider ${selectedComplaint.status === 'Open' ? 'bg-blue-50 text-blue-700 border border-blue-100' : selectedComplaint.status === 'In Progress' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-gray-100 text-gray-700 border border-gray-200'}`}>{translateStatus(selectedComplaint.status)}</span>
+                  <span className={`px-2.5 py-1 inline-block rounded-md text-xs font-bold uppercase tracking-wider ${
+                      selectedComplaint.status === 'Open'
+                        ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                        : selectedComplaint.status === 'Dismissed'
+                          ? 'bg-gray-100 text-gray-700 border border-gray-200'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                    }`}
+                  >
+                    {translateStatus(selectedComplaint.status)}
+                  </span>
                 </div>
               </div>
 
@@ -366,21 +424,23 @@ export default function AdminComplaintsPage() {
                   {t.close}
                 </button>
                 <div className="flex-1 flex flex-col sm:flex-row justify-end gap-3">
-                  {selectedComplaint.status !== 'In Progress' && selectedComplaint.status !== 'Resolved' && (
-                    <button 
-                      onClick={() => updateComplaintStatus(selectedComplaint.id, 'In Progress')}
-                      className="px-6 py-3 rounded-xl font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors border border-amber-200 sm:w-auto w-full"
-                    >
-                      {t.markInProgress}
-                    </button>
-                  )}
-                  {selectedComplaint.status !== 'Resolved' && (
-                    <button 
-                       onClick={() => updateComplaintStatus(selectedComplaint.id, 'Resolved')}
-                       className="px-6 py-3 rounded-xl font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-colors sm:w-auto w-full"
-                    >
-                       {t.markResolved}
-                    </button>
+                  {selectedComplaint.status === 'Open' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => updateComplaintStatus(selectedComplaint.id, 'Dismissed')}
+                        className="px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-800 hover:bg-gray-200 transition-colors border border-gray-200 sm:w-auto w-full"
+                      >
+                        {t.markDismiss}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateComplaintStatus(selectedComplaint.id, 'Resolved')}
+                        className="px-6 py-3 rounded-xl font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-colors sm:w-auto w-full"
+                      >
+                        {t.markResolved}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

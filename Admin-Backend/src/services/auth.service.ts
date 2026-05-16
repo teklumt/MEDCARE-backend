@@ -1,13 +1,62 @@
 import bcrypt from "bcrypt";
 import { generateSecret, generateURI, verify } from "otplib";
 import QRCode from "qrcode";
+import type { IUser } from "../models/User.js";
 import { authRepository } from "../repositories/auth.repository.js";
 import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/tokens.js";
 import { allRolePermissions } from "../types/auth.js";
 
 const refreshTtlMs = 30 * 24 * 60 * 60 * 1000;
 
+function buildAuthUserPayload(user: IUser) {
+  return {
+    id: String(user._id),
+    email: user.email,
+    username: user.username,
+    role: user.role,
+    isActive: user.isActive,
+    permissions: (user as any).permissions?.length
+      ? (user as any).permissions
+      : allRolePermissions[user.role],
+  };
+}
+
 export const authService = {
+  /**
+   * Issue access + refresh tokens and persist session (used by login and registration).
+   */
+  async issueSessionForUser(user: IUser) {
+    const accessToken = signAccessToken({
+      sub: String(user._id),
+      role: user.role,
+      mfa: user.mfa?.enabled ?? false,
+      permissions: (user as any).permissions?.length
+        ? (user as any).permissions
+        : allRolePermissions[user.role],
+    });
+    const refreshToken = signRefreshToken(String(user._id));
+
+    await authRepository.createRefreshToken(
+      String(user._id),
+      hashToken(refreshToken),
+      new Date(Date.now() + refreshTtlMs),
+    );
+
+    (user as any).lastLoginAt = new Date();
+    (user as any).refreshToken = hashToken(refreshToken);
+    await authRepository.saveUser(user);
+
+    return {
+      data: {
+        user: buildAuthUserPayload(user),
+        tokens: {
+          accessToken,
+          refreshToken,
+        },
+      },
+    };
+  },
+
   async login(email: string, password: string, totpCode?: string) {
     const user = await authRepository.findActiveUserByEmail(email);
     if (!user) {
@@ -33,36 +82,7 @@ export const authService = {
     // MFA checks are intentionally disabled for this deployment.
     void totpCode;
 
-    const accessToken = signAccessToken({
-      sub: String(user._id),
-      role: user.role,
-      mfa: user.mfa?.enabled ?? false,
-      permissions: (user as any).permissions?.length ? (user as any).permissions : allRolePermissions[user.role],
-    });
-    const refreshToken = signRefreshToken(String(user._id));
-
-    await authRepository.createRefreshToken(String(user._id), hashToken(refreshToken), new Date(Date.now() + refreshTtlMs));
-
-    (user as any).lastLoginAt = new Date();
-    (user as any).refreshToken = hashToken(refreshToken);
-    await authRepository.saveUser(user);
-
-    return {
-      data: {
-        user: {
-          id: String(user._id),
-          email: user.email,
-          username: user.username,
-          role: user.role,
-          isActive: user.isActive,
-          permissions: (user as any).permissions?.length ? (user as any).permissions : allRolePermissions[user.role],
-        },
-        tokens: {
-          accessToken,
-          refreshToken,
-        },
-      },
-    };
+    return this.issueSessionForUser(user);
   },
 
   async refresh(refreshToken: string) {
@@ -93,21 +113,14 @@ export const authService = {
       (user as any).refreshToken = hashToken(newRefreshToken);
       await authRepository.saveUser(user);
 
-      return { 
-        data: { 
-          user: {
-            id: String(user._id),
-            email: user.email,
-            username: user.username,
-            role: user.role,
-            isActive: user.isActive,
-            permissions: (user as any).permissions?.length ? (user as any).permissions : allRolePermissions[user.role],
-          },
+      return {
+        data: {
+          user: buildAuthUserPayload(user),
           tokens: {
-            accessToken: newAccessToken, 
+            accessToken: newAccessToken,
             refreshToken: newRefreshToken,
           },
-        } 
+        },
       };
     } catch {
       return { error: { message: "Refresh token invalid", code: "TOKEN_INVALID", status: 401 } };

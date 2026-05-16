@@ -9,6 +9,9 @@ const prescriptionUploadSchema = new Schema<IPrescriptionUpload>(
     fileType: { type: String, enum: ['image', 'pdf'], required: true },
     verifiedById: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     verifiedAt: { type: Date, default: null },
+    rejectedAt: { type: Date, default: null },
+    rejectedReason: { type: String, default: null },
+    rejectedById: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     uploadedAt: { type: Date, default: Date.now }
   },
   { timestamps: false }

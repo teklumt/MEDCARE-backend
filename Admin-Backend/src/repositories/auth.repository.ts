@@ -10,6 +10,18 @@ export const authRepository = {
     return User.findOne({ _id: id });
   },
 
+  findUserByEmailAny(email: string): Promise<IUser | null> {
+    return User.findOne({ email: email.toLowerCase().trim() });
+  },
+
+  findUserByUsername(username: string): Promise<IUser | null> {
+    return User.findOne({ username: username.trim() });
+  },
+
+  findUserByPhone(phone: string): Promise<IUser | null> {
+    return User.findOne({ phone });
+  },
+
   saveUser(user: IUser): Promise<IUser> {
     return user.save();
   },

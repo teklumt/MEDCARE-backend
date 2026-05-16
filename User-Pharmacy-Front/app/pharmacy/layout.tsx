@@ -8,6 +8,7 @@ import {
   MessageSquare, BarChart2, Settings, LogOut, ShieldCheck, HelpCircle 
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { clearPrescriptionScanSessionStorage } from '@/lib/prescriptionScanSession';
 
 const NAV_ITEMS = [
   { id: 'Dashboard', href: '/pharmacy', icon: LayoutDashboard },
@@ -98,6 +99,7 @@ export default function PharmacyLayout({ children }: { children: React.ReactNode
   }, [router]);
 
   const handleLogout = () => {
+    clearPrescriptionScanSessionStorage();
     localStorage.removeItem('medcare_role');
     localStorage.removeItem('medcare_username');
     router.push('/');

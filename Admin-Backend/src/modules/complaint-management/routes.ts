@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { body, query } from "express-validator";
+import mongoose from "mongoose";
 import { Complaint } from "../../models/Complaint.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/role.js";
@@ -7,6 +8,15 @@ import { validateRequest } from "../../middleware/validate.js";
 import { errorResponse, successResponse } from "../../utils/response.js";
 import { getPagination } from "../../utils/pagination.js";
 import { logAudit } from "../../utils/audit.js";
+
+/** PATCH may use MongoDB id or human-readable `ref` (e.g. CMP-001). */
+async function findComplaintByIdentifier(param: string) {
+  if (mongoose.Types.ObjectId.isValid(param)) {
+    const byId = await Complaint.findById(param);
+    if (byId) return byId;
+  }
+  return Complaint.findOne({ ref: param });
+}
 
 export const complaintManagementRouter = Router();
 complaintManagementRouter.use(requireAuth);
@@ -44,13 +54,13 @@ complaintManagementRouter.patch(
   async (req, res) => {
     const { status, resolution } = req.body as { status: "open" | "resolved" | "dismissed"; resolution?: string };
 
-    const complaint = await Complaint.findById(req.params.id);
+    const complaint = await findComplaintByIdentifier(String(req.params.id));
     if (!complaint) return errorResponse(res, "Complaint not found", "NOT_FOUND", 404);
 
     complaint.status = status;
     complaint.resolution = resolution ?? complaint.resolution ?? null;
-    complaint.resolvedById = req.admin!.id as any;
-    complaint.resolvedAt = status === "resolved" ? new Date() : complaint.resolvedAt ?? null;
+    complaint.resolvedById = status === "resolved" ? (req.admin!.id as any) : null;
+    complaint.resolvedAt = status === "resolved" ? new Date() : null;
     await complaint.save();
 
     await logAudit(req, "complaint.update", "Complaint", String(complaint._id), { status });

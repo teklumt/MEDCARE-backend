@@ -5,16 +5,27 @@ import { motion, AnimatePresence } from 'motion/react';
 import Link from 'next/link';
 import { 
   ChevronLeft, Globe, AlertTriangle, X, Send, 
-  Mic, Camera, Bot, Shield, Activity, MapPin, Square,
+  Mic, Bot, Shield, Activity, MapPin, Square,
   CheckCircle2, AlertCircle, XCircle, Paperclip, FileText, Image as ImageIcon
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { sendMedcareAiChat } from '@/lib/api';
+import {
+  readMedcareAiConversationId,
+  writeMedcareAiConversationId
+} from '@/lib/medcareAiSession';
 
 type Message = {
   id: string;
   role: 'user' | 'ai' | 'system';
   content: string;
   type?: 'standard' | 'rich';
+  isError?: boolean;
+  prescriptionMeta?: {
+    doctor: string | null;
+    clinic: string | null;
+    medications: string[];
+  };
   attachment?: {
     name: string;
     url: string;
@@ -52,7 +63,9 @@ export default function HealthAssistantPage() {
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [showLangDropdown, setShowLangDropdown] = useState(false);
-  
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -74,15 +87,25 @@ export default function HealthAssistantPage() {
     });
   }, [t]);
 
-  const handleSend = (text: string = input) => {
-    if (!text.trim() && !selectedFile) return;
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setConversationId(readMedcareAiConversationId());
+  }, []);
+
+  const handleSend = async (text: string = input) => {
+    const trimmed = text.trim();
+    if (!trimmed && !selectedFile) return;
+
+    if (!trimmed && selectedFile) {
+      setChatError('Add a message to send. Attachments are shown in the chat for your reference only; MedCare AI currently accepts text.');
+      return;
+    }
 
     let attachmentData = undefined;
     if (selectedFile) {
       attachmentData = {
         name: selectedFile.name,
         type: selectedFile.type,
-        // using object URL for preview purposes in this simulated environment
         url: URL.createObjectURL(selectedFile)
       };
     }
@@ -90,55 +113,77 @@ export default function HealthAssistantPage() {
     const newUserMsg: Message = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: text || 'Sent an attachment',
+      content: trimmed || 'Sent an attachment',
       attachment: attachmentData
     };
 
-    setMessages(prev => [...prev, newUserMsg]);
+    setMessages((prev) => [...prev, newUserMsg]);
     setInput('');
     setSelectedFile(null);
+    setChatError(null);
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      setIsTyping(false);
-      
-      if (text.toLowerCase().includes('fever')) {
-        setMessages(prev => [...prev, {
-          id: crypto.randomUUID(),
-          role: 'ai',
-          content: 'I understand you have a fever. Here is some general guidance, but please consult a doctor if your fever is high or persists.',
-          type: 'rich',
-          richData: {
-            categories: ['Fever', 'Symptom Relief'],
-            guidance: [
-              { type: 'safe', text: 'Rest and drink plenty of fluids (water, clear broths).' },
-              { type: 'safe', text: 'Take over-the-counter fever reducers like Paracetamol if appropriate.' },
-              { type: 'warning', text: 'Monitor your temperature regularly.' },
-              { type: 'avoid', text: 'Do not bundle up in heavy blankets if you have chills.' }
-            ],
-            actions: [
-              { label: 'Find nearby clinic', icon: MapPin },
-              { label: 'Check Paracetamol stock', icon: Activity }
-            ]
-          }
-        }]);
-      } else {
-        setMessages(prev => [...prev, {
-          id: crypto.randomUUID(),
-          role: 'ai',
-          content: 'This is a simulated response. In a real application, this would be connected to the Gemini API to provide helpful health information based on your query.',
-          type: 'standard'
-        }]);
+    try {
+      const data = await sendMedcareAiChat({
+        content: trimmed,
+        conversationId
+      });
+
+      const reply =
+        typeof data.message?.text === 'string' && data.message.text.trim()
+          ? data.message.text.trim()
+          : 'No response text from MedCare AI.';
+
+      const sid = data.session_id;
+      const nextConv = sid != null && String(sid).trim() !== '' ? String(sid).trim() : conversationId;
+      if (nextConv) {
+        setConversationId(nextConv);
+        writeMedcareAiConversationId(nextConv);
       }
-    }, 1500);
+
+      let prescriptionMeta: Message['prescriptionMeta'];
+      const presc = data.prescription;
+      if (presc?.detected) {
+        prescriptionMeta = {
+          doctor: presc.doctor ?? null,
+          clinic: presc.clinic ?? null,
+          medications: Array.isArray(presc.medications)
+            ? presc.medications.map((m) => (typeof m === 'string' ? m : JSON.stringify(m)))
+            : []
+        };
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'ai',
+          content: reply,
+          type: 'standard',
+          prescriptionMeta
+        }
+      ]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'MedCare AI request failed.';
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'ai',
+          content: message,
+          type: 'standard',
+          isError: true
+        }
+      ]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const toggleRecording = () => {
     if (isRecording) {
       setIsRecording(false);
-      // Simulate sending voice message
-      handleSend("Voice message (simulated)");
+      setChatError('Voice input is not connected to MedCare AI yet. Please type your message.');
     } else {
       setIsRecording(true);
     }
@@ -238,9 +283,48 @@ export default function HealthAssistantPage() {
                     <Bot className="w-5 h-5 text-brand-600" />
                   </div>
                   <div className="space-y-2">
-                    <div className="bg-white border border-gray-200 text-gray-800 p-4 rounded-2xl rounded-tl-none shadow-sm">
-                      <p className="text-[15px] leading-relaxed">{msg.content}</p>
+                    <div
+                      className={`border text-gray-800 p-4 rounded-2xl rounded-tl-none shadow-sm ${
+                        msg.isError
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-white border-gray-200'
+                      }`}
+                    >
+                      <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                     </div>
+
+                    {msg.prescriptionMeta && (
+                      <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-4 shadow-sm text-sm space-y-2">
+                        <p className="font-bold text-emerald-900 flex items-center gap-2">
+                          <FileText className="w-4 h-4 shrink-0" />
+                          Prescription detected
+                        </p>
+                        {(msg.prescriptionMeta.doctor || msg.prescriptionMeta.clinic) && (
+                          <ul className="text-emerald-900/90 space-y-1 text-[13px]">
+                            {msg.prescriptionMeta.doctor && (
+                              <li>
+                                <span className="font-semibold">Doctor:</span> {msg.prescriptionMeta.doctor}
+                              </li>
+                            )}
+                            {msg.prescriptionMeta.clinic && (
+                              <li>
+                                <span className="font-semibold">Clinic:</span> {msg.prescriptionMeta.clinic}
+                              </li>
+                            )}
+                          </ul>
+                        )}
+                        {msg.prescriptionMeta.medications.length > 0 && (
+                          <div>
+                            <p className="font-semibold text-emerald-900 mb-1">Medications</p>
+                            <ul className="list-disc list-inside text-emerald-900/90 text-[13px] space-y-0.5">
+                              {msg.prescriptionMeta.medications.map((line, i) => (
+                                <li key={i}>{line}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     
                     {msg.type === 'rich' && msg.richData && (
                       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-4">
@@ -346,7 +430,7 @@ export default function HealthAssistantPage() {
                 {SUGGESTED_PROMPTS.map((prompt) => (
                   <button
                     key={prompt}
-                    onClick={() => handleSend(prompt)}
+                    onClick={() => void handleSend(prompt)}
                     className="bg-white border border-gray-200 hover:border-brand-300 hover:bg-brand-50 text-gray-700 hover:text-brand-700 px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-sm"
                   >
                     {prompt}
@@ -363,6 +447,20 @@ export default function HealthAssistantPage() {
       {/* Input Area */}
       <div className="bg-white border-t border-gray-200 p-4">
         <div className="max-w-3xl mx-auto relative">
+          {chatError && (
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p className="flex-1 leading-snug">{chatError}</p>
+              <button
+                type="button"
+                onClick={() => setChatError(null)}
+                className="p-1 rounded-md text-amber-700 hover:bg-amber-100/80"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
           
           {isRecording ? (
             <div className="flex items-center justify-between bg-red-50 border border-red-100 rounded-full px-4 py-2.5">
@@ -451,7 +549,7 @@ export default function HealthAssistantPage() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        handleSend();
+                        void handleSend();
                       }
                     }}
                     placeholder={t('assistant.placeholder')}
@@ -460,9 +558,9 @@ export default function HealthAssistantPage() {
                   />
                 </div>
 
-                {input.trim() || selectedFile ? (
+                {input.trim() ? (
                   <button 
-                    onClick={() => handleSend()}
+                    onClick={() => void handleSend()}
                     className="p-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-full transition-colors shadow-sm shrink-0"
                   >
                     <Send className="w-5 h-5" />

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { FileCheck, AlertTriangle, CheckCircle2, XCircle, Globe, ChevronDown } from 'lucide-react';
+import { FileCheck, AlertTriangle, XCircle, Globe, ChevronDown, Loader2 } from 'lucide-react';
 import { adminApi } from '@/lib/admin-api';
 
 const TRANSLATIONS = {
@@ -13,7 +13,6 @@ const TRANSLATIONS = {
     pendingApps: 'Pending Applications',
     approvedThisMonth: 'Approved This Month',
     rejectedThisMonth: 'Rejected This Month',
-    expiringLessThan60: 'Expiring < 60 Days',
     pendingQueueTitle: 'Applications Queue',
     urgent: 'Urgent > 48h',
     submitted: 'Submitted',
@@ -28,7 +27,6 @@ const TRANSLATIONS = {
     pendingApps: 'በመጠባበቅ ላይ ያሉ ማመልከቻዎች',
     approvedThisMonth: 'በዚህ ወር የጸደቁ',
     rejectedThisMonth: 'በዚህ ወር ውድቅ የተደረጉ',
-    expiringLessThan60: 'ከ 60 ቀናት በታች ጊዜ ያለቀባቸው',
     pendingQueueTitle: 'የማመልከቻዎች ወረፋ',
     urgent: 'አስቸኳይ > 48 ሰዓት',
     submitted: 'የገባበት ጊዜ',
@@ -43,21 +41,61 @@ const INITIAL_VERIFICATIONS = [
   { id: 'VER-993', name: 'Amanuel Pharmacy', location: 'Bole, Addis Ababa', time: '1 day ago', status: 'Pending Review', docs: 1, urgent: false, email: 'amanuel@example.com', phone: '+251 922 345 678', owner: 'Amanuel Kebede', regNo: 'REG-29384' },
   { id: 'VER-994', name: 'Tena Pharmacy', location: 'Mekanisa, Addis Ababa', time: '2 weeks ago', status: 'Approved', docs: 2, urgent: false, email: 'tena@example.com', phone: '+251 933 456 789', owner: 'Tena Mengistu', regNo: 'REG-38475' },
   { id: 'VER-995', name: 'Health First', location: 'Ayat, Addis Ababa', time: '3 weeks ago', status: 'Rejected', docs: 2, urgent: false, email: 'hf@example.com', phone: '+251 944 567 890', owner: 'Health First LLC', regNo: 'REG-47586' },
-  { id: 'VER-996', name: 'Addis Pharmacy', location: 'Kazanchis, Addis Ababa', time: '11 months ago', status: 'Expiring', docs: 2, urgent: true, email: 'addis@example.com', phone: '+251 955 678 901', owner: 'Addis Alemayehu', regNo: 'REG-58697' },
+  { id: 'VER-996', name: 'Addis Pharmacy', location: 'Kazanchis, Addis Ababa', time: '11 months ago', status: 'Approved', docs: 2, urgent: false, email: 'addis@example.com', phone: '+251 955 678 901', owner: 'Addis Alemayehu', regNo: 'REG-58697' },
 ];
+
+/** Must match Pharmacy.verification.documents keys; first two required before approve */
+const REQUIRED_APPROVAL_KEYS = ['businessRegistration', 'operatingLicense'] as const;
+
+const VERIFICATION_DOC_SLOTS: Array<{
+  key: (typeof REQUIRED_APPROVAL_KEYS)[number] | 'inspectionReport';
+  label: string;
+}> = [
+  { key: 'businessRegistration', label: 'Business Registration Certificate' },
+  { key: 'operatingLicense', label: 'Pharmacy Operating License' },
+  { key: 'inspectionReport', label: 'Facility Inspection Report' },
+];
+
+type VerificationDocs = Partial<
+  Record<
+    (typeof VERIFICATION_DOC_SLOTS)[number]['key'],
+    { url?: string; status?: string } | undefined
+  >
+>;
+
+function countRequiredDocsWithUrl(documents: VerificationDocs | undefined): number {
+  if (!documents) return 0;
+  let n = 0;
+  for (const k of REQUIRED_APPROVAL_KEYS) {
+    if (documents[k]?.url?.trim()) n++;
+  }
+  return n;
+}
+
+function canApproveFromDocuments(documents: VerificationDocs | undefined): boolean {
+  if (!documents) return false;
+  return REQUIRED_APPROVAL_KEYS.every((k) => Boolean(documents[k]?.url?.trim()));
+}
+
+/** Absolute HTTP(S) URLs unchanged; relative paths prefixed with API origin (strip /api/v1). */
+function resolvePublicFileUrl(url: string): string {
+  const u = url.trim();
+  if (/^https?:\/\//i.test(u)) return u;
+  const api = process.env.NEXT_PUBLIC_API_URL ?? '';
+  const origin = api.replace(/\/api\/v1\/?$/i, '').replace(/\/$/, '');
+  if (!origin) return u;
+  return `${origin}${u.startsWith('/') ? '' : '/'}${u}`;
+}
 
 export default function AdminVerificationPage() {
   const [verifications, setVerifications] = useState(INITIAL_VERIFICATIONS);
   const [selectedApp, setSelectedApp] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const { language, setLanguage } = useLanguage();
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'Pending Review' | 'Approved' | 'Rejected' | 'Expiring'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'Pending Review' | 'Approved' | 'Rejected'>('all');
   
-  useEffect(() => {
-        // Fixed eslint warning by directly using state but we can just use setLanguage without issue in this specific nextjs setup via localstorage check
-    // However, to keep it clean we omit setstate out of effect loop dependencies if possible.
-      }, []);
-
   const toggleLanguage = (lang: 'en' | 'am') => {
     setLanguage(lang);
         setIsLangDropdownOpen(false);
@@ -69,32 +107,67 @@ export default function AdminVerificationPage() {
   const pendingCount = verifications.filter(v => v.status === 'Pending Review').length;
   const approvedCount = verifications.filter(v => v.status === 'Approved').length;
   const rejectedCount = verifications.filter(v => v.status === 'Rejected').length;
-  const expiringCount = verifications.filter(v => v.status === 'Expiring').length;
 
   const filteredVerifications = activeFilter === 'all' 
     ? verifications 
     : verifications.filter(v => v.status === activeFilter);
 
-  const toggleFilter = (filter: 'Pending Review' | 'Approved' | 'Rejected' | 'Expiring') => {
+  const toggleFilter = (filter: 'Pending Review' | 'Approved' | 'Rejected') => {
     if (activeFilter === filter) setActiveFilter('all');
     else setActiveFilter(filter);
   };
 
-  const handleReviewApp = (id: string) => {
-    const app = verifications.find(v => v.id === id);
-    if(app) {
-      setSelectedApp(app);
+  const handleReviewApp = async (id: string) => {
+    const app = verifications.find((v) => v.id === id);
+    if (!app) return;
+    setDetailError(null);
+    setSelectedApp(app);
+    setDetailLoading(true);
+    try {
+      const detail = await adminApi.getVerificationById(id);
+      setSelectedApp((prev: any) => {
+        if (!prev || prev.id !== id) return prev;
+        return {
+          ...prev,
+          name: detail.businessName ?? prev.name,
+          location: detail.location ?? prev.location,
+          email: detail.email ?? prev.email,
+          phone: detail.phone ?? prev.phone,
+          verification: detail.verification,
+          license: detail.license,
+          regNo:
+            (detail.license as { businessLicenseNumber?: string })?.businessLicenseNumber ?? prev.regNo,
+          owner: detail.ownerName ?? detail.ownerId ?? prev.owner,
+          ownerName: detail.ownerName,
+        };
+      });
+    } catch (error) {
+      const msg = (error as Error).message;
+      setDetailError(msg);
+      alert(msg);
+    } finally {
+      setDetailLoading(false);
     }
   };
 
   const handleApproveReject = async (id: string, action: 'approve' | 'reject') => {
     try {
-      await adminApi.updateVerification(id, action === 'approve' ? 'approved' : 'rejected', 'Review completed');
+      if (action === 'reject') {
+        const reason = window.prompt('Rejection reason (min 3 characters):');
+        if (reason === null) return;
+        if (reason.trim().length < 3) {
+          alert('Reason must be at least 3 characters.');
+          return;
+        }
+        await adminApi.updateVerification(id, 'rejected', reason.trim());
+      } else {
+        await adminApi.updateVerification(id, 'approved');
+      }
       setVerifications(prev => prev.map(v => 
         v.id === id ? { ...v, status: action === 'approve' ? 'Approved' : 'Rejected' } : v
       ));
       setSelectedApp(null);
-      alert(`Application ${action}d successfully.`);
+      setDetailError(null);
     } catch (error) {
       alert((error as Error).message);
     }
@@ -103,12 +176,8 @@ export default function AdminVerificationPage() {
   useEffect(() => {
     const loadVerifications = async () => {
       try {
-        const data = await adminApi.getVerifications();
-        const now = Date.now();
+        const { items: data } = await adminApi.getVerifications();
         const mapped = data.map((pharmacy: any) => {
-          const expiry = pharmacy.license?.businessLicenseExpiry || pharmacy.license?.professionalLicenseExpiry;
-          const expiryMs = expiry ? new Date(expiry).getTime() : null;
-          const isExpiring = expiryMs ? expiryMs - now < 60 * 24 * 60 * 60 * 1000 : false;
           const statusMap: Record<string, string> = {
             pending: 'Pending Review',
             reviewing: 'Pending Review',
@@ -122,8 +191,8 @@ export default function AdminVerificationPage() {
             name: pharmacy.businessName,
             location: pharmacy.location || pharmacy.address || '-',
             time: pharmacy.createdAt ? new Date(pharmacy.createdAt).toLocaleString() : '-',
-            status: isExpiring ? 'Expiring' : statusMap[pharmacy.verification?.status] || 'Pending Review',
-            docs: Object.values(pharmacy.verification?.documents || {}).filter(Boolean).length,
+            status: statusMap[pharmacy.verification?.status] || 'Pending Review',
+            docs: countRequiredDocsWithUrl(pharmacy.verification?.documents as VerificationDocs | undefined),
             urgent: pharmacy.verification?.status === 'pending',
             email: pharmacy.email,
             phone: pharmacy.phone,
@@ -131,7 +200,7 @@ export default function AdminVerificationPage() {
             regNo: pharmacy.license?.businessLicenseNumber || '-',
           };
         });
-        if (mapped.length) setVerifications(mapped);
+        setVerifications(mapped);
       } catch (error) {
         console.error('Failed to load verifications', error);
       }
@@ -179,7 +248,7 @@ export default function AdminVerificationPage() {
       </div>
 
       {/* Summary Cards Row - Clickable for Filtering */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div 
           onClick={() => toggleFilter('Pending Review')}
           className={`cursor-pointer p-5 rounded-2xl shadow-sm transition-all duration-200 ${
@@ -211,16 +280,6 @@ export default function AdminVerificationPage() {
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.rejectedThisMonth}</h3>
           <p className="text-3xl font-bold text-brand-950">{rejectedCount}</p>
         </div>
-        
-        <div 
-          onClick={() => toggleFilter('Expiring')}
-          className={`cursor-pointer p-5 rounded-2xl shadow-sm transition-all duration-200 ${
-            activeFilter === 'Expiring' ? 'bg-amber-50 border-2 border-amber-500 ring-2 ring-amber-100' : 'bg-white border border-gray-200 hover:border-amber-300'
-          }`}
-        >
-          <h3 className="text-gray-500 text-sm font-medium mb-1">{t.expiringLessThan60}</h3>
-          <p className="text-3xl font-bold text-amber-600">{expiringCount}</p>
-        </div>
       </div>
 
       {/* Pending Queue / Filtered List */}
@@ -230,8 +289,7 @@ export default function AdminVerificationPage() {
             {activeFilter === 'all' ? t.allApplications : 
              activeFilter === 'Pending Review' ? t.pendingApps : 
              activeFilter === 'Approved' ? t.approvedThisMonth : 
-             activeFilter === 'Rejected' ? t.rejectedThisMonth : 
-             t.expiringLessThan60} 
+             t.rejectedThisMonth} 
             <span className="ml-2 px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 text-sm">{filteredVerifications.length}</span>
           </h2>
           {activeFilter !== 'all' && (
@@ -261,7 +319,7 @@ export default function AdminVerificationPage() {
                       item.status === 'Pending Review' ? 'bg-amber-50 text-amber-700' :
                       item.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' :
                       item.status === 'Rejected' ? 'bg-red-50 text-red-700' :
-                      'bg-orange-50 text-orange-700'
+                      'bg-gray-100 text-gray-700'
                     }`}>
                       {item.status}
                     </span>
@@ -295,7 +353,13 @@ export default function AdminVerificationPage() {
               <h2 className="text-xl font-bold text-brand-950">
                 {selectedApp.status === 'Pending Review' ? `Review Application: ${selectedApp.name}` : `Pharmacy Details: ${selectedApp.name}`}
               </h2>
-              <button onClick={() => setSelectedApp(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <button
+                onClick={() => {
+                  setSelectedApp(null);
+                  setDetailError(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
@@ -338,32 +402,65 @@ export default function AdminVerificationPage() {
               </div>
 
               <div>
-                 <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Submitted Documents ({selectedApp.docs}/2)</h3>
-                 <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-xl">
-                       <div className="flex items-center gap-2">
-                          <FileCheck className="w-5 h-5 text-emerald-600" />
-                          <span className="font-medium text-emerald-900 text-sm">Business License.pdf</span>
-                       </div>
-                       <button className="text-emerald-700 text-xs font-bold hover:underline">View</button>
-                    </div>
-                    {selectedApp.docs >= 2 ? (
-                      <div className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-xl">
-                        <div className="flex items-center gap-2">
-                            <FileCheck className="w-5 h-5 text-emerald-600" />
-                            <span className="font-medium text-emerald-900 text-sm">Professional License.pdf</span>
-                        </div>
-                        <button className="text-emerald-700 text-xs font-bold hover:underline">View</button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between p-3 border border-amber-200 bg-amber-50 rounded-xl">
-                        <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
+                  Submitted Documents (
+                  {countRequiredDocsWithUrl(selectedApp.verification?.documents as VerificationDocs | undefined)}/2)
+                </h3>
+                {detailLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-8 text-gray-500 text-sm">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Loading documents…
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {VERIFICATION_DOC_SLOTS.map(({ key, label }) => {
+                      const documents = selectedApp.verification?.documents as VerificationDocs | undefined;
+                      const doc = documents?.[key];
+                      const rawUrl = doc?.url?.trim();
+                      const hasUrl = Boolean(rawUrl);
+
+                      if (hasUrl && rawUrl) {
+                        const href = resolvePublicFileUrl(rawUrl);
+                        return (
+                          <div
+                            key={key}
+                            className="flex items-center justify-between p-3 border border-emerald-200 bg-emerald-50 rounded-xl"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                              <span className="font-medium text-emerald-900 text-sm truncate" title={label}>
+                                {label}
+                              </span>
+                            </div>
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-700 text-xs font-bold hover:underline shrink-0 ml-2"
+                            >
+                              View
+                            </a>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between p-3 border border-amber-200 bg-amber-50 rounded-xl"
+                        >
+                          <div className="flex items-center gap-2">
                             <AlertTriangle className="w-5 h-5 text-amber-600" />
-                            <span className="font-medium text-amber-900 text-sm">Professional License Missing</span>
+                            <span className="font-medium text-amber-900 text-sm">{label} — Missing</span>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                 </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {detailError && (
+                  <p className="text-xs text-red-600 mt-2">Could not refresh details: {detailError}</p>
+                )}
               </div>
               
               {selectedApp.status !== 'Pending Review' && (
@@ -372,7 +469,7 @@ export default function AdminVerificationPage() {
                    <div className={`p-4 rounded-xl border ${
                       selectedApp.status === 'Approved' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
                       selectedApp.status === 'Rejected' ? 'bg-red-50 border-red-200 text-red-800' :
-                      'bg-orange-50 border-orange-200 text-orange-800'
+                      'bg-gray-50 border-gray-200 text-gray-800'
                    }`}>
                      <p className="font-bold">{selectedApp.status}</p>
                      <p className="text-sm opacity-80 mt-1">This application was previously reviewed.</p>
@@ -391,7 +488,10 @@ export default function AdminVerificationPage() {
                 </button>
                 <button 
                   onClick={() => handleApproveReject(selectedApp.id, 'approve')}
-                  disabled={selectedApp.docs < 2}
+                  disabled={
+                    detailLoading ||
+                    !canApproveFromDocuments(selectedApp.verification?.documents as VerificationDocs | undefined)
+                  }
                   className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Approve Pharmacy
@@ -400,7 +500,10 @@ export default function AdminVerificationPage() {
             ) : (
               <div className="p-6 border-t border-gray-100 flex items-center justify-end bg-gray-50/50 rounded-b-2xl">
                 <button 
-                  onClick={() => setSelectedApp(null)}
+                  onClick={() => {
+                    setSelectedApp(null);
+                    setDetailError(null);
+                  }}
                   className="px-5 py-2.5 rounded-xl bg-brand-900 text-white font-bold hover:bg-brand-800 transition-colors"
                 >
                   Close

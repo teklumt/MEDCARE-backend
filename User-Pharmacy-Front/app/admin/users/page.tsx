@@ -2,8 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { Search, ShieldAlert, UserX, MessageSquare, Edit, Trash2, Globe, ChevronDown } from 'lucide-react';
-import { adminApi } from '@/lib/admin-api';
+import { Search, ShieldAlert, Edit, Trash2, Globe, ChevronDown } from 'lucide-react';
+import { adminApi, type UserRoleKey } from '@/lib/admin-api';
+
+const ROLE_KEYS: UserRoleKey[] = ['patient', 'pharmacy', 'delivery', 'admin'];
+
+function parseRoleInput(raw: string): UserRoleKey | null {
+  const s = raw.trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'patient' || s === 'pat') return 'patient';
+  if (s === 'pharmacy' || s === 'provider') return 'pharmacy';
+  if (s === 'delivery' || s === 'driver') return 'delivery';
+  if (s === 'admin' || s === 'administrator') return 'admin';
+  return null;
+}
 
 const TRANSLATIONS = {
   en: {
@@ -13,6 +25,8 @@ const TRANSLATIONS = {
     allRoles: 'All Roles',
     patient: 'Patient',
     provider: 'Provider',
+    delivery: 'Delivery',
+    adminRole: 'Admin',
     allStatuses: 'All Statuses',
     active: 'Active',
     suspended: 'Suspended',
@@ -34,6 +48,8 @@ const TRANSLATIONS = {
     allRoles: 'ሁሉም ሚናዎች',
     patient: 'ታካሚ',
     provider: 'አቅራቢ',
+    delivery: 'ማድረስ',
+    adminRole: 'አስተዳዳር',
     allStatuses: 'ሁሉም ሁኔታዎች',
     active: 'ንቁ',
     suspended: 'ታግዷል',
@@ -51,14 +67,14 @@ const TRANSLATIONS = {
 };
 
 const INITIAL_USERS = [
-  { id: 'USR-1029', name: 'Abebe Kebede', phone: '+251 911 234 567', email: 'abebe@example.com', role: 'Patient', status: 'Active', joinDate: '2024-01-15', warnings: 0 },
-  { id: 'USR-1030', name: 'Sara Mohammed', phone: '+251 922 345 678', email: 'sara@example.com', role: 'Patient', status: 'Suspended', joinDate: '2024-02-20', warnings: 2 },
-  { id: 'USR-1031', name: 'Dawit Tadesse', phone: '+251 933 456 789', email: 'dawit@example.com', role: 'Patient', status: 'Pending Deletion', joinDate: '2024-03-10', warnings: 0 },
+  { id: 'USR-1029', name: 'Abebe Kebede', phone: '+251 911 234 567', email: 'abebe@example.com', roleKey: 'patient' as UserRoleKey, status: 'Active', joinDate: '2024-01-15', warnings: 0 },
+  { id: 'USR-1030', name: 'Sara Mohammed', phone: '+251 922 345 678', email: 'sara@example.com', roleKey: 'patient' as UserRoleKey, status: 'Suspended', joinDate: '2024-02-20', warnings: 2 },
+  { id: 'USR-1031', name: 'Dawit Tadesse', phone: '+251 933 456 789', email: 'dawit@example.com', roleKey: 'patient' as UserRoleKey, status: 'Pending Deletion', joinDate: '2024-03-10', warnings: 0 },
 ];
 
 export default function AdminUsersPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('All Roles');
+  const [roleFilter, setRoleFilter] = useState<'all' | UserRoleKey>('all');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
   const [users, setUsers] = useState(INITIAL_USERS);
   
@@ -81,8 +97,8 @@ export default function AdminUsersPage() {
       user.phone.toLowerCase().includes(query) ||
       user.id.toLowerCase().includes(query);
 
-    const isRoleAll = roleFilter === 'All Roles' || roleFilter === t.allRoles;
-    const roleMatch = isRoleAll || user.role === roleFilter || (language === 'am' && roleFilter === t.patient && user.role === 'Patient') || (language === 'am' && roleFilter === t.provider && user.role === 'Provider');
+    const isRoleAll = roleFilter === 'all';
+    const roleMatch = isRoleAll || user.roleKey === roleFilter;
 
     const isStatusAll = statusFilter === 'All Statuses' || statusFilter === t.allStatuses;
     const statusMatch = isStatusAll || user.status === statusFilter || (language === 'am' && statusFilter === t.active && user.status === 'Active') || (language === 'am' && statusFilter === t.suspended && user.status === 'Suspended') || (language === 'am' && statusFilter === t.pendingDeletion && user.status === 'Pending Deletion');
@@ -99,20 +115,37 @@ export default function AdminUsersPage() {
     }
   };
 
-  const translateRole = (role: string) => {
-    switch(role) {
-      case 'Patient': return t.patient;
-      case 'Provider': return t.provider;
-      default: return role;
+  const translateRole = (roleKey: UserRoleKey) => {
+    switch (roleKey) {
+      case 'patient':
+        return t.patient;
+      case 'pharmacy':
+        return t.provider;
+      case 'delivery':
+        return t.delivery;
+      case 'admin':
+        return t.adminRole;
+      default:
+        return roleKey;
     }
   };
 
-  const handleEditUser = (id: string, currentRole: string) => {
-    const newRole = prompt(`Edit Role for ${id} (Patient | Provider)`, currentRole);
-    if (newRole && ['Patient', 'Provider'].includes(newRole)) {
-      setUsers(prev => prev.map(u => u.id === id ? { ...u, role: newRole } : u));
-    } else if (newRole) {
-      alert("Invalid role. Role unchanged.");
+  const handleEditUser = async (id: string, currentRoleKey: UserRoleKey) => {
+    const raw = window.prompt(
+      `Edit role for ${id}\nAllowed: patient, pharmacy (or provider), delivery (or driver), admin — case insensitive`,
+      currentRoleKey,
+    );
+    if (raw === null) return;
+    const roleKey = parseRoleInput(raw);
+    if (!roleKey) {
+      alert('Invalid role. Use patient, pharmacy, delivery, or admin (synonyms: provider, driver).');
+      return;
+    }
+    try {
+      await adminApi.patchUser(id, { role: roleKey });
+      setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, roleKey } : u)));
+    } catch (error) {
+      alert((error as Error).message);
     }
   };
 
@@ -141,16 +174,22 @@ export default function AdminUsersPage() {
     const loadUsers = async () => {
       try {
         const data = await adminApi.getUsers();
-        const mapped = data.map((user: any) => ({
-          id: user._id,
-          name: user.username,
-          phone: user.phone,
-          email: user.email,
-          role: user.role === 'patient' ? 'Patient' : user.role === 'pharmacy' ? 'Provider' : user.role,
-          status: user.isActive ? 'Active' : 'Suspended',
-          joinDate: user.createdAt ? new Date(user.createdAt).toISOString().slice(0, 10) : '-',
-          warnings: 0,
-        }));
+        const mapped = data.map((user: any) => {
+          const rk = user.role as string;
+          const roleKey: UserRoleKey = ROLE_KEYS.includes(rk as UserRoleKey)
+            ? (rk as UserRoleKey)
+            : 'patient';
+          return {
+            id: user._id,
+            name: user.username,
+            phone: user.phone,
+            email: user.email,
+            roleKey,
+            status: user.isActive ? 'Active' : 'Suspended',
+            joinDate: user.createdAt ? new Date(user.createdAt).toISOString().slice(0, 10) : '-',
+            warnings: 0,
+          };
+        });
         setUsers(mapped);
       } catch (error) {
         console.error('Failed to load users', error);
@@ -214,12 +253,17 @@ export default function AdminUsersPage() {
         <div className="flex gap-3">
           <select 
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setRoleFilter(v === 'all' ? 'all' : (v as UserRoleKey));
+            }}
             className="bg-accent-50 border border-gray-200 text-brand-950 text-sm rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500"
           >
-            <option value="All Roles">{t.allRoles}</option>
-            <option value="Patient">{t.patient}</option>
-            <option value="Provider">{t.provider}</option>
+            <option value="all">{t.allRoles}</option>
+            <option value="patient">{t.patient}</option>
+            <option value="pharmacy">{t.provider}</option>
+            <option value="delivery">{t.delivery}</option>
+            <option value="admin">{t.adminRole}</option>
           </select>
           <select 
             value={statusFilter}
@@ -259,7 +303,7 @@ export default function AdminUsersPage() {
                     <p className="text-sm text-gray-700">{user.phone}</p>
                     <p className="text-xs text-gray-500">{user.email}</p>
                   </td>
-                  <td className="p-4 text-sm text-gray-600">{translateRole(user.role)}</td>
+                  <td className="p-4 text-sm text-gray-600">{translateRole(user.roleKey)}</td>
                   <td className="p-4">
                     <div className="flex flex-col items-start gap-1">
                       <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${
@@ -289,7 +333,7 @@ export default function AdminUsersPage() {
                         {t.viewProfile}
                       </button>
                       <button 
-                        onClick={() => handleEditUser(user.id, user.role)}
+                        onClick={() => handleEditUser(user.id, user.roleKey)}
                         title="Edit User Role"
                         className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
                       >

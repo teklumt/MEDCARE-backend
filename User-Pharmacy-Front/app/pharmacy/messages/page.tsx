@@ -1,20 +1,109 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { Search, Lock, Send, Paperclip, Mic, Image as ImageIcon, Check, CheckCheck, Globe, ChevronDown, FileText, Truck, MapPin, Navigation } from 'lucide-react';
-import Image from 'next/image';
+import {
+  listConversations,
+  getConversationMessages,
+  sendConversationMessage,
+  markConversationRead,
+  type ConversationListItem,
+  type ConversationMessage,
+} from '@/lib/api';
+import { Search, Lock, Send, Globe, ChevronDown } from 'lucide-react';
 
-const PATIENT_CONVERSATIONS = [
-  { id: '1', name: 'Abebe Kebede', initial: 'A', lastMessage: 'Is this medication safe to take with...', time: '10:42 AM', unread: 2, online: true, orderId: 'ORD-20847' },
-  { id: '2', name: 'Sara Mohammed', initial: 'S', lastMessage: 'Thank you, I received the delivery.', time: 'Yesterday', unread: 0, online: false, orderId: 'ORD-20840' },
-  { id: '3', name: 'Dawit Tadesse', initial: 'D', lastMessage: '[Prescription Image]', time: 'Yesterday', unread: 0, online: false, orderId: null },
-];
+type PatientSidebarRow = {
+  id: string;
+  name: string;
+  initial: string;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  online: boolean;
+  orderId: string | null;
+};
 
-const TEAM_CONVERSATIONS = [
-  { id: 't1', name: 'Abebe Tadesse', initial: 'A', lastMessage: 'Will do. I am picking up the package now.', time: '10:05 AM', unread: 0, online: true, orderId: 'ORD-20840', vehicle: 'Motorcycle' },
-  { id: 't2', name: 'Dawit Kebede', initial: 'D', lastMessage: 'Arrived at the location.', time: '9:30 AM', unread: 1, online: true, orderId: null, vehicle: 'Bicycle' },
-];
+type TeamSidebarRow = {
+  id: string;
+  name: string;
+  initial: string;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  online: boolean;
+  orderId: string | null;
+};
+
+function mapApiConvToPatientRow(c: ConversationListItem): PatientSidebarRow {
+  const patientP = c.participants.find((p) => p.role === 'patient');
+  const name = patientP?.name?.trim() || 'Patient';
+  const last = c.lastMessage;
+  const sent = last?.sentAt ? new Date(last.sentAt) : c.updatedAt ? new Date(c.updatedAt) : null;
+  const today = new Date();
+  let timeLabel = '';
+  let isYesterday = false;
+  if (sent && !Number.isNaN(sent.getTime())) {
+    const calendarDay =
+      sent.getFullYear() === today.getFullYear() && sent.getMonth() === today.getMonth() && sent.getDate() === today.getDate();
+    const y = new Date(today);
+    y.setDate(y.getDate() - 1);
+    isYesterday =
+      sent.getFullYear() === y.getFullYear() && sent.getMonth() === y.getMonth() && sent.getDate() === y.getDate();
+    timeLabel = calendarDay || isYesterday ? sent.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : sent.toLocaleDateString();
+  }
+
+  const oid = c.relatedOrderId ? String(c.relatedOrderId) : null;
+
+  return {
+    id: c._id,
+    name,
+    initial: name.charAt(0).toUpperCase(),
+    lastMessage: last?.content || '',
+    time: isYesterday ? 'Yesterday' : timeLabel,
+    unread: 0,
+    online: true,
+    orderId: oid ? oid.slice(-8).toUpperCase() : null,
+  };
+}
+
+function mapApiConvToTeamRow(c: ConversationListItem): TeamSidebarRow {
+  const deliveryP = c.participants.find((p) => p.role === 'delivery');
+  const name = deliveryP?.name?.trim() || 'Driver';
+  const last = c.lastMessage;
+  const sent = last?.sentAt ? new Date(last.sentAt) : c.updatedAt ? new Date(c.updatedAt) : null;
+  const today = new Date();
+  let timeLabel = '';
+  let isYesterday = false;
+  if (sent && !Number.isNaN(sent.getTime())) {
+    const calendarDay =
+      sent.getFullYear() === today.getFullYear() && sent.getMonth() === today.getMonth() && sent.getDate() === today.getDate();
+    const y = new Date(today);
+    y.setDate(y.getDate() - 1);
+    isYesterday =
+      sent.getFullYear() === y.getFullYear() && sent.getMonth() === y.getMonth() && sent.getDate() === y.getDate();
+    timeLabel = calendarDay || isYesterday ? sent.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : sent.toLocaleDateString();
+  }
+
+  const oid = c.relatedOrderId ? String(c.relatedOrderId) : null;
+
+  return {
+    id: c._id,
+    name,
+    initial: name.charAt(0).toUpperCase(),
+    lastMessage: last?.content || '',
+    time: isYesterday ? 'Yesterday' : timeLabel,
+    unread: 0,
+    online: true,
+    orderId: oid ? oid.slice(-8).toUpperCase() : null,
+  };
+}
+
+function mergeConversationMessages(prev: ConversationMessage[], incoming: ConversationMessage[]) {
+  if (!incoming.length) return prev;
+  const map = new Map(prev.map((m) => [m._id, m]));
+  for (const m of incoming) map.set(m._id, m);
+  return [...map.values()].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+}
 
 const TRANSLATIONS = {
   en: {
@@ -31,7 +120,12 @@ const TRANSLATIONS = {
     typeMessage: 'Type a secure message...',
     yesterday: 'Yesterday',
     patients: 'Patients',
-    team: 'Team'
+    team: 'Team',
+    noConversations: 'No conversations yet',
+    noConversationsHint: 'Open a chat from Pharmacy Orders to message a patient.',
+    loadingList: 'Loading conversations…',
+    loadingThread: 'Loading messages…',
+    selectConversation: 'Select a conversation',
   },
   am: {
     messages: 'መልዕክቶች',
@@ -47,95 +141,262 @@ const TRANSLATIONS = {
     typeMessage: 'ደህንነቱ የተጠበቀ መልዕክት ይተይቡ...',
     yesterday: 'ትላንትና',
     patients: 'ታካሚዎች',
-    team: 'ቡድን'
-  }
+    team: 'ቡድን',
+    noConversations: 'ገና ውይይት የለም',
+    noConversationsHint: 'ከፋርማሲ ትዕዛዞች ገጽ ውይይት ይክፈቱ።',
+    loadingList: 'ውይይቶች በመጫን ላይ…',
+    loadingThread: 'መልዕክቶች በመጫን ላይ…',
+    selectConversation: 'ውይይት ይምረጡ',
+  },
 };
 
 export default function MessagesPage() {
   const [activeTab, setActiveTab] = useState<'patients' | 'team'>('patients');
-  const [patientConversations, setPatientConversations] = useState(PATIENT_CONVERSATIONS);
-  const [teamConversations, setTeamConversations] = useState(TEAM_CONVERSATIONS);
-  
-  const [activeChat, setActiveChat] = useState<any>(PATIENT_CONVERSATIONS[0]);
+  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+
+  const patientSidebarRows = useMemo(
+    () => conversations.filter((c) => c.participants.some((p) => p.role === 'patient')).map(mapApiConvToPatientRow),
+    [conversations],
+  );
+  const teamSidebarRows = useMemo(
+    () => conversations.filter((c) => c.participants.some((p) => p.role === 'delivery')).map(mapApiConvToTeamRow),
+    [conversations],
+  );
+
+  const [activePatientConvId, setActivePatientConvId] = useState<string | null>(null);
+  const [patientThreadMessages, setPatientThreadMessages] = useState<ConversationMessage[]>([]);
+  const [patientThreadLoading, setPatientThreadLoading] = useState(false);
+  const [patientThreadSending, setPatientThreadSending] = useState(false);
+
+  const [activeTeamConvId, setActiveTeamConvId] = useState<string | null>(null);
+  const [teamThreadMessages, setTeamThreadMessages] = useState<ConversationMessage[]>([]);
+  const [teamThreadLoading, setTeamThreadLoading] = useState(false);
+  const [teamThreadSending, setTeamThreadSending] = useState(false);
+
+  const threadMessagesRef = useRef<ConversationMessage[]>([]);
+  const activePatientConvIdRef = useRef<string | null>(null);
+  const teamThreadMessagesRef = useRef<ConversationMessage[]>([]);
+  const activeTeamConvIdRef = useRef<string | null>(null);
+  const patientMessagesEndRef = useRef<HTMLDivElement>(null);
+  const teamMessagesEndRef = useRef<HTMLDivElement>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const { language, setLanguage } = useLanguage();
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [messages, setMessages] = useState<Array<{ id: number | string; sender: string; text: string; time: string; location: { lat: number; lng: number } | null }>>([
-    {
-      id: 1, sender: 'other', text: 'Hello, I just placed an order. Is it safe to take Amoxicillin if I am slightly allergic to penicillin?', time: '10:40 AM', location: null
-    },
-    {
-      id: 2, sender: 'pharmacy', text: 'Hello. Amoxicillin is a type of penicillin. If you have a known allergy, you should NOT take it. I will suggest an alternative.', time: '10:45 AM', location: null
-    }
-  ]);
   const [newMessage, setNewMessage] = useState('');
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const patientParam = params.get('patient');
-      const agentParam = params.get('agent');
-      const orderIdParam = params.get('orderId');
-      const tabParam = params.get('tab');
-      
-      if (tabParam === 'team') setActiveTab('team');
+    threadMessagesRef.current = patientThreadMessages;
+  }, [patientThreadMessages]);
 
-      if (patientParam) {
-        setActiveTab('patients');
-        const existing = PATIENT_CONVERSATIONS.find(c => c.name === patientParam);
-        if (existing) {
-          setActiveChat(existing);
-        } else {
-          const newChat = {
-            id: Math.random().toString(36).substring(7),
-            name: patientParam,
-            initial: patientParam.charAt(0).toUpperCase(),
-            lastMessage: '',
-            time: 'Just now',
-            unread: 0,
-            online: true,
-            orderId: orderIdParam || null,
-          };
-          setPatientConversations(prev => [newChat, ...prev]);
-          setActiveChat(newChat);
-          setMessages([
-            { id: Date.now(), sender: 'pharmacy', text: `Hello ${patientParam}, how can I help you with your order ${orderIdParam ? orderIdParam : ''}?`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), location: null }
-          ]);
-        }
-      } else if (agentParam) {
-        setActiveTab('team');
-        const existing = TEAM_CONVERSATIONS.find(c => c.name === agentParam);
-        if (existing) {
-          setActiveChat(existing);
-          if (existing.orderId === 'ORD-20840') {
-             setMessages([
-               { id: 1, sender: 'pharmacy', text: 'Hello, please make sure to call the patient before you arrive.', time: '10:00 AM', location: null },
-               { id: 2, sender: 'other', text: 'Will do. I am picking up the package now.', time: '10:05 AM', location: null },
-               { id: 3, sender: 'other', text: '', time: '10:10 AM', location: { lat: 9.03, lng: 38.74 } } // mock location
-             ]);
-          }
-        } else {
-          const newChat = {
-            id: Math.random().toString(36).substring(7),
-            name: agentParam,
-            initial: agentParam.charAt(0).toUpperCase(),
-            lastMessage: '',
-            time: 'Just now',
-            unread: 0,
-            online: true,
-            orderId: orderIdParam || null,
-            vehicle: 'Motorcycle'
-          };
-          setTeamConversations(prev => [newChat, ...prev]);
-          setActiveChat(newChat);
-          setMessages([
-            { id: Date.now(), sender: 'pharmacy', text: `Hello ${agentParam}, about order ${orderIdParam ? orderIdParam : ''}...`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), location: null }
-          ]);
-        }
-      }
+  useEffect(() => {
+    activePatientConvIdRef.current = activePatientConvId;
+  }, [activePatientConvId]);
+
+  useEffect(() => {
+    teamThreadMessagesRef.current = teamThreadMessages;
+  }, [teamThreadMessages]);
+
+  useEffect(() => {
+    activeTeamConvIdRef.current = activeTeamConvId;
+  }, [activeTeamConvId]);
+
+  const refreshConversations = async () => {
+    try {
+      const items = await listConversations();
+      setConversations(items);
+      setListError(null);
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : 'Could not load conversations');
+    } finally {
+      setListLoading(false);
     }
+  };
+
+  useEffect(() => {
+    void refreshConversations();
   }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void refreshConversations();
+    }, 15000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (conversations.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const cid = params.get('conversation');
+    if (!cid) return;
+    const tabParam = params.get('tab');
+    const teamMatch = conversations.find(
+      (c) => c._id === cid && c.participants.some((p) => p.role === 'delivery'),
+    );
+    const patientMatch = conversations.find(
+      (c) => c._id === cid && c.participants.some((p) => p.role === 'patient'),
+    );
+    if (tabParam === 'team' && teamMatch) {
+      setActiveTab('team');
+      setActiveTeamConvId(cid);
+    } else if (patientMatch) {
+      setActiveTab('patients');
+      setActivePatientConvId(cid);
+    } else if (teamMatch) {
+      setActiveTab('team');
+      setActiveTeamConvId(cid);
+    }
+  }, [conversations]);
+
+  useEffect(() => {
+    if (activePatientConvId && patientSidebarRows.length > 0 && !patientSidebarRows.some((r) => r.id === activePatientConvId)) {
+      setActivePatientConvId(null);
+      setPatientThreadMessages([]);
+    }
+  }, [patientSidebarRows, activePatientConvId]);
+
+  useEffect(() => {
+    if (activeTeamConvId && teamSidebarRows.length > 0 && !teamSidebarRows.some((r) => r.id === activeTeamConvId)) {
+      setActiveTeamConvId(null);
+      setTeamThreadMessages([]);
+    }
+  }, [teamSidebarRows, activeTeamConvId]);
+
+  useEffect(() => {
+    if (!activePatientConvId || activeTab !== 'patients') {
+      setPatientThreadMessages([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      setPatientThreadLoading(true);
+      setPatientThreadMessages([]);
+      try {
+        await markConversationRead(activePatientConvId).catch(() => {});
+        const { messages: page } = await getConversationMessages(activePatientConvId, { page: 1 });
+        if (cancelled) return;
+        setPatientThreadMessages([...page].reverse());
+      } catch {
+        if (!cancelled) setPatientThreadMessages([]);
+      } finally {
+        if (!cancelled) setPatientThreadLoading(false);
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePatientConvId, activeTab]);
+
+  useEffect(() => {
+    if (!activeTeamConvId || activeTab !== 'team') {
+      setTeamThreadMessages([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      setTeamThreadLoading(true);
+      setTeamThreadMessages([]);
+      try {
+        await markConversationRead(activeTeamConvId).catch(() => {});
+        const { messages: page } = await getConversationMessages(activeTeamConvId, { page: 1 });
+        if (cancelled) return;
+        setTeamThreadMessages([...page].reverse());
+      } catch {
+        if (!cancelled) setTeamThreadMessages([]);
+      } finally {
+        if (!cancelled) setTeamThreadLoading(false);
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTeamConvId, activeTab]);
+
+  useEffect(() => {
+    if (!activePatientConvId || activeTab !== 'patients') return;
+
+    const POLL_MS = 8000;
+
+    const poll = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const cid = activePatientConvIdRef.current;
+      if (!cid) return;
+      try {
+        const list = threadMessagesRef.current;
+        if (list.length === 0) {
+          const { messages } = await getConversationMessages(cid, { page: 1 });
+          if (messages.length) setPatientThreadMessages([...messages].reverse());
+          return;
+        }
+        let latest = list[0];
+        for (let i = 1; i < list.length; i++) {
+          if (new Date(list[i].sentAt).getTime() > new Date(latest.sentAt).getTime()) latest = list[i];
+        }
+        const { messages: inc } = await getConversationMessages(cid, { since: latest.sentAt });
+        if (inc.length) setPatientThreadMessages((prev) => mergeConversationMessages(prev, inc));
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const interval = setInterval(poll, POLL_MS);
+    poll();
+    return () => clearInterval(interval);
+  }, [activePatientConvId, activeTab]);
+
+  useEffect(() => {
+    if (!activeTeamConvId || activeTab !== 'team') return;
+
+    const POLL_MS = 8000;
+
+    const poll = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const cid = activeTeamConvIdRef.current;
+      if (!cid) return;
+      try {
+        const list = teamThreadMessagesRef.current;
+        if (list.length === 0) {
+          const { messages } = await getConversationMessages(cid, { page: 1 });
+          if (messages.length) setTeamThreadMessages([...messages].reverse());
+          return;
+        }
+        let latest = list[0];
+        for (let i = 1; i < list.length; i++) {
+          if (new Date(list[i].sentAt).getTime() > new Date(latest.sentAt).getTime()) latest = list[i];
+        }
+        const { messages: inc } = await getConversationMessages(cid, { since: latest.sentAt });
+        if (inc.length) setTeamThreadMessages((prev) => mergeConversationMessages(prev, inc));
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const interval = setInterval(poll, POLL_MS);
+    poll();
+    return () => clearInterval(interval);
+  }, [activeTeamConvId, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'patients' && activePatientConvId) {
+      patientMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    if (activeTab === 'team' && activeTeamConvId) {
+      teamMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [activeTab, activePatientConvId, activeTeamConvId, patientThreadMessages, teamThreadMessages, patientThreadLoading, teamThreadLoading]);
 
   const toggleLanguage = (lang: 'en' | 'am') => {
     setLanguage(lang);
@@ -144,78 +405,143 @@ export default function MessagesPage() {
 
   const t = TRANSLATIONS[language];
 
-  const currentConversations = activeTab === 'patients' ? patientConversations : teamConversations;
-  
-  const filteredConversations = currentConversations.filter(conv => 
-    conv.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredPatientRows = patientSidebarRows.filter((conv) => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return true;
+    return (
+      conv.name.toLowerCase().includes(q) ||
+      conv.lastMessage.toLowerCase().includes(q) ||
+      (conv.orderId && conv.orderId.toLowerCase().includes(q))
+    );
+  });
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setMessages([...messages, {
-        id: Date.now(),
-        sender: 'pharmacy',
-        text: `Sent a file: ${file.name}`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        location: null
-      }]);
+  const filteredTeamConversations = teamSidebarRows.filter((conv) => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return true;
+    return (
+      conv.name.toLowerCase().includes(q) ||
+      conv.lastMessage.toLowerCase().includes(q) ||
+      (conv.orderId && conv.orderId.toLowerCase().includes(q))
+    );
+  });
+
+  const handleSendPatientMessage = async () => {
+    const trimmed = newMessage.trim();
+    if (!trimmed || !activePatientConvId || patientThreadSending) return;
+
+    setPatientThreadSending(true);
+    try {
+      const sent = await sendConversationMessage(activePatientConvId, trimmed);
+      setNewMessage('');
+      setPatientThreadMessages((prev) => mergeConversationMessages(prev, [sent]));
+      void refreshConversations();
+    } catch {
+      /* optional toast */
+    } finally {
+      setPatientThreadSending(false);
+    }
+  };
+
+  const handleSendTeamMessage = async () => {
+    const trimmed = newMessage.trim();
+    if (!trimmed || !activeTeamConvId || teamThreadSending) return;
+
+    setTeamThreadSending(true);
+    try {
+      const sent = await sendConversationMessage(activeTeamConvId, trimmed);
+      setNewMessage('');
+      setTeamThreadMessages((prev) => mergeConversationMessages(prev, [sent]));
+      void refreshConversations();
+    } catch {
+      /* optional toast */
+    } finally {
+      setTeamThreadSending(false);
     }
   };
 
   const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
-    setMessages([...messages, {
-      id: Date.now(),
-      sender: 'pharmacy',
-      text: newMessage,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      location: null
-    }]);
-    setNewMessage('');
+    if (activeTab === 'patients') void handleSendPatientMessage();
+    else void handleSendTeamMessage();
   };
 
   const setChipMessage = (msg: string) => setNewMessage(msg);
 
+  const activePatientRow = patientSidebarRows.find((r) => r.id === activePatientConvId);
+  const activeTeamRow = teamSidebarRows.find((r) => r.id === activeTeamConvId);
+
+  const onSelectPatientsTab = () => {
+    setActiveTab('patients');
+  };
+
+  const onSelectTeamTab = () => {
+    setActiveTab('team');
+    if (teamSidebarRows.length > 0 && !activeTeamConvId) {
+      setActiveTeamConvId(teamSidebarRows[0].id);
+    }
+  };
+
+  const sendDisabled =
+    activeTab === 'patients'
+      ? !newMessage.trim() || patientThreadSending || patientThreadLoading || !activePatientConvId
+      : !newMessage.trim() || teamThreadSending || teamThreadLoading || !activeTeamConvId;
+
   return (
     <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] bg-white">
-      
       {/* Left Panel: Conversation List */}
       <div className="w-full md:w-80 border-r border-gray-200 flex flex-col shrink-0 bg-accent-50/30">
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-serif font-bold text-brand-950">{t.messages}</h2>
-            {/* Compact Language Selector */}
             <div className="relative z-50">
-              <button 
+              <button
+                type="button"
                 onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
                 className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
               >
                 <Globe className="w-4 h-4 text-brand-600" />
                 <span className="text-sm font-bold text-brand-950">{language === 'en' ? 'EN' : 'አማ'}</span>
-                <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown
+                  className={`w-4 h-4 text-gray-500 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`}
+                />
               </button>
-              
+
               {isLangDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-                  <button onClick={() => toggleLanguage('en')} className="w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors">English</button>
-                  <button onClick={() => toggleLanguage('am')} className="w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors">አማርኛ</button>
+                  <button
+                    type="button"
+                    onClick={() => toggleLanguage('en')}
+                    className="w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors"
+                  >
+                    English
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleLanguage('am')}
+                    className="w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors"
+                  >
+                    አማርኛ
+                  </button>
                 </div>
               )}
             </div>
           </div>
-          
-          {/* Tabs */}
+
           <div className="flex rounded-xl bg-gray-100 p-1 mb-4">
-            <button 
-              onClick={() => { setActiveTab('patients'); setActiveChat(patientConversations[0]); }}
-              className={`flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors ${activeTab === 'patients' ? 'bg-white text-brand-950 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            <button
+              type="button"
+              onClick={onSelectPatientsTab}
+              className={`flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors ${
+                activeTab === 'patients' ? 'bg-white text-brand-950 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               {t.patients}
             </button>
-            <button 
-              onClick={() => { setActiveTab('team'); setActiveChat(teamConversations[0]); }}
-              className={`flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors ${activeTab === 'team' ? 'bg-white text-brand-950 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            <button
+              type="button"
+              onClick={onSelectTeamTab}
+              className={`flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors ${
+                activeTab === 'team' ? 'bg-white text-brand-950 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               {t.team}
             </button>
@@ -223,8 +549,8 @@ export default function MessagesPage() {
 
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder={activeTab === 'patients' ? t.searchPatients : t.searchTeam}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -232,216 +558,353 @@ export default function MessagesPage() {
             />
           </div>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto">
-          {filteredConversations.map((conv) => (
-            <div 
-              key={conv.id} 
-              onClick={() => setActiveChat(conv)}
-              className={`p-4 border-b border-gray-100 cursor-pointer transition-colors flex gap-3 ${activeChat?.id === conv.id ? 'bg-brand-50' : 'hover:bg-white'}`}
-            >
-              <div className="relative shrink-0">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${activeTab === 'team' ? 'bg-blue-100 text-blue-700' : 'bg-brand-100 text-brand-700'}`}>
-                  {conv.initial}
-                </div>
-                {conv.online && <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-baseline mb-0.5">
-                  <h3 className="font-bold text-sm text-brand-950 truncate flex items-center gap-1">
-                    {conv.name}
-                  </h3>
-                  <span className="text-xs text-gray-500 shrink-0 ml-2">{conv.time.includes('Yesterday') ? t.yesterday : conv.time}</span>
-                </div>
-                {activeTab === 'team' && (
-                  <div className="text-[10px] font-bold text-gray-500 mb-1">{(conv as any).vehicle}</div>
-                )}
-                <div className="flex justify-between items-center">
-                  <p className={`text-xs truncate ${conv.unread > 0 ? 'font-bold text-gray-900' : 'text-gray-500'}`}>
-                    {conv.lastMessage || 'Location shared'}
-                  </p>
-                  {conv.unread > 0 && (
-                    <span className="w-4 h-4 bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center rounded-full shrink-0 ml-2">
-                       {conv.unread}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <Lock className="w-3 h-3 text-gray-400" />
-                  {conv.orderId && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${activeTab === 'team' ? 'text-blue-700 bg-blue-100' : 'text-brand-600 bg-brand-100'}`}>
-                      Re: {conv.orderId}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Right Panel: Active Chat */}
-      {activeChat ? (
-      <div className="flex-1 flex flex-col bg-white">
-        {/* Chat Header */}
-        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 shrink-0 bg-white">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${activeTab === 'team' ? 'bg-blue-100 text-blue-700' : 'bg-brand-100 text-brand-700'}`}>
-              {activeChat.initial}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-bold text-brand-950">{activeChat.name}</h2>
-                {activeTab === 'team' && <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{(activeChat as any).vehicle}</span>}
-              </div>
-              <p className="text-xs text-gray-500 flex items-center gap-1">
-                {activeChat.online ? <span className="text-emerald-600 font-medium">{t.online}</span> : t.offline}
-                <span className="mx-1">•</span>
-                <Lock className="w-3 h-3" /> {t.encrypted}
-              </p>
-            </div>
-          </div>
-          {activeChat.orderId && (
-            <button className="hidden sm:block text-sm font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-xl transition-colors">
-              {t.viewOrder} {activeChat.orderId} →
-            </button>
+          {activeTab === 'patients' && listLoading && (
+            <div className="p-4 text-sm text-gray-500 text-center">{t.loadingList}</div>
           )}
-        </div>
-        
-        {/* Order specific context banner if team */}
-        {activeTab === 'team' && activeChat.orderId && (
-          <div className="bg-blue-50 py-2 px-4 shadow-sm shrink-0 flex items-center justify-center cursor-pointer hover:bg-blue-100 transition-colors">
-            <span className="text-xs font-bold text-blue-800 flex items-center justify-center gap-1">
-              Currently delivering {activeChat.orderId}
-            </span>
-          </div>
-        )}
+          {activeTab === 'patients' && listError && (
+            <div className="p-4 text-sm text-red-600 text-center">{listError}</div>
+          )}
+          {activeTab === 'patients' && !listLoading && !listError && filteredPatientRows.length === 0 && (
+            <div className="p-4 text-center text-sm text-gray-500 space-y-1">
+              <p>{t.noConversations}</p>
+              <p className="text-xs text-gray-400">{t.noConversationsHint}</p>
+            </div>
+          )}
 
-        {/* Chat Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 bg-accent-50/30">
-          <div className="flex justify-center">
-            <span className="text-xs font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">{t.today}</span>
-          </div>
-          
-          <div className="flex justify-center text-center mx-auto max-w-sm">
-            <span className="text-[10px] sm:text-xs text-gray-500 flex items-center justify-center gap-1 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm">
-              <Lock className="w-3 h-3 shrink-0" /> {t.encryptionNotice}
-            </span>
-          </div>
+          {activeTab === 'team' && listLoading && (
+            <div className="p-4 text-sm text-gray-500 text-center">{t.loadingList}</div>
+          )}
+          {activeTab === 'team' && listError && (
+            <div className="p-4 text-sm text-red-600 text-center">{listError}</div>
+          )}
+          {activeTab === 'team' && !listLoading && !listError && filteredTeamConversations.length === 0 && (
+            <div className="p-4 text-center text-sm text-gray-500 space-y-1">
+              <p>{t.noConversations}</p>
+              <p className="text-xs text-gray-400">Driver chats appear here when you dispatch delivery orders.</p>
+            </div>
+          )}
 
-          {messages.map(msg => (
-            <div key={msg.id} className={`flex items-end gap-2 max-w-[85%] sm:max-w-[80%] ${msg.sender === 'pharmacy' ? 'ml-auto flex-row-reverse' : ''}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${msg.sender === 'pharmacy' ? 'bg-brand-900 text-white font-serif' : 'bg-gray-200 text-gray-700'}`}>
-                {msg.sender === 'pharmacy' ? 'M' : activeChat.initial}
-              </div>
-              <div className={`p-3 shadow-sm ${msg.sender === 'pharmacy' ? 'bg-brand-900 text-white rounded-2xl rounded-br-none' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-none'}`}>
-                {msg.text && (
-                  <p className={`text-sm ${msg.sender === 'pharmacy' ? 'text-white' : 'text-gray-800'}`}>
-                    {msg.text.startsWith('Sent a file:') ? (
-                      <span className="flex items-center gap-2"><FileText className="w-4 h-4" /> {msg.text.replace('Sent a file: ', '')}</span>
-                    ) : msg.text}
-                  </p>
-                )}
-                {msg.location && (
-                  <div className="bg-gray-100 p-2 rounded-xl mb-1">
-                    <div className="flex items-center gap-2 mb-2 text-gray-900">
-                      <MapPin className="w-4 h-4 text-blue-600" />
-                      <span className="text-xs font-bold text-gray-900">Agent's current location — shared at {msg.time}</span>
+          {activeTab === 'patients'
+            ? filteredPatientRows.map((conv) => (
+                <button
+                  type="button"
+                  key={conv.id}
+                  onClick={() => setActivePatientConvId(conv.id)}
+                  className={`w-full text-left p-4 border-b border-gray-100 cursor-pointer transition-colors flex gap-3 ${
+                    activePatientConvId === conv.id ? 'bg-brand-50' : 'hover:bg-white'
+                  }`}
+                >
+                  <div className="relative shrink-0">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold bg-brand-100 text-brand-700">
+                      {conv.initial}
                     </div>
-                    <div className="h-32 bg-gray-200 rounded-lg overflow-hidden relative mb-2 w-64">
-                      <Image src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=400&q=80" alt="Map" fill className="object-cover" unoptimized/>
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-md"></div>
-                    </div>
-                    <button className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg text-xs hover:bg-blue-700">
-                      Get Directions From Here
-                    </button>
+                    {conv.online && (
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>
+                    )}
                   </div>
-                )}
-                <div className={`flex items-center gap-1 mt-1 ${msg.sender === 'pharmacy' ? 'justify-end' : ''}`}>
-                  <span className={`text-[10px] ${msg.sender === 'pharmacy' ? 'text-brand-200' : 'text-gray-400'}`}>{msg.time}</span>
-                  {msg.sender === 'pharmacy' && <CheckCheck className="w-3 h-3 text-brand-200" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline mb-0.5">
+                      <h3 className="font-bold text-sm text-brand-950 truncate">{conv.name}</h3>
+                      <span className="text-xs text-gray-500 shrink-0 ml-2">
+                        {conv.time === 'Yesterday' ? t.yesterday : conv.time}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <p className={`text-xs truncate ${conv.unread > 0 ? 'font-bold text-gray-900' : 'text-gray-500'}`}>
+                        {conv.lastMessage || '—'}
+                      </p>
+                      {conv.unread > 0 && (
+                        <span className="w-4 h-4 bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center rounded-full shrink-0 ml-2">
+                          {conv.unread}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Lock className="w-3 h-3 text-gray-400" />
+                      {conv.orderId && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-brand-600 bg-brand-100">
+                          Re: {conv.orderId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))
+            : filteredTeamConversations.map((conv) => (
+                <button
+                  type="button"
+                  key={conv.id}
+                  onClick={() => setActiveTeamConvId(conv.id)}
+                  className={`w-full text-left p-4 border-b border-gray-100 cursor-pointer transition-colors flex gap-3 ${
+                    activeTeamConvId === conv.id ? 'bg-brand-50' : 'hover:bg-white'
+                  }`}
+                >
+                  <div className="relative shrink-0">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold bg-blue-100 text-blue-700">
+                      {conv.initial}
+                    </div>
+                    {conv.online && (
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline mb-0.5">
+                      <h3 className="font-bold text-sm text-brand-950 truncate">{conv.name}</h3>
+                      <span className="text-xs text-gray-500 shrink-0 ml-2">
+                        {conv.time === 'Yesterday' ? t.yesterday : conv.time}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <p className={`text-xs truncate ${conv.unread > 0 ? 'font-bold text-gray-900' : 'text-gray-500'}`}>
+                        {conv.lastMessage || '—'}
+                      </p>
+                      {conv.unread > 0 && (
+                        <span className="w-4 h-4 bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center rounded-full shrink-0 ml-2">
+                          {conv.unread}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Lock className="w-3 h-3 text-gray-400" />
+                      {conv.orderId && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-blue-700 bg-blue-100">
+                          Re: {conv.orderId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))}
+        </div>
+      </div>
+
+      {/* Right Panel */}
+      {(activeTab === 'patients' && activePatientRow) || (activeTab === 'team' && activeTeamRow) ? (
+        <div className="flex-1 flex flex-col bg-white min-w-0">
+          {/* Header */}
+          <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 shrink-0 bg-white">
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 ${
+                  activeTab === 'team' ? 'bg-blue-100 text-blue-700' : 'bg-brand-100 text-brand-700'
+                }`}
+              >
+                {activeTab === 'patients' ? activePatientRow!.initial : activeTeamRow!.initial}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-bold text-brand-950 truncate">
+                    {activeTab === 'patients' ? activePatientRow!.name : activeTeamRow!.name}
+                  </h2>
+                  {activeTab === 'team' && (
+                    <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold">
+                      Delivery
+                    </span>
+                  )}
                 </div>
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  {(activeTab === 'patients' ? activePatientRow!.online : activeTeamRow!.online) ? (
+                    <span className="text-emerald-600 font-medium">{t.online}</span>
+                  ) : (
+                    t.offline
+                  )}
+                  <span className="mx-1">•</span>
+                  <Lock className="w-3 h-3" /> {t.encrypted}
+                </p>
               </div>
             </div>
-          ))}
-        </div>
+            {activeTab === 'patients' && activePatientRow!.orderId && (
+              <span className="hidden sm:inline text-sm font-bold text-brand-700 bg-brand-50 px-4 py-2 rounded-xl">
+                {t.viewOrder} #{activePatientRow!.orderId} →
+              </span>
+            )}
+            {activeTab === 'team' && activeTeamRow!.orderId && (
+              <span className="hidden sm:inline text-sm font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-xl">
+                {t.viewOrder} {activeTeamRow!.orderId} →
+              </span>
+            )}
+          </div>
 
-        {/* Input Area */}
-        <div className="p-4 bg-white border-t border-gray-200 shrink-0">
-          {activeTab === 'team' ? (
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide mb-2">
-               <button onClick={() => setChipMessage('Please call the patient before arriving')} className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full whitespace-nowrap">
-                 Please call the patient before arriving
-               </button>
-               <button onClick={() => setChipMessage('The patient\'s address has been updated')} className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full whitespace-nowrap">
-                 The patient's address has been updated
-               </button>
-               <button onClick={() => setChipMessage('Return the order to the pharmacy')} className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full whitespace-nowrap">
-                 Return the order to the pharmacy
-               </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 mb-2">
-              <button className="text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg transition-colors overflow-hidden text-ellipsis whitespace-nowrap">
-                {t.sendMedInfo}
-              </button>
+          {activeTab === 'team' && activeTeamRow!.orderId && (
+            <div className="bg-blue-50 py-2 px-4 shadow-sm shrink-0 flex items-center justify-center cursor-pointer hover:bg-blue-100 transition-colors">
+              <span className="text-xs font-bold text-blue-800 flex items-center justify-center gap-1">
+                Order context: {activeTeamRow!.orderId}
+              </span>
             </div>
           )}
-          
-          
 
-          <div className="flex items-end gap-2">
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileUpload} 
-              className="hidden" 
-            />
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              className="p-3 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors shrink-0"
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
-            {activeTab === 'team' && (
-              <button 
-                className="p-3 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors shrink-0"
-              >
-                <MapPin className="w-5 h-5" />
-              </button>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 bg-accent-50/30 min-h-0 flex flex-col">
+            <div className="flex justify-center shrink-0">
+              <span className="text-xs font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">{t.today}</span>
+            </div>
+            <div className="flex justify-center text-center mx-auto max-w-sm shrink-0">
+              <span className="text-[10px] sm:text-xs text-gray-500 flex items-center justify-center gap-1 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm">
+                <Lock className="w-3 h-3 shrink-0" /> {t.encryptionNotice}
+              </span>
+            </div>
+
+            {activeTab === 'patients' ? (
+              <div className="flex flex-col gap-3 flex-1">
+                {patientThreadLoading && (
+                  <div className="text-center text-xs text-gray-500 py-8">{t.loadingThread}</div>
+                )}
+                {!patientThreadLoading && patientThreadMessages.length === 0 && (
+                  <div className="text-center text-xs text-gray-500 py-8">No messages yet. Say hello!</div>
+                )}
+                {!patientThreadLoading &&
+                  patientThreadMessages.map((msg) => {
+                    const isSystem = msg.senderRole === 'system' || msg.kind === 'system';
+                    if (isSystem) {
+                      return (
+                        <div key={msg._id} className="flex justify-center w-full shrink-0">
+                          <div className="rounded-2xl bg-gray-100 text-gray-600 text-xs px-3 py-2 max-w-[95%] text-center break-words border border-gray-200">
+                            {msg.content}
+                          </div>
+                        </div>
+                      );
+                    }
+                    const mine = msg.senderRole === 'pharmacy';
+                    const timeLabel =
+                      msg.sentAt != null
+                        ? new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : '';
+                    return (
+                      <div
+                        key={msg._id}
+                        className={`p-3 rounded-2xl text-sm shadow-sm max-w-[85%] ${
+                          mine
+                            ? 'bg-brand-600 text-white rounded-tr-sm self-end'
+                            : 'bg-white border border-gray-200 text-gray-700 rounded-tl-sm self-start'
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                        <p className={`text-[10px] mt-1.5 ${mine ? 'text-brand-100' : 'text-gray-400'}`}>{timeLabel}</p>
+                      </div>
+                    );
+                  })}
+                <div ref={patientMessagesEndRef} className="h-px shrink-0" aria-hidden />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 flex-1">
+                {teamThreadLoading && (
+                  <div className="text-center text-xs text-gray-500 py-8">{t.loadingThread}</div>
+                )}
+                {!teamThreadLoading && teamThreadMessages.length === 0 && (
+                  <div className="text-center text-xs text-gray-500 py-8">No messages yet. Say hello!</div>
+                )}
+                {!teamThreadLoading &&
+                  teamThreadMessages.map((msg) => {
+                    const isSystem = msg.senderRole === 'system' || msg.kind === 'system';
+                    if (isSystem) {
+                      return (
+                        <div key={msg._id} className="flex justify-center w-full shrink-0">
+                          <div className="rounded-2xl bg-gray-100 text-gray-600 text-xs px-3 py-2 max-w-[95%] text-center break-words border border-gray-200">
+                            {msg.content}
+                          </div>
+                        </div>
+                      );
+                    }
+                    const mine = msg.senderRole === 'pharmacy';
+                    const timeLabel =
+                      msg.sentAt != null
+                        ? new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : '';
+                    return (
+                      <div
+                        key={msg._id}
+                        className={`p-3 rounded-2xl text-sm shadow-sm max-w-[85%] ${
+                          mine
+                            ? 'bg-brand-900 text-white rounded-tr-sm self-end'
+                            : 'bg-white border border-gray-200 text-gray-700 rounded-tl-sm self-start'
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                        <p className={`text-[10px] mt-1.5 ${mine ? 'text-blue-200' : 'text-gray-400'}`}>{timeLabel}</p>
+                      </div>
+                    );
+                  })}
+                <div ref={teamMessagesEndRef} className="h-px shrink-0" aria-hidden />
+              </div>
             )}
-            <div className="flex-1 bg-accent-50 border border-gray-200 rounded-2xl flex items-end overflow-hidden focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500 transition-all">
-              <textarea 
-                rows={1}
-                placeholder={t.typeMessage}
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
+          </div>
+
+          {/* Input */}
+          <div className="p-4 bg-white border-t border-gray-200 shrink-0">
+            {activeTab === 'team' ? (
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide mb-2">
+                <button
+                  type="button"
+                  onClick={() => setChipMessage('Please call the patient before arriving')}
+                  className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full whitespace-nowrap"
+                >
+                  Please call the patient before arriving
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChipMessage("The patient's address has been updated")}
+                  className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full whitespace-nowrap"
+                >
+                  The patient&apos;s address has been updated
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChipMessage('Return the order to the pharmacy')}
+                  className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full whitespace-nowrap"
+                >
+                  Return the order to the pharmacy
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-brand-700 bg-brand-50 px-3 py-1.5 rounded-lg">{t.sendMedInfo}</span>
+              </div>
+            )}
+
+            <div className="flex items-end gap-2">
+              <div className="flex-1 bg-accent-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500 transition-all">
+                <textarea
+                  rows={1}
+                  placeholder={t.typeMessage}
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  disabled={
+                    (activeTab === 'patients' && (!activePatientConvId || patientThreadLoading)) ||
+                    (activeTab === 'team' && (!activeTeamConvId || teamThreadLoading))
                   }
-                }}
-                className="w-full bg-transparent px-4 py-3 text-sm outline-none resize-none max-h-32 min-h-[44px]"
-              ></textarea>
-              <button className="p-3 text-gray-400 hover:text-brand-600 transition-colors shrink-0">
-                <Mic className="w-5 h-5" />
+                  className="w-full bg-transparent px-4 py-3 text-sm outline-none resize-none max-h-32 min-h-[44px] disabled:opacity-60"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSendMessage}
+                disabled={sendDisabled}
+                className={`p-3 text-white rounded-xl transition-colors shadow-sm shrink-0 disabled:opacity-50 ${
+                  activeTab === 'team' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-brand-900 hover:bg-brand-800'
+                }`}
+              >
+                <Send className="w-5 h-5" />
               </button>
             </div>
-            <button 
-              onClick={handleSendMessage}
-              disabled={!newMessage.trim()}
-              className={`p-3 text-white rounded-xl transition-colors shadow-sm shrink-0 disabled:opacity-50 ${activeTab === 'team' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-brand-900 hover:bg-brand-800'}`}
-            >
-              <Send className="w-5 h-5" />
-            </button>
           </div>
         </div>
-
-      </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-gray-50 flex-col">
-          <p className="text-gray-500 mb-4">Select a conversation</p>
+        <div className="flex-1 flex items-center justify-center bg-gray-50 flex-col px-6 text-center">
+          <p className="text-gray-500">{t.selectConversation}</p>
+          {activeTab === 'patients' && patientSidebarRows.length === 0 && !listLoading && (
+            <p className="text-xs text-gray-400 mt-2">{t.noConversationsHint}</p>
+          )}
+          {activeTab === 'team' && teamSidebarRows.length === 0 && !listLoading && (
+            <p className="text-xs text-gray-400 mt-2">Driver chats appear when you dispatch orders to a delivery agent.</p>
+          )}
         </div>
       )}
     </div>

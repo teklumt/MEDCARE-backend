@@ -83,6 +83,8 @@ JWT_REFRESH_EXPIRE=7d
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
+PRESCRIPTION_SCAN_WEBHOOK_URL=
+MEDCARE_AI_WEBHOOK_URL=https://dawit-sema.dev/webhook/medcare-ai
 ```
 
 ## Testing

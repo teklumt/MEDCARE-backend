@@ -5,9 +5,18 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Store, Mail, Phone, Lock, Eye, EyeOff, ArrowLeft, FileText, Upload, Calendar, Building, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useRouter } from 'next/navigation';
+import { authApi, setupTokenRefresh } from '@/lib/auth-api';
+
+function normalizeSignupPhone(localPart: string): string {
+  const d = localPart.replace(/\D/g, '');
+  if (d.length >= 12 && d.startsWith('251')) return `+${d.slice(0, 12)}`;
+  if (d.length === 9 && d.startsWith('9')) return `+251${d}`;
+  if (d.length === 10 && d.startsWith('0')) return `+251${d.slice(1)}`;
+  return `+251${d}`;
+}
 
 export default function PharmacySignupForm({ onBack }: { onBack: () => void }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const router = useRouter();
 
   // Field states
@@ -25,7 +34,7 @@ export default function PharmacySignupForm({ onBack }: { onBack: () => void }) {
   // File states
   const [licenseFile, setLicenseFile] = useState<File | null>(null);
   const [professionalLicenseFile, setProfessionalLicenseFile] = useState<File | null>(null);
-  const [supportingDocs, setSupportingDocs] = useState<File[]>([]);
+  const [uploadedDocUrls, setUploadedDocUrls] = useState<{ business?: string; professional?: string }>({});
 
   // UI state
   const [showPassword, setShowPassword] = useState(false);
@@ -120,7 +129,7 @@ export default function PharmacySignupForm({ onBack }: { onBack: () => void }) {
     return score;
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'license' | 'professionalLicense' | 'supporting') => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'license' | 'professionalLicense') => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     
@@ -144,23 +153,19 @@ export default function PharmacySignupForm({ onBack }: { onBack: () => void }) {
     
     if (type === 'license') {
       setLicenseFile(file);
-    } else if (type === 'professionalLicense') {
-      setProfessionalLicenseFile(file);
     } else {
-      setSupportingDocs(prev => [...prev, file]);
+      setProfessionalLicenseFile(file);
     }
     setGlobalError('');
   };
 
-  const removeFile = (type: 'license' | 'professionalLicense' | 'supporting', index?: number) => {
+  const removeFile = (type: 'license' | 'professionalLicense') => {
     if (type === 'license') {
       setLicenseFile(null);
       localStorage.removeItem('medcare_business_license');
-    } else if (type === 'professionalLicense') {
+    } else {
       setProfessionalLicenseFile(null);
       localStorage.removeItem('medcare_professional_license');
-    } else if (index !== undefined) {
-      setSupportingDocs(prev => prev.filter((_, i) => i !== index));
     }
   };
 
@@ -192,28 +197,23 @@ export default function PharmacySignupForm({ onBack }: { onBack: () => void }) {
     }
 
     setIsSubmitting(true);
-    
-    // Simulate API call
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Simulate duplicate entry error
-      if (formData.email === 'test@test.com') {
-        setGlobalError('Email already exists. Please login or use a different email.');
-        setIsSubmitting(false);
-        return;
-      }
-      
-      if (formData.phone === '+251 11 111 1111') {
-        setErrors(prev => ({ ...prev, phone: 'Phone number already registered' }));
-        setIsSubmitting(false);
-        return;
-      }
 
+    try {
+      let businessUrl: string | undefined;
+      let professionalUrl: string | undefined;
+      if (licenseFile) {
+        businessUrl = await authApi.uploadPharmacyLicenseFile(licenseFile, 'business');
+      }
+      if (professionalLicenseFile) {
+        professionalUrl = await authApi.uploadPharmacyLicenseFile(professionalLicenseFile, 'professional');
+      }
+      await authApi.sendPharmacySignupVerification(formData.email.trim());
+      setUploadedDocUrls({ business: businessUrl, professional: professionalUrl });
       setStep('otp');
-      setIsSubmitting(false);
+      setCountdown(60);
     } catch (err) {
-      setGlobalError('Network error. Please try again.');
+      setGlobalError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -238,29 +238,49 @@ export default function PharmacySignupForm({ onBack }: { onBack: () => void }) {
       setGlobalError('Please enter all 6 digits of the OTP.');
       return;
     }
-    
+
+    setGlobalError('');
     setIsSubmitting(true);
-    // Simulate verification
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    localStorage.setItem('medcare_role', 'pharmacy');
-    if (formData.name) {
-      localStorage.setItem('medcare_user_name', formData.name);
+    try {
+      const phone = normalizeSignupPhone(formData.phone);
+      const response = await authApi.registerPharmacy({
+        businessName: formData.name.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        phone,
+        businessLicenseNumber: formData.license.trim(),
+        issuingAuthority: formData.issuingAuthority.trim() || undefined,
+        businessLicenseExpiry: formData.expiryDate || undefined,
+        professionalLicenseExpiry: formData.profExpiryDate || undefined,
+        businessRegistrationUrl: uploadedDocUrls.business,
+        operatingLicenseUrl: uploadedDocUrls.professional,
+        language: language === 'am' ? 'am' : 'en',
+        verificationCode: otp.join(''),
+      });
+      authApi.storeAuthData(response);
+      setupTokenRefresh();
+      localStorage.setItem('medcare_role', 'pharmacy');
+      localStorage.setItem('medcare_user_name', formData.name.trim());
+      localStorage.removeItem('pharmacy_signup_draft');
+      router.push('/pharmacy');
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : 'Registration failed');
+    } finally {
+      setIsSubmitting(false);
     }
-    if (formData.license) {
-      localStorage.setItem('medcare_pharmacy_license', formData.license);
-    }
-    if (formData.expiryDate) {
-      localStorage.setItem('medcare_pharmacy_expiry_date', formData.expiryDate);
-      localStorage.setItem('medcare_pharmacy_prof_expiry_date', formData.profExpiryDate);
-    }
-    localStorage.removeItem('pharmacy_signup_draft');
-    router.push('/pharmacy');
   };
-  
-  const handleResendOtp = () => {
-    setCountdown(60);
-    // trigger resend API call here
+
+  const handleResendOtp = async () => {
+    setGlobalError('');
+    setIsSubmitting(true);
+    try {
+      await authApi.sendPharmacySignupVerification(formData.email.trim());
+      setCountdown(60);
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : 'Could not resend code');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (step === 'otp') {

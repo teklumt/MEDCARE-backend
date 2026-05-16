@@ -1,25 +1,29 @@
 'use client';
 
-import { useState } from 'react';
-import { Shield, User, Store, ArrowLeft, Mail, Lock, Phone, UserCircle, FileText, ChevronRight, ChevronDown, Eye, EyeOff, Search, CheckCircle, AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, ChevronDown, Eye, EyeOff, Search, CheckCircle, AlertTriangle, FileText, Mail } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { authApi, setupTokenRefresh, type PublicPharmacyOption } from '@/lib/auth-api';
 
 type DeliverySignupFormProps = {
   onBack: () => void;
 };
 
-// Mock list of verified pharmacies
-const VERIFIED_PHARMACIES = [
-  { id: 'p1', name: 'Kenema Pharmacy #4', address: 'Bole Road', registeredPhones: ['911234567'] },
-  { id: 'p2', name: 'Lion International', address: 'Africa Avenue', registeredPhones: ['922334455'] },
-];
+function normalizeSignupPhone(localPart: string): string {
+  const d = localPart.replace(/\D/g, '');
+  if (d.length >= 12 && d.startsWith('251')) return `+${d.slice(0, 12)}`;
+  if (d.length === 9 && d.startsWith('9')) return `+251${d}`;
+  if (d.length === 10 && d.startsWith('0')) return `+251${d.slice(1)}`;
+  return `+251${d}`;
+}
 
 export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) {
   const router = useRouter();
   const { t, language } = useLanguage();
-  
+
   const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -28,13 +32,48 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
   const [vehicleType, setVehicleType] = useState('Motorcycle');
   const [licensePlate, setLicensePlate] = useState('');
   const [pharmacyQuery, setPharmacyQuery] = useState('');
-  const [selectedPharmacy, setSelectedPharmacy] = useState<typeof VERIFIED_PHARMACIES[0] | null>(null);
+  const [selectedPharmacy, setSelectedPharmacy] = useState<PublicPharmacyOption | null>(null);
   const [pharmacyStatus, setPharmacyStatus] = useState<'idle' | 'verified' | 'not-found'>('idle');
+  const [searchResults, setSearchResults] = useState<PublicPharmacyOption[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
 
-  // OTP State
   const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otpCountdown, setOtpCountdown] = useState(60);
+  const [otpVerifyError, setOtpVerifyError] = useState<string | null>(null);
+  const [sendCodeError, setSendCodeError] = useState<string | null>(null);
+  const [deliverySendSubmitting, setDeliverySendSubmitting] = useState(false);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
+
+  useEffect(() => {
+    const q = pharmacyQuery.trim();
+    if (q.length === 0) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    const id = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const items = await authApi.fetchPublicPharmacies(pharmacyQuery);
+        setSearchResults(items);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [pharmacyQuery]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    if (showOtp && otpCountdown > 0) {
+      timer = setInterval(() => setOtpCountdown((c) => c - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [showOtp, otpCountdown]);
 
   const getPasswordStrength = () => {
     if (password.length === 0) return { label: '', color: 'bg-gray-200' };
@@ -45,16 +84,17 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
   const passStrength = getPasswordStrength();
   const passwordsMatch = password && confirmPassword ? password === confirmPassword : true;
 
-  const handlePharmacySelect = (pharmacy: typeof VERIFIED_PHARMACIES[0]) => {
+  const handlePharmacySelect = (pharmacy: PublicPharmacyOption) => {
     setSelectedPharmacy(pharmacy);
-    setPharmacyQuery(pharmacy.name);
-    
-    // Simulate backend check - always passing for demo purposes
+    setPharmacyQuery(pharmacy.businessName);
     setPharmacyStatus('verified');
   };
 
-  const isFormValid = 
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  const isFormValid =
     fullName.trim().length >= 3 &&
+    emailOk &&
     phone.trim().length >= 8 &&
     password.length >= 8 &&
     passwordsMatch &&
@@ -63,10 +103,34 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
     pharmacyStatus === 'verified' &&
     agreedTerms;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid) return;
-    setShowOtp(true);
+    setSendCodeError(null);
+    setDeliverySendSubmitting(true);
+    try {
+      await authApi.sendDeliverySignupVerification(email.trim());
+      setOtp(['', '', '', '', '', '']);
+      setOtpCountdown(60);
+      setShowOtp(true);
+    } catch (err) {
+      setSendCodeError(err instanceof Error ? err.message : 'Could not send verification email');
+    } finally {
+      setDeliverySendSubmitting(false);
+    }
+  };
+
+  const handleResendDeliveryOtp = async () => {
+    setOtpVerifyError(null);
+    setDeliverySendSubmitting(true);
+    try {
+      await authApi.sendDeliverySignupVerification(email.trim());
+      setOtpCountdown(60);
+    } catch (err) {
+      setOtpVerifyError(err instanceof Error ? err.message : 'Could not resend code');
+    } finally {
+      setDeliverySendSubmitting(false);
+    }
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -84,13 +148,35 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
     }
   };
 
-  const handleVerifyOtp = () => {
-    if (otp.join('').length === 6) {
+  const handleVerifyOtp = async () => {
+    if (otp.join('').length !== 6 || !selectedPharmacy) return;
+    setOtpVerifyError(null);
+    setOtpSubmitting(true);
+    try {
+      const normalizedPhone = normalizeSignupPhone(phone);
+      const response = await authApi.registerDelivery({
+        fullName: fullName.trim(),
+        email: email.trim(),
+        password,
+        phone: normalizedPhone,
+        nationalId: nationalId.trim(),
+        vehicleType,
+        licensePlate: licensePlate.trim() || undefined,
+        pharmacyId: selectedPharmacy._id,
+        language: language === 'am' ? 'am' : 'en',
+        verificationCode: otp.join(''),
+      });
+      authApi.storeAuthData(response);
+      setupTokenRefresh();
       localStorage.setItem('medcare_role', 'delivery');
-      localStorage.setItem('medcare_user_name', fullName);
+      localStorage.setItem('medcare_user_name', fullName.trim());
       localStorage.setItem('medcare_delivery_phone', phone);
-      localStorage.setItem('medcare_delivery_pharmacy', selectedPharmacy?.name || '');
+      localStorage.setItem('medcare_delivery_pharmacy', selectedPharmacy.businessName);
       router.push('/delivery');
+    } catch (e) {
+      setOtpVerifyError(e instanceof Error ? e.message : 'Registration failed');
+    } finally {
+      setOtpSubmitting(false);
     }
   };
 
@@ -106,8 +192,14 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
         
         <h1 className="text-3xl font-serif text-brand-950 mb-2">{t('signup.verifyAccount')}</h1>
         <p className="text-gray-500 mb-8 max-w-sm leading-relaxed">
-          {language === 'en' ? `We've sent a 6-digit code to +251 ${phone}` : `ወደ +251 ${phone} ባለ 6 አሃዝ ኮድ ልከናል።`}
+          {language === 'en'
+            ? `We've sent a 6-digit code to ${email.trim()}`
+            : `ወደ ${email.trim()} ባለ 6 አሃዝ ኮድ ልከናል።`}
         </p>
+
+        {otpVerifyError && (
+          <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm mb-4">{otpVerifyError}</div>
+        )}
 
         <div className="flex gap-3 justify-between mb-8 max-w-sm">
           {otp.map((digit, index) => (
@@ -124,13 +216,36 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
           ))}
         </div>
 
-        <button 
-          onClick={handleVerifyOtp}
-          disabled={otp.join('').length !== 6}
+        <button
+          type="button"
+          onClick={() => handleVerifyOtp()}
+          disabled={otp.join('').length !== 6 || otpSubmitting}
           className="w-full bg-brand-900 hover:bg-brand-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold text-lg transition-colors shadow-md"
         >
-          {language === 'en' ? 'Verify Account' : 'መለያ ያረጋግጡ'}
+          {otpSubmitting ? '…' : language === 'en' ? 'Verify Account' : 'መለያ ያረጋግጡ'}
         </button>
+
+        <div className="text-center mt-6">
+          <p className="text-sm text-gray-500">
+            {language === 'en' ? "Didn't receive it? " : 'አልደረሰዎትም? '}
+            {otpCountdown > 0 ? (
+              <span className="font-medium text-gray-700">
+                {language === 'en'
+                  ? `Resend in ${otpCountdown}s`
+                  : `እንደገና በ ${otpCountdown} ሰከንድ`}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResendDeliveryOtp}
+                disabled={deliverySendSubmitting}
+                className="font-bold text-brand-700 hover:text-brand-900"
+              >
+                {language === 'en' ? 'Resend code' : 'ኮድ እንደገና ላክ'}
+              </button>
+            )}
+          </p>
+        </div>
       </div>
     );
   }
@@ -154,6 +269,10 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
         }
       </p>
 
+      {sendCodeError && (
+        <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm mb-4">{sendCodeError}</div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-1.5">{language === 'en' ? 'Full Name' : 'ሙሉ ስም'}</label>
@@ -167,6 +286,31 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
             className="block w-full px-4 py-3.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors" 
             placeholder={language === 'en' ? 'Enter your full name' : 'ሙሉ ስምዎን ያስገቡ'} 
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-bold text-gray-700 mb-1.5">
+            {language === 'en' ? 'Email' : 'ኢሜይል'}
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <Mail className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="block w-full pl-11 pr-4 py-3.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
+              placeholder={language === 'en' ? 'you@example.com' : 'you@example.com'}
+            />
+          </div>
+          <p className="mt-1.5 text-xs text-gray-500">
+            {language === 'en'
+              ? 'We will send your signup verification code to this address and use it for login.'
+              : 'የማረጋገጫ ኮድ እዚህ ይላካል እና ለመግባት ይጠቀማል።'}
+          </p>
         </div>
 
         <div>
@@ -321,29 +465,28 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
               />
             </div>
 
-            {/* Dropdown for search results (mock) */}
+            {/* Dropdown for approved pharmacies from API */}
             {pharmacyQuery.length > 0 && !selectedPharmacy && (
               <div className="mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden relative z-10 max-h-48 overflow-y-auto">
-                {VERIFIED_PHARMACIES.filter(p => p.name.toLowerCase().includes(pharmacyQuery.toLowerCase())).map(p => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                    onClick={() => handlePharmacySelect(p)}
-                  >
-                    <div className="font-bold text-gray-900">{p.name}</div>
-                    <div className="text-xs text-gray-500">{p.address}</div>
-                  </button>
-                ))}
-                {VERIFIED_PHARMACIES.filter(p => p.name.toLowerCase().includes(pharmacyQuery.toLowerCase())).length === 0 && (
-                  <button
-                    type="button"
-                    className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                    onClick={() => handlePharmacySelect({ id: 'mock', name: pharmacyQuery, address: 'Unknown Location', registeredPhones: [] })}
-                  >
-                    <div className="font-bold text-gray-900">{pharmacyQuery}</div>
-                    <div className="text-xs text-brand-600 font-medium">Tap to select this pharmacy</div>
-                  </button>
+                {searchLoading && (
+                  <div className="px-4 py-3 text-sm text-gray-500">{language === 'en' ? 'Searching…' : 'በመፈለግ ላይ…'}</div>
+                )}
+                {!searchLoading &&
+                  searchResults.map((p) => (
+                    <button
+                      key={p._id}
+                      type="button"
+                      className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                      onClick={() => handlePharmacySelect(p)}
+                    >
+                      <div className="font-bold text-gray-900">{p.businessName}</div>
+                      <div className="text-xs text-gray-500">{p.address || p.location || p.phone}</div>
+                    </button>
+                  ))}
+                {!searchLoading && searchResults.length === 0 && pharmacyQuery.length > 1 && (
+                  <div className="px-4 py-3 text-sm text-gray-500">
+                    {language === 'en' ? 'No pharmacies match your search.' : 'ምንም ፋርማሲ አልተገኘም።'}
+                  </div>
                 )}
               </div>
             )}
@@ -354,9 +497,9 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
             <div className="flex items-start gap-2 bg-green-50 p-3 rounded-lg border border-green-200">
               <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
               <p className="text-sm text-green-800 font-medium leading-relaxed">
-                {language === 'en' 
-                  ? `✓ Verified — ${selectedPharmacy?.name} has registered you as a delivery agent.` 
-                  : `✓ ተረጋግጧል — ${selectedPharmacy?.name} እንደ አድራሽ አስመዝግቦዎታል።`}
+                {language === 'en'
+                  ? `✓ Selected — ${selectedPharmacy?.businessName}`
+                  : `✓ ተመርጧል — ${selectedPharmacy?.businessName}`}
               </p>
             </div>
           )}
@@ -397,10 +540,10 @@ export default function DeliverySignupForm({ onBack }: DeliverySignupFormProps) 
 
         <button 
           type="submit" 
-          disabled={!isFormValid}
+          disabled={!isFormValid || deliverySendSubmitting}
           className="w-full bg-brand-900 hover:bg-brand-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold text-lg transition-colors shadow-md mt-4"
         >
-          {language === 'en' ? 'Create Delivery Account' : 'የማድረሻ አካውንት ይፍጠሩ'}
+          {deliverySendSubmitting ? '…' : language === 'en' ? 'Create Delivery Account' : 'የማድረሻ አካውንት ይፍጠሩ'}
         </button>
       </form>
     </div>

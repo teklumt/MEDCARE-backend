@@ -16,6 +16,11 @@ interface Order {
   totalAmount: number;
   status: string;
   paymentStatus: string;
+  prescriptionVerified?: boolean;
+  prescriptionUploadId?: string | null;
+  deliveryAgentId?: string | null;
+  driverHandoffAt?: string | null;
+  deliveryMethod?: string;
   items: Array<{
     medicationName: string;
     quantity: number;
@@ -44,7 +49,36 @@ export default function OrdersPage() {
     loadOrders();
   }, []);
 
-  const getStatusBadge = (status: string, paymentStatus: string) => {
+  const getStatusBadge = (order: Order) => {
+    const { status, paymentStatus, deliveryMethod, deliveryAgentId, driverHandoffAt } = order;
+
+    if (
+      order.paymentStatus === 'pending_prescription_review' &&
+      order.prescriptionVerified !== true &&
+      order.status !== 'cancelled' &&
+      order.status !== 'rejected'
+    ) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-sm font-bold text-violet-800 bg-violet-100 px-2.5 py-1 rounded-lg">
+          <Clock className="w-4 h-4" /> Awaiting prescription review
+        </span>
+      );
+    }
+
+    const needsConfirm =
+      status === 'dispatched' &&
+      deliveryMethod === 'delivery' &&
+      deliveryAgentId &&
+      driverHandoffAt;
+
+    if (needsConfirm) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-800 bg-brand-100 px-2.5 py-1 rounded-lg">
+          <Clock className="w-4 h-4" /> Confirm receipt
+        </span>
+      );
+    }
+
     if (status === 'delivered') {
       return (
         <span className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
@@ -166,7 +200,7 @@ export default function OrdersPage() {
 
                   <div className="flex items-center justify-between pt-4 border-t border-gray-50">
                     <div className="flex items-center gap-2">
-                      {getStatusBadge(order.status, order.paymentStatus)}
+                      {getStatusBadge(order)}
                       {order.paymentStatus === 'success' && (
                         <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded font-medium">
                           Paid

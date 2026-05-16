@@ -74,6 +74,7 @@ export default function DrugDetailsPage({ params }: { params: Promise<{ id: stri
       price: 150.00, // Mock price
       quantity: 1,
       requiresPrescription: true, // Mock requirement
+      pharmacyId: 'mock-central-pharmacy',
       pharmacyName: 'Med-Care Central Pharmacy',
       image: drug.image,
     });

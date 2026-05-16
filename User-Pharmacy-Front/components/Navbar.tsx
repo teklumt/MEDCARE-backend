@@ -3,13 +3,25 @@
 import { useState } from 'react';
 import { Menu, X, ChevronDown, Globe } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function Navbar() {
+  const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
   const { language, setLanguage, t } = useLanguage();
+
+  const scrollToPharmaciesSection = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    setIsMobileMenuOpen(false);
+    if (pathname === '/') {
+      document.getElementById('for-pharmacies')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.location.assign('/#for-pharmacies');
+    }
+  };
 
   const toggleLanguage = (lang: 'en' | 'am') => {
     setLanguage(lang);
@@ -40,9 +52,13 @@ export default function Navbar() {
             <Link href="#features" className="text-gray-600 hover:text-brand-900 font-medium transition-colors">
               {t('nav.features')}
             </Link>
-            <Link href="/for-pharmacies" className="text-gray-600 hover:text-brand-900 font-medium transition-colors">
+            <a
+              href="/#for-pharmacies"
+              onClick={scrollToPharmaciesSection}
+              className="text-gray-600 hover:text-brand-900 font-medium transition-colors cursor-pointer"
+            >
               {t('nav.forPharmacies')}
-            </Link>
+            </a>
           </div>
 
           {/* Right Actions */}
@@ -111,9 +127,13 @@ export default function Navbar() {
               <Link href="#features" className="block px-3 py-3 text-base font-medium text-gray-900 hover:bg-brand-50 rounded-lg">
                 {t('nav.features')}
               </Link>
-              <Link href="/for-pharmacies" className="block px-3 py-3 text-base font-medium text-gray-900 hover:bg-brand-50 rounded-lg">
+              <a
+                href="/#for-pharmacies"
+                onClick={scrollToPharmaciesSection}
+                className="block px-3 py-3 text-base font-medium text-gray-900 hover:bg-brand-50 rounded-lg cursor-pointer"
+              >
                 {t('nav.forPharmacies')}
-              </Link>
+              </a>
               <div className="pt-4 mt-4 border-t border-gray-100 flex flex-col gap-3 px-3">
                 <div className="flex gap-2 mb-2">
                   <button 

@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 import {
-  MapPin,
   Navigation,
   Phone,
   AlertCircle,
@@ -14,6 +13,7 @@ import {
   Globe,
   ChevronDown,
 } from "lucide-react";
+import PharmacyDeliveriesMap from "@/components/pharmacy/PharmacyDeliveriesMap";
 
 type DeliveryStatus = "ON THE WAY" | "DELAYED" | "ARRIVED" | "DELIVERED";
 
@@ -55,94 +55,30 @@ const INITIAL_DELIVERIES: DeliveryOrder[] = [
   },
 ];
 
-const PERSONNEL = [
-  {
-    id: "1",
-    name: "Abebe Tadesse",
-    phone: "+251 911 234 567",
-    vehicle: "Motorcycle",
-    vehicleAm: "ሞተርሳይክል",
-    status: "On Delivery",
-    statusAm: "በማድረስ ላይ",
-    activeCount: 2,
-    limit: 5,
-  },
-  {
-    id: "2",
-    name: "Dawit Kebede",
-    phone: "+251 922 345 678",
-    vehicle: "Bicycle",
-    vehicleAm: "ብስክሌት",
-    status: "On Delivery",
-    statusAm: "በማድረስ ላይ",
-    activeCount: 1,
-    limit: 3,
-  },
-  {
-    id: "3",
-    name: "Chala Mohammed",
-    phone: "+251 933 456 789",
-    vehicle: "Motorcycle",
-    vehicleAm: "ሞተርሳይክል",
-    status: "Available",
-    statusAm: "ዝግጁ",
-    activeCount: 0,
-    limit: 5,
-  },
-];
-
 const TRANSLATIONS = {
   en: {
     deliveryOps: "Delivery Operations",
-    deliveryOpsSubtitle: "Track active deliveries and manage your personnel.",
-    tabs: ["Active Deliveries", "Delivery Personnel", "Performance"],
-    liveMapView: "Live Map View",
-    trackingAgents: "Tracking 2 active agents",
+    deliveryOpsSubtitle: "Track active deliveries out with your agents.",
     currentDispatches: "Current Dispatches",
     to: "To",
     eta: "ETA",
     elapsed: "Elapsed",
     contact: "Contact",
     flagIssue: "Flag Issue",
-    deliveryTeam: "Delivery Team",
-    addPersonnel: "Add Personnel",
-    tabName: "Name",
-    tabContact: "Contact",
-    tabVehicle: "Vehicle",
-    tabStatus: "Status",
-    tabWorkload: "Workload",
-    tabActions: "Actions",
-    edit: "Edit",
-    performancePlaceholder:
-      "Performance metrics and COD confirmation will appear here.",
   },
   am: {
     deliveryOps: "የአቅርቦት ስራዎች",
-    deliveryOpsSubtitle: "ንቁ አቅርቦቶችን ይከታተሉ እና ሰራተኞችዎን ያስተዳድሩ።",
-    tabs: ["ንቁ አቅርቦቶች", "አድራሽ ሰራተኞች", "አፈጻጸም"],
-    liveMapView: "የካርታ እይታ",
-    trackingAgents: "2 ንቁ አድራሾችን በመከታተል ላይ",
+    deliveryOpsSubtitle: "ከአድራሾችዎ ጋር በመንገድ ላይ ያሉ አቅርቦቶችን ይከታተሉ።",
     currentDispatches: "የአሁኑ አቅርቦቶች",
     to: "ወደ",
     eta: "የሚጠበቀው ጊዜ",
     elapsed: "ያለፈው ጊዜ",
     contact: "አግኝ",
     flagIssue: "ችግር ሪፖርት አድርግ",
-    deliveryTeam: "አድራሽ ቡድን",
-    addPersonnel: "ሰራተኛ አክል",
-    tabName: "ስም",
-    tabContact: "አድራሻ",
-    tabVehicle: "ተሽከርካሪ",
-    tabStatus: "ሁኔታ",
-    tabWorkload: "የስራ ጫና",
-    tabActions: "ድርጊቶች",
-    edit: "አስተካክል",
-    performancePlaceholder: "የአፈጻጸም መለኪያዎች እና የ COD ማረጋገጫዎች እዚህ ይታያሉ።",
   },
 };
 
 export default function DeliveriesPage() {
-  const [activeTab, setActiveTab] = useState(0);
   const { language, setLanguage } = useLanguage();
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
 
@@ -251,10 +187,7 @@ export default function DeliveriesPage() {
 
     // Simulate fetch
     setTimeout(() => {
-      // Find mocked phones from Personnel and original active deliveries
-      const agentPhone =
-        PERSONNEL.find((p) => p.name === delivery.agent)?.phone ||
-        "+251 911 000 000";
+      const agentPhone = "+251 911 000 000";
       const patientPhone =
         delivery.patient === "Sara Mohammed"
           ? "+251 911 234 567"
@@ -409,49 +342,12 @@ export default function DeliveriesPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex overflow-x-auto scrollbar-hide border-b border-gray-200 shrink-0">
-        {t.tabs.map((tab, idx) => (
-          <button
-            key={idx}
-            onClick={() => setActiveTab(idx)}
-            className={`whitespace-nowrap px-6 py-3 text-sm font-bold transition-colors border-b-2 ${activeTab === idx ? "border-brand-600 text-brand-900" : "border-transparent text-gray-500 hover:text-brand-700"}`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {/* Content Area */}
+      {/* Active deliveries */}
       <div className="flex-1 flex flex-col gap-6">
-        {activeTab === 0 && (
-          <>
-            {/* Map Placeholder */}
-            <div className="h-64 bg-gray-200 rounded-2xl border border-gray-300 flex items-center justify-center shrink-0 relative overflow-hidden">
-              <div
-                className="absolute inset-0 opacity-20"
-                style={{
-                  backgroundImage:
-                    'url("https://www.transparenttextures.com/patterns/cubes.png")',
-                }}
-              ></div>
-              <div className="text-center relative z-10 p-4">
-                <MapPin className="w-8 h-8 text-brand-600 mx-auto mb-2" />
-                <p className="font-bold text-gray-700">{t.liveMapView}</p>
-                <p className="text-sm font-bold text-gray-900 mb-3">
-                  Tracking {deliveries.length} active agent
-                  {deliveries.length !== 1 ? "s" : ""}
-                </p>
-                <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium px-4 py-2 rounded-lg max-w-sm mx-auto shadow-sm">
-                  Map integration is currently unavailable. Delivery agents are
-                  being tracked — use the contact and status information below
-                  to monitor dispatches.
-                </div>
-              </div>
-            </div>
+        <PharmacyDeliveriesMap />
 
-            {/* Active Deliveries List */}
-            <div className="flex-1 space-y-4">
+        {/* Active Deliveries List */}
+        <div className="flex-1 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-brand-950">
                   {t.currentDispatches}
@@ -595,94 +491,6 @@ export default function DeliveriesPage() {
                 ))
               )}
             </div>
-          </>
-        )}
-
-        {activeTab === 1 && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden overflow-x-auto">
-            <div className="p-5 border-b border-gray-200 flex justify-between items-center min-w-max">
-              <h3 className="font-bold text-brand-950 pr-4">
-                {t.deliveryTeam}
-              </h3>
-              <button className="text-sm font-bold text-white bg-brand-900 hover:bg-brand-800 px-4 py-2 rounded-xl transition-colors whitespace-nowrap">
-                {t.addPersonnel}
-              </button>
-            </div>
-            <div className="min-w-full inline-block align-middle">
-              <table className="w-full text-left border-collapse min-w-[600px]">
-                <thead>
-                  <tr className="bg-accent-50 text-gray-500 text-xs uppercase tracking-wider">
-                    <th className="p-4 font-medium">{t.tabName}</th>
-                    <th className="p-4 font-medium">{t.tabContact}</th>
-                    <th className="p-4 font-medium">{t.tabVehicle}</th>
-                    <th className="p-4 font-medium">{t.tabStatus}</th>
-                    <th className="p-4 font-medium">{t.tabWorkload}</th>
-                    <th className="p-4 font-medium text-right">
-                      {t.tabActions}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {PERSONNEL.map((person) => (
-                    <tr key={person.id} className="hover:bg-accent-50/50">
-                      <td className="p-4 font-bold text-brand-950 text-sm">
-                        {person.name}
-                      </td>
-                      <td className="p-4 text-sm text-gray-600">
-                        {person.phone}
-                      </td>
-                      <td className="p-4 text-sm text-gray-600">
-                        {language === "am" ? person.vehicleAm : person.vehicle}
-                      </td>
-                      <td className="p-4">
-                        <span
-                          className={`px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap ${person.status === "Available" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}`}
-                        >
-                          {language === "am" ? person.statusAm : person.status}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden w-24">
-                            <div
-                              className={`h-full ${person.activeCount === person.limit ? "bg-red-500" : "bg-brand-500"}`}
-                              style={{
-                                width: `${(person.activeCount / person.limit) * 100}%`,
-                              }}
-                            ></div>
-                          </div>
-                          <span className="text-xs font-bold text-gray-500">
-                            {person.activeCount}/{person.limit}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          <Link 
-                            href={`/pharmacy/messages?agent=${encodeURIComponent(person.name)}&tab=team`}
-                            className="text-brand-600 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 p-2 rounded-lg transition-colors"
-                            title="Message Agent"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
-                          </Link>
-                          <button className="text-sm font-bold text-gray-600 hover:text-gray-900">
-                            {t.edit}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 2 && (
-          <div className="flex items-center justify-center p-12 text-gray-500 text-center border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50 mt-4">
-            {t.performancePlaceholder}
-          </div>
-        )}
       </div>
 
       {/* Modals */}

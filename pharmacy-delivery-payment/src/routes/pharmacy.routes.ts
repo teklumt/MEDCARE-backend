@@ -6,13 +6,15 @@ import {
   createMedication,
   deleteMedication,
   getInventoryAlerts,
+  getMyDeliveryAgents,
   getMyPharmacy,
   getMyPharmacyInventory,
   getMyReviews,
   getPharmacyAnalytics,
   updateMedication,
   updateMyPharmacy,
-  verifyPrescription
+  verifyPrescription,
+  rejectPrescription
 } from '../controllers/pharmacies.controller';
 import { getPharmacyOrders } from '../controllers/orders.controller';
 
@@ -21,6 +23,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 router.get('/me', authenticate, authorizeRoles('pharmacy'), getMyPharmacy);
 router.put('/me', authenticate, authorizeRoles('pharmacy'), updateMyPharmacy);
+router.get('/me/delivery-agents', authenticate, authorizeRoles('pharmacy'), getMyDeliveryAgents);
 router.get('/me/orders', authenticate, authorizeRoles('pharmacy'), getPharmacyOrders);
 router.get('/me/inventory', authenticate, authorizeRoles('pharmacy'), getMyPharmacyInventory);
 router.post('/me/inventory', authenticate, authorizeRoles('pharmacy'), createMedication);
@@ -32,5 +35,6 @@ router.get('/me/analytics', authenticate, authorizeRoles('pharmacy'), getPharmac
 router.get('/me/reviews', authenticate, authorizeRoles('pharmacy'), getMyReviews);
 
 router.patch('/prescriptions/:id/verify', authenticate, authorizeRoles('pharmacy'), verifyPrescription);
+router.patch('/prescriptions/:id/reject', authenticate, authorizeRoles('pharmacy'), rejectPrescription);
 
 export default router;

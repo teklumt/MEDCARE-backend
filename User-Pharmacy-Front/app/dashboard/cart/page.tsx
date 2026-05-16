@@ -1,15 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import DashboardNavbar from '@/components/DashboardNavbar';
 import { motion } from 'motion/react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Trash2, Plus, Minus, Upload, MapPin, Store, CheckCircle2, AlertCircle, CreditCard, Clock, ShoppingCart, Pill, FileText, Loader2 } from 'lucide-react';
+import { ChevronLeft, Trash2, Plus, Minus, Upload, MapPin, Store, CheckCircle2, AlertCircle, CreditCard, Clock, ShoppingCart, Pill, FileText, Loader2, X } from 'lucide-react';
 import { useCart } from '@/lib/CartContext';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { apiPost } from '@/lib/api';
+import {
+  apiPost,
+  submitOrderForPrescriptionReview,
+  getUserAddresses,
+  getPharmacyById,
+  type UserAddress
+} from '@/lib/api';
+import DeliveryAddressEditor, {
+  addressToFormValue,
+  emptyDeliveryAddressForm,
+  formValueToPayload,
+  type DeliveryAddressFormValue
+} from '@/components/dashboard/DeliveryAddressEditor';
+import { formatDeliveryAddressForDisplay, toGeoJsonPoint } from '@/lib/mapGeo';
+import { haversineKm, mapPharmacyToCard, formatDistanceKm } from '@/lib/pharmacyGeo';
+import { useUserLocation } from '@/lib/useUserLocation';
 
 export default function CartPage() {
   const { t } = useLanguage();
@@ -20,7 +35,13 @@ export default function CartPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'chapa' | 'cod'>('chapa');
+  const [deliveryForm, setDeliveryForm] = useState<DeliveryAddressFormValue>(emptyDeliveryAddressForm);
+  const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [pharmacyDistance, setPharmacyDistance] = useState<string | null>(null);
   const router = useRouter();
+  const { position, usingFallback } = useUserLocation();
 
   const deliveryFee = deliveryMethod === 'delivery' ? 50.00 : 0;
   const finalTotal = cartTotal + deliveryFee;
@@ -29,12 +50,111 @@ export default function CartPage() {
 
   // Get pharmacy ID from cart items (all items should be from same pharmacy)
   const selectedPharmacyId = items.length > 0 ? items[0].pharmacyId : null;
+  const selectedPharmacyName = items.length > 0 ? items[0].pharmacyName : 'Pharmacy';
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoadingAddresses(true);
+      try {
+        const list = await getUserAddresses();
+        if (cancelled) return;
+        setSavedAddresses(list);
+        const def = list.find((a) => a.isDefault) ?? list[0];
+        if (def) setDeliveryForm(addressToFormValue(def));
+      } catch {
+        if (!cancelled) setSavedAddresses([]);
+      } finally {
+        if (!cancelled) setLoadingAddresses(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPharmacyId || usingFallback) return;
+    let cancelled = false;
+    void getPharmacyById(selectedPharmacyId).then((pharm) => {
+      if (cancelled) return;
+      const card = mapPharmacyToCard(pharm);
+      if (!card.position) return;
+      const km = haversineKm(position, card.position);
+      setPharmacyDistance(formatDistanceKm(km));
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPharmacyId, position, usingFallback]);
+
+  const resolveDeliveryPayload = () => {
+    if (deliveryMethod !== 'delivery') return undefined;
+    const payload = formValueToPayload(deliveryForm);
+    if (!payload) throw new Error('Please set your delivery address and map pin.');
+    return payload;
+  };
 
   const handlePrescriptionUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setPrescriptionFile(file);
       setPrescriptionUploaded(true);
+    }
+  };
+
+  const handleSendForReview = async () => {
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      if (!selectedPharmacyId) {
+        throw new Error('Unable to determine pharmacy. Please try adding items to cart again.');
+      }
+
+      let prescriptionUploadId: string | null = null;
+      if (requiresPrescription && prescriptionFile) {
+        const formData = new FormData();
+        formData.append('file', prescriptionFile);
+        try {
+          const uploadRes = await apiPost<{ _id: string }>('/prescriptions/upload', formData);
+          prescriptionUploadId = uploadRes.data?._id ?? null;
+        } catch {
+          throw new Error('Failed to upload prescription. Please try again.');
+        }
+      }
+
+      const deliveryAddress = resolveDeliveryPayload();
+
+      const orderPayload = {
+        pharmacyId: selectedPharmacyId,
+        deliveryMethod,
+        deliveryAddress,
+        deliveryInstructions: '',
+        items: items.map((item) => ({
+          medicationId: item.id,
+          quantity: item.quantity
+        })),
+        paymentMethod,
+        deliveryFee,
+        discount: 0,
+        prescriptionUploadId
+      };
+
+      const data = await submitOrderForPrescriptionReview(orderPayload);
+      clearCart();
+
+      const created = data.order;
+      const nextId = created._id;
+      if (nextId) {
+        router.push(`/dashboard/orders/${nextId}`);
+      }
+    } catch (err: unknown) {
+      console.error('Send for review error:', err);
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -48,31 +168,9 @@ export default function CartPage() {
         throw new Error('Unable to determine pharmacy. Please try adding items to cart again.');
       }
 
-      // 1. Upload prescription if required
-      let prescriptionUploadId = null;
-      if (requiresPrescription && prescriptionFile) {
-        const formData = new FormData();
-        formData.append('file', prescriptionFile);
-        
-        try {
-          const uploadRes = await apiPost<{ _id: string }>('/prescriptions/upload', formData);
-          prescriptionUploadId = uploadRes.data?._id;
-        } catch (err: any) {
-          throw new Error('Failed to upload prescription. Please try again.');
-        }
-      }
+      // Non–prescription cart: payment starts immediately (Chapa or COD).
+      const deliveryAddress = resolveDeliveryPayload();
 
-      // 2. Get user address (mock for now - should come from user profile)
-      const deliveryAddress = deliveryMethod === 'delivery' ? {
-        recipientName: 'Abebe Kebede',
-        phone: '0911234567',
-        street: 'Bole Road, Dembel City Center',
-        subCity: 'Bole',
-        city: 'Addis Ababa',
-        additionalInfo: 'Green gate'
-      } : undefined;
-
-      // 3. Create order with payment
       const orderData = {
         pharmacyId: selectedPharmacyId,
         deliveryMethod,
@@ -85,26 +183,23 @@ export default function CartPage() {
         paymentMethod,
         deliveryFee,
         discount: 0,
-        prescriptionUploadId
+        prescriptionUploadId: null as string | null
       };
 
-      const response = await apiPost<{ order: { _id: string }; payment: { checkoutUrl?: string } }>('/orders', orderData);
+      const response = await apiPost<{ order: { _id: string }; payment: { checkoutUrl?: string } | null }>('/orders', orderData);
       const { order, payment } = response.data || {};
 
-      // 4. Clear cart
       clearCart();
 
-      // 5. Redirect based on payment method
       if (paymentMethod === 'chapa' && payment?.checkoutUrl) {
-        // Redirect to Chapa checkout
         window.location.href = payment.checkoutUrl;
       } else if (order?._id) {
-        // COD order - redirect to order page
         router.push(`/dashboard/orders/${order._id}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Checkout error:', err);
-      setError(err.message || 'Checkout failed. Please try again.');
+      setError(err instanceof Error ? err.message : 'Checkout failed. Please try again.');
+    } finally {
       setIsProcessing(false);
     }
   };
@@ -162,11 +257,16 @@ export default function CartPage() {
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-                        Aksum Pharmacy
+                        {selectedPharmacyName}
                         <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                       </h3>
                       <p className="text-sm text-gray-500 flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5" /> Bole, Addis Ababa <span className="ml-1 font-medium text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full text-xs">1.2 km away</span>
+                        <MapPin className="w-3.5 h-3.5" /> {items[0]?.pharmacyName ? 'Pharmacy order' : 'Addis Ababa'}
+                        {pharmacyDistance && (
+                          <span className="ml-1 font-medium text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full text-xs">
+                            {pharmacyDistance} away
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -333,13 +433,21 @@ export default function CartPage() {
                   <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
                     <div className="flex justify-between items-start mb-2">
                       <h4 className="font-bold text-gray-900 text-sm">{t('cart.deliveryAddress')}</h4>
-                      <button className="text-brand-700 text-sm font-bold hover:underline">{t('cart.edit')}</button>
+                      <button
+                        type="button"
+                        onClick={() => setAddressModalOpen(true)}
+                        className="text-brand-700 text-sm font-bold hover:underline"
+                      >
+                        {t('cart.edit')}
+                      </button>
                     </div>
-                    <p className="text-gray-600 text-sm">
-                      Abebe Kebede<br/>
-                      Bole Road, Dembel City Center<br/>
-                      Addis Ababa, Ethiopia<br/>
-                      +251 911 000000
+                    <p className="text-gray-600 text-sm whitespace-pre-line">
+                      {deliveryForm.pin
+                        ? formatDeliveryAddressForDisplay(
+                            { ...deliveryForm, coordinates: toGeoJsonPoint(deliveryForm.pin) },
+                            { multiline: true }
+                          )
+                        : 'No delivery address set. Tap Edit to add your address and map pin.'}
                     </p>
                   </div>
                 )}
@@ -406,8 +514,8 @@ export default function CartPage() {
                 </div>
 
                 <button 
-                  disabled={requiresPrescription && !prescriptionUploaded || isProcessing}
-                  onClick={handleCheckout}
+                  disabled={(requiresPrescription && !prescriptionUploaded) || isProcessing}
+                  onClick={requiresPrescription ? handleSendForReview : handleCheckout}
                   className="w-full bg-brand-900 hover:bg-brand-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 rounded-2xl font-bold text-lg transition-colors flex items-center justify-center gap-2 shadow-sm mb-4"
                 >
                   {isProcessing ? (
@@ -415,10 +523,20 @@ export default function CartPage() {
                       <Loader2 className="w-5 h-5 animate-spin" />
                       Processing...
                     </>
+                  ) : requiresPrescription ? (
+                    'Send for prescription verification'
+                  ) : paymentMethod === 'chapa' ? (
+                    'Proceed to Payment'
                   ) : (
-                    paymentMethod === 'chapa' ? 'Proceed to Payment' : 'Place Order'
+                    'Place Order'
                   )}
                 </button>
+
+                {requiresPrescription && prescriptionUploaded && (
+                  <p className="text-xs text-gray-500 text-center mb-4">
+                    Payment starts after the pharmacy accepts your prescription. You will complete payment from your order page.
+                  </p>
+                )}
                 
                 {requiresPrescription && !prescriptionUploaded && (
                   <p className="text-xs text-red-500 text-center mb-4">
@@ -438,6 +556,37 @@ export default function CartPage() {
           </div>
         )}
       </div>
+
+      {addressModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900">Delivery address</h3>
+              <button type="button" onClick={() => setAddressModalOpen(false)} aria-label="Close">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <DeliveryAddressEditor
+                value={deliveryForm}
+                onChange={setDeliveryForm}
+                savedAddresses={savedAddresses}
+                loadingAddresses={loadingAddresses}
+                onPickSaved={(addr) => setDeliveryForm(addressToFormValue(addr))}
+              />
+            </div>
+            <div className="p-4 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAddressModalOpen(false)}
+                className="px-5 py-2.5 bg-brand-600 text-white font-bold rounded-xl"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

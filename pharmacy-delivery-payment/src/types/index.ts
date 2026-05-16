@@ -10,6 +10,10 @@ export interface IUserAddress {
   city?: string;
   additionalInfo?: string;
   isDefault?: boolean;
+  coordinates?: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
 }
 
 export interface IUser extends Document {
@@ -17,7 +21,7 @@ export interface IUser extends Document {
   email: string;
   phone: string;
   passwordHash: string;
-  role: 'patient' | 'pharmacy' | 'admin';
+  role: 'patient' | 'pharmacy' | 'admin' | 'delivery';
   language: 'en' | 'am';
   isActive: boolean;
   isLocked: boolean;
@@ -48,6 +52,7 @@ export interface IPharmacy extends Document {
   openingHours?: string;
   deliveryAvailable: boolean;
   deliveryFee: number;
+  deliveryRadiusKm?: number;
   license: {
     businessLicenseNumber?: string;
     businessLicenseExpiry?: Date;
@@ -120,6 +125,7 @@ export interface IOrder extends Document {
   patientId: Types.ObjectId;
   pharmacyId: Types.ObjectId;
   paymentId?: Types.ObjectId;
+  deliveryAgentId?: Types.ObjectId | null;
   deliveryMethod: 'pickup' | 'delivery';
   deliveryAddress?: {
     recipientName?: string;
@@ -128,6 +134,15 @@ export interface IOrder extends Document {
     subCity?: string;
     city?: string;
     additionalInfo?: string;
+    coordinates?: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+  };
+  driverLocation?: {
+    lat?: number;
+    lng?: number;
+    updatedAt?: Date;
   };
   deliveryInstructions?: string;
   prescriptionUploadId?: Types.ObjectId | null;
@@ -143,6 +158,8 @@ export interface IOrder extends Document {
   statusHistory: IOrderStatusHistory[];
   estimatedReadyAt?: Date;
   estimatedDeliveryAt?: Date;
+  tripStartedAt?: Date | null;
+  driverHandoffAt?: Date | null;
   deliveredAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -177,12 +194,15 @@ export interface IPrescriptionUpload extends Document {
   fileType: 'image' | 'pdf';
   verifiedById?: Types.ObjectId | null;
   verifiedAt?: Date | null;
+  rejectedAt?: Date | null;
+  rejectedReason?: string | null;
+  rejectedById?: Types.ObjectId | null;
   uploadedAt: Date;
 }
 
 export interface IConversation extends Document {
   relatedOrderId?: Types.ObjectId;
-  participants: Array<{ userId: Types.ObjectId; name: string; role: 'patient' | 'pharmacy' }>;
+  participants: Array<{ userId: Types.ObjectId; name: string; role: 'patient' | 'pharmacy' | 'delivery' }>;
   lastMessage?: { content: string; senderId: Types.ObjectId; sentAt: Date };
   createdAt: Date;
   updatedAt: Date;
@@ -195,6 +215,8 @@ export interface IMessage extends Document {
   content: string;
   isRead: boolean;
   sentAt: Date;
+  /** user = normal chat; system = automated intro (never from client POST) */
+  kind?: 'user' | 'system';
 }
 
 export interface IReview extends Document {
@@ -220,8 +242,10 @@ export interface IHospital extends Document {
 }
 
 export interface IComplaint extends Document {
+  ref: string;
   reporterId: Types.ObjectId;
   reporterName?: string;
+  reporterRole: 'patient' | 'pharmacy';
   targetType: 'pharmacy' | 'system';
   targetId?: Types.ObjectId;
   targetName?: string;

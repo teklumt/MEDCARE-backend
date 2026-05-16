@@ -1,10 +1,16 @@
 'use client';
 
-import { DollarSign, ShoppingCart, Clock, Star, Download, TrendingUp, TrendingDown, Globe, ChevronDown } from 'lucide-react';
+import { DollarSign, ShoppingCart, Star, TrendingUp, TrendingDown, Globe, ChevronDown } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import ViewReviewsModal from '@/components/pharmacy/ViewReviewsModal';
+import {
+  getMyPharmacy,
+  getMyPharmacyReviews,
+  type MyPharmacyProfile,
+  type PharmacyReviewItem
+} from '@/lib/api';
 
 const REVENUE_DATA = [
   { name: 'Mon', revenue: 4000, orders: 24 },
@@ -42,11 +48,9 @@ const TRANSLATIONS = {
     last3m: 'Last 3 Months',
     totRev: 'Total Revenue',
     totOrd: 'Total Orders',
-    avgDel: 'Avg. Delivery Time',
     custRating: 'Customer Rating',
     revTrend: 'Revenue & Orders Trend',
     reviewSumm: 'Review Summary',
-    basedOn: 'Based on 124 reviews',
     viewAllRev: 'View All Reviews',
     topMed: 'Top Selling Medications',
     thMed: 'Medication',
@@ -65,11 +69,9 @@ const TRANSLATIONS = {
     last3m: 'ያለፉት 3 ወራት',
     totRev: 'አጠቃላይ ገቢ',
     totOrd: 'አጠቃላይ ትዕዛዞች',
-    avgDel: 'አማካይ የማድረስ ጊዜ',
     custRating: 'የደንበኛ ደረጃ',
     revTrend: 'የገቢ እና ትዕዛዞች አዝማሚያ',
     reviewSumm: 'የግምገማ ማጠቃለያ',
-    basedOn: 'በ 124 ግምገማዎች ላይ የተመሰረተ',
     viewAllRev: 'ሁሉንም ግምገማዎች ይመልከቱ',
     topMed: 'በብዛት የተሸጡ መድሃኒቶች',
     thMed: 'መድሃኒት',
@@ -86,6 +88,57 @@ export default function AnalyticsPage() {
   const { language, setLanguage } = useLanguage();
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [isReviewsOpen, setIsReviewsOpen] = useState(false);
+  const [profile, setProfile] = useState<MyPharmacyProfile | null>(null);
+  const [reviewsList, setReviewsList] = useState<PharmacyReviewItem[]>([]);
+  const [insightsLoading, setInsightsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setInsightsLoading(true);
+      try {
+        const [prof, revs] = await Promise.all([
+          getMyPharmacy(),
+          getMyPharmacyReviews().catch(() => [] as PharmacyReviewItem[])
+        ]);
+        if (!cancelled) {
+          setProfile(prof);
+          setReviewsList(revs);
+        }
+      } catch {
+        if (!cancelled) {
+          setProfile(null);
+          setReviewsList([]);
+        }
+      } finally {
+        if (!cancelled) setInsightsLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const reviewCount = profile?.stats?.reviewCount ?? reviewsList.length;
+  const avgRating =
+    profile?.stats?.rating != null && profile.stats.rating > 0
+      ? profile.stats.rating
+      : reviewsList.length > 0
+        ? reviewsList.reduce((s, r) => s + Number(r.rating), 0) / reviewsList.length
+        : 0;
+  const ratingDisplay = avgRating > 0 ? avgRating.toFixed(1) : '—';
+
+  const starPercents = useMemo(() => {
+    const counts = [0, 0, 0, 0, 0];
+    for (const r of reviewsList) {
+      const k = Math.min(5, Math.max(1, Math.round(Number(r.rating))));
+      counts[k - 1]++;
+    }
+    const total = counts.reduce((a, b) => a + b, 0);
+    if (!total) return [0, 0, 0, 0, 0];
+    return counts.map((c) => Math.round((c / total) * 100));
+  }, [reviewsList]);
 
   
   const toggleLanguage = (lang: 'en' | 'am') => {
@@ -142,7 +195,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
           <div className="flex justify-between items-start mb-4">
             <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
@@ -171,25 +224,21 @@ export default function AnalyticsPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
           <div className="flex justify-between items-start mb-4">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <Clock className="w-5 h-5" />
-            </div>
-            <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-              <TrendingDown className="w-3 h-3" /> -2m
-            </span>
-          </div>
-          <h3 className="text-gray-500 text-sm font-medium mb-1">{t.avgDel}</h3>
-          <p className="text-3xl font-bold text-brand-950">28 <span className="text-lg text-gray-500 font-normal">{language === 'am' ? 'ደቂቃ' : 'mins'}</span></p>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-          <div className="flex justify-between items-start mb-4">
             <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
               <Star className="w-5 h-5" />
             </div>
           </div>
           <h3 className="text-gray-500 text-sm font-medium mb-1">{t.custRating}</h3>
-          <p className="text-3xl font-bold text-brand-950">4.8 <span className="text-lg text-gray-500 font-normal">/ 5</span></p>
+          <p className="text-3xl font-bold text-brand-950">
+            {insightsLoading ? (
+              <span className="inline-block h-9 w-16 bg-gray-100 animate-pulse rounded-md align-middle" />
+            ) : (
+              <>
+                {ratingDisplay}{' '}
+                <span className="text-lg text-gray-500 font-normal">/ 5</span>
+              </>
+            )}
+          </p>
         </div>
       </div>
 
@@ -220,12 +269,31 @@ export default function AnalyticsPage() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <h2 className="text-lg font-bold text-brand-950 mb-6">{t.reviewSumm}</h2>
           <div className="flex items-center gap-4 mb-6">
-            <div className="text-5xl font-bold text-brand-950">4.8</div>
+            <div className="text-5xl font-bold text-brand-950">
+              {insightsLoading ? (
+                <span className="inline-block h-14 w-20 bg-gray-100 animate-pulse rounded-lg" />
+              ) : (
+                ratingDisplay
+              )}
+            </div>
             <div>
               <div className="flex text-amber-400 mb-1">
-                <Star className="w-5 h-5 fill-current" /><Star className="w-5 h-5 fill-current" /><Star className="w-5 h-5 fill-current" /><Star className="w-5 h-5 fill-current" /><Star className="w-5 h-5 fill-current" />
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Star
+                    key={s}
+                    className={`w-5 h-5 ${s <= Math.round(avgRating) && avgRating > 0 ? 'fill-current' : 'text-gray-200 fill-transparent'}`}
+                  />
+                ))}
               </div>
-              <p className="text-sm text-gray-500">{t.basedOn}</p>
+              <p className="text-sm text-gray-500">
+                {insightsLoading ? (
+                  <span className="inline-block h-4 w-40 bg-gray-100 animate-pulse rounded" />
+                ) : language === 'am' ? (
+                  `በ ${reviewCount} ግምገማዎች ላይ የተመሰረተ`
+                ) : (
+                  `Based on ${reviewCount} ${reviewCount === 1 ? 'review' : 'reviews'}`
+                )}
+              </p>
             </div>
           </div>
           <div className="space-y-2">
@@ -234,7 +302,12 @@ export default function AnalyticsPage() {
                 <span className="w-3 text-gray-600 font-medium">{star}</span>
                 <Star className="w-3 h-3 text-amber-400 fill-current" />
                 <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-400" style={{ width: `${star === 5 ? 80 : star === 4 ? 15 : star === 3 ? 3 : star === 2 ? 1 : 1}%` }}></div>
+                  <div
+                    className="h-full bg-amber-400 transition-all min-w-0"
+                    style={{
+                      width: `${insightsLoading ? 0 : starPercents[star - 1]}%`
+                    }}
+                  />
                 </div>
               </div>
             ))}
@@ -285,11 +358,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <ViewReviewsModal 
-        isOpen={isReviewsOpen} 
-        onClose={() => setIsReviewsOpen(false)} 
-        pharmacyId="pharmacy-1" 
-      />
+      <ViewReviewsModal isOpen={isReviewsOpen} onClose={() => setIsReviewsOpen(false)} />
     </div>
   );
 }

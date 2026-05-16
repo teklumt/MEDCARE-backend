@@ -16,6 +16,8 @@ import hospitalsRoutes from './routes/hospitals.routes';
 import alertsRoutes from './routes/alerts.routes';
 import complaintsRoutes from './routes/complaints.routes';
 import searchRoutes from './routes/search.routes';
+import deliveryRoutes from './routes/delivery.routes';
+import medcareAiRoutes from './routes/medcare-ai.routes';
 
 // Initialize Express app
 const app: Application = express();
@@ -50,6 +52,8 @@ app.use('/api/v1/conversations', conversationsRoutes);
 app.use('/api/v1/hospitals', hospitalsRoutes);
 app.use('/api/v1/alerts', alertsRoutes);
 app.use('/api/v1/complaints', complaintsRoutes);
+app.use('/api/v1/delivery', deliveryRoutes);
+app.use('/api/v1/medcare-ai', medcareAiRoutes);
 
 // API info
 app.get('/api/v1', (_req: Request, res: Response) => {
@@ -69,7 +73,9 @@ app.get('/api/v1', (_req: Request, res: Response) => {
       conversations: '/api/v1/conversations',
       hospitals: '/api/v1/hospitals',
       alerts: '/api/v1/alerts',
-      complaints: '/api/v1/complaints'
+      complaints: '/api/v1/complaints',
+      delivery: '/api/v1/delivery',
+      medcareAi: '/api/v1/medcare-ai'
     }
   });
 });

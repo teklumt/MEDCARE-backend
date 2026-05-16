@@ -98,6 +98,13 @@ export const uploadPrescription = multer({
   fileFilter: fileFilter
 });
 
+/** In-memory only; forwards to OCR webhook (no persistence). Max 10MB per integration spec. */
+export const scanPrescriptionMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter
+});
+
 // Helper to get file URL
 export const getFileUrl = (file: Express.Multer.File): string => {
   // Check if file was uploaded to Cloudinary (has path property from CloudinaryStorage)

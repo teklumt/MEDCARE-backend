@@ -9,6 +9,21 @@ import { errorResponse, successResponse } from "../../utils/response.js";
 import { getPagination } from "../../utils/pagination.js";
 import { sendMail } from "../../utils/mailer.js";
 import { logAudit } from "../../utils/audit.js";
+import { logger } from "../../utils/logger.js";
+
+/** Mongoose subdocument spread omits nested paths; `documents` must not be undefined for nested schema. */
+function plainVerificationFrom(verification: unknown): Record<string, unknown> {
+  if (verification == null) {
+    return { documents: {} };
+  }
+  const sub = verification as { toObject?: () => Record<string, unknown> };
+  const plain =
+    typeof sub.toObject === "function"
+      ? sub.toObject()
+      : { ...(verification as Record<string, unknown>) };
+  const documents = plain.documents != null ? plain.documents : {};
+  return { ...plain, documents };
+}
 
 export const licenseVerificationRouter = Router();
 licenseVerificationRouter.use(requireAuth);
@@ -62,11 +77,30 @@ licenseVerificationRouter.get("/expiring", requireRole("admin"), async (_req, re
 });
 
 licenseVerificationRouter.get("/:id", requireRole("admin"), async (req, res) => {
-  const pharmacy = await Pharmacy.findById(req.params.id).lean();
+  const pharmacy = await Pharmacy.findById(req.params.id).populate("ownerId", "username").lean();
   if (!pharmacy) return errorResponse(res, "Pharmacy not found", "NOT_FOUND", 404);
+
+  const ownerRef = pharmacy.ownerId as unknown;
+  let ownerIdStr: string;
+  let ownerName: string | null = null;
+  if (ownerRef && typeof ownerRef === "object" && "_id" in ownerRef) {
+    ownerIdStr = String((ownerRef as { _id: unknown })._id);
+    ownerName =
+      "username" in ownerRef && typeof (ownerRef as { username?: string }).username === "string"
+        ? (ownerRef as { username: string }).username
+        : null;
+  } else {
+    ownerIdStr = String(pharmacy.ownerId ?? "");
+  }
+
   return successResponse(res, {
     pharmacyId: pharmacy._id,
     businessName: pharmacy.businessName,
+    location: pharmacy.location || pharmacy.address,
+    email: pharmacy.email,
+    phone: pharmacy.phone,
+    ownerId: ownerIdStr,
+    ownerName,
     license: pharmacy.license,
     verification: pharmacy.verification,
   });
@@ -77,12 +111,13 @@ licenseVerificationRouter.patch("/:id/approve", requireRole("admin"), async (req
   if (!pharmacy) return errorResponse(res, "Pharmacy not found", "NOT_FOUND", 404);
 
   pharmacy.verification = {
-    ...(pharmacy.verification ?? {}),
+    ...plainVerificationFrom(pharmacy.verification),
     status: "approved",
     verifiedById: req.admin!.id as any,
     verifiedAt: new Date(),
     rejectionNote: null,
   } as any;
+  pharmacy.isActive = true;
   await pharmacy.save();
 
   if (pharmacy?.email) {
@@ -100,11 +135,17 @@ licenseVerificationRouter.patch(
   validateRequest,
   async (req, res) => {
     const { reason } = req.body as { reason: string };
+    logger.info("[license.reject] request", {
+      pharmacyId: req.params.id,
+      actorId: req.admin?.id,
+      reasonLength: reason.length,
+    });
+
     const pharmacy = await Pharmacy.findById(req.params.id);
     if (!pharmacy) return errorResponse(res, "Pharmacy not found", "NOT_FOUND", 404);
 
     pharmacy.verification = {
-      ...(pharmacy.verification ?? {}),
+      ...plainVerificationFrom(pharmacy.verification),
       status: "rejected",
       verifiedById: req.admin!.id as any,
       verifiedAt: new Date(),
@@ -117,6 +158,7 @@ licenseVerificationRouter.patch(
     }
 
     await logAudit(req, "license.reject", "Pharmacy", String(pharmacy._id), { reason });
+    logger.info("[license.reject] ok", { pharmacyId: String(pharmacy._id) });
     return successResponse(res, { id: pharmacy._id, status: pharmacy.verification?.status });
   },
 );
@@ -133,7 +175,7 @@ licenseVerificationRouter.patch(
     if (!pharmacy) return errorResponse(res, "Pharmacy not found", "NOT_FOUND", 404);
 
     pharmacy.verification = {
-      ...(pharmacy.verification ?? {}),
+      ...plainVerificationFrom(pharmacy.verification),
       status: "rejected",
       verifiedById: req.admin!.id as any,
       verifiedAt: new Date(),
@@ -158,8 +200,9 @@ licenseVerificationRouter.post(
     if (!pharmacy) return errorResponse(res, "Pharmacy not found", "NOT_FOUND", 404);
 
     pharmacy.verification = {
-      ...(pharmacy.verification ?? {}),
-      status: pharmacy.verification?.status ?? "pending",
+      ...plainVerificationFrom(pharmacy.verification),
+      status: "needs_docs",
+      rejectionNote: note,
     } as any;
     await pharmacy.save();
 

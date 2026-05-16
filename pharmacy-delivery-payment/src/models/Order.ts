@@ -9,6 +9,7 @@ const orderSchema = new Schema<IOrder>(
     patientId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     pharmacyId: { type: Schema.Types.ObjectId, ref: 'Pharmacy', required: true },
     paymentId: { type: Schema.Types.ObjectId, ref: 'Payment' },
+    deliveryAgentId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     deliveryMethod: { type: String, enum: DELIVERY_METHODS, required: true },
     deliveryAddress: {
       recipientName: { type: String },
@@ -16,7 +17,16 @@ const orderSchema = new Schema<IOrder>(
       street: { type: String },
       subCity: { type: String },
       city: { type: String },
-      additionalInfo: { type: String }
+      additionalInfo: { type: String },
+      coordinates: {
+        type: { type: String, enum: ['Point'], default: 'Point' },
+        coordinates: { type: [Number] }
+      }
+    },
+    driverLocation: {
+      lat: { type: Number },
+      lng: { type: Number },
+      updatedAt: { type: Date }
     },
     deliveryInstructions: { type: String },
     prescriptionUploadId: { type: Schema.Types.ObjectId, ref: 'PrescriptionUpload', default: null },
@@ -49,6 +59,8 @@ const orderSchema = new Schema<IOrder>(
     ],
     estimatedReadyAt: { type: Date },
     estimatedDeliveryAt: { type: Date },
+    tripStartedAt: { type: Date },
+    driverHandoffAt: { type: Date },
     deliveredAt: { type: Date }
   },
   { 
@@ -79,6 +91,7 @@ orderSchema.index({ orderId: 1 }, { unique: true, sparse: true });
 orderSchema.index({ ref: 1 }, { unique: true });
 orderSchema.index({ patientId: 1, createdAt: -1 });
 orderSchema.index({ pharmacyId: 1, status: 1 });
+orderSchema.index({ pharmacyId: 1, deliveryAgentId: 1 });
 orderSchema.index({ paymentId: 1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 

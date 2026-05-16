@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { 
   Users, Store, ShoppingCart, FileCheck, AlertOctagon, 
-  Activity, CheckCircle2, XCircle, Clock, Search, 
-  ChevronRight, ShieldAlert, Server, Database, Globe,
-  Eye, Download, AlertTriangle, ChevronDown
+  CheckCircle2, XCircle, Clock, Search, 
+  ChevronRight, ShieldAlert, Globe,
+  Eye, ChevronDown
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
-import { adminApi } from '@/lib/admin-api';
+import { adminApi, type BroadcastAlertType } from '@/lib/admin-api';
 import { authApi } from '@/lib/auth-api';
 
 const TRANSLATIONS = {
@@ -23,9 +24,11 @@ const TRANSLATIONS = {
     ordersToday: 'Orders Today',
     pendingVerifs: 'Pending Verifications',
     activeComplaints: 'Active Complaints',
-    systemUptime: 'System Uptime',
     platformTraffic: 'Platform Traffic',
     activeUsers24h: 'Active users over the last 24 hours',
+    trafficSubtitle24h: 'Orders in the last 24 hours (by hour, UTC)',
+    trafficSubtitle7d: 'Orders in the last 7 days (by day, UTC)',
+    trafficSubtitle30d: 'Orders in the last 30 days (by day, UTC)',
     last24Hours: 'Last 24 Hours',
     last7Days: 'Last 7 Days',
     last30Days: 'Last 30 Days',
@@ -45,7 +48,6 @@ const TRANSLATIONS = {
     broadcasting: 'Broadcasting...',
     recentComplaints: 'Recent Complaints',
     resolve: 'Resolve',
-    systemAuditLogs: 'System Audit Logs',
     outbreak: 'Disease Outbreak (e.g., Malaria, Cholera)',
     recall: 'Medication Recall',
     advisory: 'Emergency Health Advisory',
@@ -53,8 +55,6 @@ const TRANSLATIONS = {
     addisAbaba: 'Addis Ababa',
     amhara: 'Amhara Region',
     oromia: 'Oromia Region',
-    systemHealth: 'System Health',
-    auditLogs: 'Audit Logs',
     viewAllComplaints: 'View All Complaints'
   },
   am: {
@@ -65,9 +65,11 @@ const TRANSLATIONS = {
     ordersToday: 'የዛሬ ትዕዛዞች',
     pendingVerifs: 'በመጠባበቅ ላይ ያሉ ማረጋገጫዎች',
     activeComplaints: 'ንቁ ቅሬታዎች',
-    systemUptime: 'የስርዓት ጊዜ',
     platformTraffic: 'ትራፊክ መቆጣጠሪያ',
     activeUsers24h: 'ባለፉት 24 ሰዓታት ንቁ ተጠቃሚዎች',
+    trafficSubtitle24h: 'ባለፉት 24 ሰዓታት ትዕዛዞች (በሰዓት፣ UTC)',
+    trafficSubtitle7d: 'ባለፉት 7 ቀናት ትዕዛዞች (በቀን፣ UTC)',
+    trafficSubtitle30d: 'ባለፉት 30 ቀን ትዕዛዞች (በቀን፣ UTC)',
     last24Hours: 'ባለፉት 24 ሰዓታት',
     last7Days: 'ባለፉት 7 ቀናት',
     last30Days: 'ባለፉት 30 ቀናት',
@@ -87,7 +89,6 @@ const TRANSLATIONS = {
     broadcasting: 'እያስተላለፈ ነው...',
     recentComplaints: 'የቅርብ ጊዜ ቅሬታዎች',
     resolve: 'ፍታ',
-    systemAuditLogs: 'የስርዓት ክትትል ታሪክ',
     outbreak: 'የበሽታ መከሰት (ለምሳሌ ወባ፣ አተት)',
     recall: 'መድሃኒት መቀልበስ',
     advisory: 'የአደጋ ጊዜ ጤና ምክር',
@@ -95,21 +96,9 @@ const TRANSLATIONS = {
     addisAbaba: 'አዲስ አበባ',
     amhara: 'አማራ ክልል',
     oromia: 'ኦሮሚያ ክልል',
-    systemHealth: 'የስርዓት ጤና',
-    auditLogs: 'ክትትል ታሪክ',
     viewAllComplaints: 'ሁሉንም ቅሬታዎች ይመልከቱ'
   }
 };
-
-const TRAFFIC_DATA = [
-  { time: '00:00', users: 1200 },
-  { time: '04:00', users: 800 },
-  { time: '08:00', users: 3500 },
-  { time: '12:00', users: 5200 },
-  { time: '16:00', users: 4800 },
-  { time: '20:00', users: 6100 },
-  { time: '24:00', users: 2400 },
-];
 
 const INITIAL_VERIFICATIONS = [
   { id: 'V-1042', name: 'Addis Hope Pharmacy', location: 'Bole, Addis Ababa', time: '2 hours ago', status: 'pending' },
@@ -123,11 +112,20 @@ const INITIAL_COMPLAINTS = [
   { id: 'C-894', target: 'System', issue: 'Payment gateway error', reporter: 'Dawit T.', severity: 'high', time: '5 hrs ago' },
 ];
 
-const AUDIT_LOGS = [
-  { id: 1, admin: 'SuperAdmin', action: 'Approved license for Kenema Pharmacy', time: '10:42 AM' },
-  { id: 2, admin: 'System', action: 'Automated database backup completed', time: '03:00 AM' },
-  { id: 3, admin: 'Admin_Sarah', action: 'Suspended user account U-9921', time: 'Yesterday, 4:15 PM' },
-];
+const VERIFICATION_DOC_KEYS = ['businessRegistration', 'operatingLicense', 'inspectionReport'] as const;
+
+const VERIFICATION_DOC_LABELS: Record<(typeof VERIFICATION_DOC_KEYS)[number], string> = {
+  businessRegistration: 'Business Registration Certificate',
+  operatingLicense: 'Pharmacy Operating License',
+  inspectionReport: 'Facility Inspection Report',
+};
+
+const BROADCAST_REGION_VALUES = [
+  'All Regions (National)',
+  'Addis Ababa',
+  'Amhara Region',
+  'Oromia Region',
+] as const;
 
 export default function AdminDashboardPage() {
   const [showVerificationModal, setShowVerificationModal] = useState(false);
@@ -139,6 +137,14 @@ export default function AdminDashboardPage() {
   const [complaints, setComplaints] = useState(INITIAL_COMPLAINTS);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingVerificationTotal, setPendingVerificationTotal] = useState<number | null>(null);
+  const [verificationSubmitting, setVerificationSubmitting] = useState(false);
+
+  const router = useRouter();
+
+  const [trafficRange, setTrafficRange] = useState<'24h' | '7d' | '30d'>('24h');
+  const [trafficSeries, setTrafficSeries] = useState<Array<{ label: string; count: number }>>([]);
+  const [trafficLoading, setTrafficLoading] = useState(false);
 
   // Load dashboard data from backend
   useEffect(() => {
@@ -150,13 +156,16 @@ export default function AdminDashboardPage() {
         const analytics = await adminApi.getAnalytics();
         
         // Fetch recent data
-        const [users, pharmacies, orders, pendingVerifications, activeComplaints] = await Promise.all([
+        const [users, pharmacies, orders, pendingVerificationResult, activeComplaints] = await Promise.all([
           adminApi.getUsers({ limit: 5 }),
           adminApi.getPharmacies({ limit: 5 }),
           adminApi.getOrders({ limit: 5 }),
           adminApi.getVerifications({ status: 'pending', limit: 10 }),
           adminApi.getComplaints({ status: 'open', limit: 5 })
         ]);
+
+        const pendingVerifications = pendingVerificationResult.items;
+        setPendingVerificationTotal(pendingVerificationResult.meta?.total ?? pendingVerifications.length);
 
         setDashboardData({
           analytics,
@@ -173,25 +182,34 @@ export default function AdminDashboardPage() {
 
         // Update verifications with real data
         if (pendingVerifications.length > 0) {
-          setVerifications(pendingVerifications.map((v: any) => ({
-            id: v._id,
-            name: v.businessName,
-            location: v.location,
-            time: new Date(v.createdAt).toLocaleString(),
-            status: v.verification?.status || 'pending'
-          })));
+          setVerifications(
+            pendingVerifications.map((v: any) => ({
+              id: String(v._id),
+              name: v.businessName,
+              location: v.location || v.address || '-',
+              time: new Date(v.createdAt).toLocaleString(),
+              status: v.verification?.status || 'pending',
+              verification: v.verification,
+            })),
+          );
+        } else {
+          setVerifications([]);
         }
 
-        // Update complaints with real data
+        // Update complaints with real data (open queue from backend)
         if (activeComplaints.length > 0) {
-          setComplaints(activeComplaints.map((c: any) => ({
-            id: c._id,
-            target: c.targetName || 'System',
-            issue: c.subject,
-            reporter: c.reporterName || 'Anonymous',
-            severity: c.severity || 'medium',
-            time: new Date(c.createdAt).toLocaleString()
-          })));
+          setComplaints(
+            activeComplaints.map((c: any) => ({
+              id: c.ref ?? String(c._id),
+              target: c.targetName || c.targetType || 'System',
+              issue: typeof c.issue === 'string' && c.issue.trim() ? c.issue : '—',
+              reporter: c.reporterName || 'Anonymous',
+              severity: c.severity || 'medium',
+              time: c.createdAt ? new Date(c.createdAt).toLocaleString() : '—',
+            })),
+          );
+        } else {
+          setComplaints([]);
         }
 
       } catch (error) {
@@ -207,6 +225,27 @@ export default function AdminDashboardPage() {
       loadDashboardData();
     }
   }, []);
+
+  useEffect(() => {
+    if (!authApi.isAuthenticated()) return;
+    let cancelled = false;
+    const loadTraffic = async () => {
+      setTrafficLoading(true);
+      try {
+        const data = await adminApi.getTraffic(trafficRange);
+        if (!cancelled) setTrafficSeries(data.series ?? []);
+      } catch (error) {
+        console.error('Failed to load traffic series', error);
+        if (!cancelled) setTrafficSeries([]);
+      } finally {
+        if (!cancelled) setTrafficLoading(false);
+      }
+    };
+    loadTraffic();
+    return () => {
+      cancelled = true;
+    };
+  }, [trafficRange]);
   
   
   const toggleLanguage = (lang: 'en' | 'am') => {
@@ -216,9 +255,19 @@ export default function AdminDashboardPage() {
 
   const t = TRANSLATIONS[language];
 
-  // Broadcast Alert State
-  const [alertType, setAlertType] = useState('Disease Outbreak (e.g., Malaria, Cholera)');
-  const [alertRegion, setAlertRegion] = useState('All Regions (National)');
+  const trafficSubtitle =
+    trafficRange === '24h'
+      ? t.trafficSubtitle24h
+      : trafficRange === '7d'
+        ? t.trafficSubtitle7d
+        : t.trafficSubtitle30d;
+
+  const trafficAxisInterval =
+    trafficRange === '30d' ? 'preserveStartEnd' : trafficRange === '24h' ? 3 : 0;
+
+  // Broadcast Alert State — values must match Admin-Backend /alerts validation
+  const [alertType, setAlertType] = useState<BroadcastAlertType>('Disease Outbreak');
+  const [alertRegion, setAlertRegion] = useState<string>(BROADCAST_REGION_VALUES[0]);
   const [alertMessage, setAlertMessage] = useState('');
   const [alertDetails, setAlertDetails] = useState('');
   const [youtubeLink, setYoutubeLink] = useState('');
@@ -230,53 +279,130 @@ export default function AdminDashboardPage() {
     setShowVerificationModal(true);
   };
 
+  const refreshPendingVerifications = async () => {
+    try {
+      const { items, meta } = await adminApi.getVerifications({ status: 'pending', limit: 10 });
+      setPendingVerificationTotal(meta?.total ?? items.length);
+      setVerifications(
+        items.map((v: any) => ({
+          id: String(v._id),
+          name: v.businessName,
+          location: v.location || v.address || '-',
+          time: new Date(v.createdAt).toLocaleString(),
+          status: v.verification?.status || 'pending',
+          verification: v.verification,
+        })),
+      );
+    } catch {
+      /* keep existing list */
+    }
+  };
+
+  const handleVerificationApprove = async () => {
+    if (!selectedPharmacy || verificationSubmitting) return;
+    setVerificationSubmitting(true);
+    try {
+      await adminApi.updateVerification(selectedPharmacy.id, 'approved');
+      setShowVerificationModal(false);
+      setSelectedPharmacy(null);
+      await refreshPendingVerifications();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setVerificationSubmitting(false);
+    }
+  };
+
+  const handleVerificationReject = async () => {
+    if (!selectedPharmacy || verificationSubmitting) return;
+    const reason = window.prompt('Rejection reason (min 3 characters):');
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      alert('Reason must be at least 3 characters.');
+      return;
+    }
+    setVerificationSubmitting(true);
+    try {
+      await adminApi.updateVerification(selectedPharmacy.id, 'rejected', reason.trim());
+      setShowVerificationModal(false);
+      setSelectedPharmacy(null);
+      await refreshPendingVerifications();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setVerificationSubmitting(false);
+    }
+  };
+
+  const handleVerificationNeedsDocs = async () => {
+    if (!selectedPharmacy || verificationSubmitting) return;
+    const note = window.prompt('Note for the pharmacy (min 2 characters):');
+    if (note === null) return;
+    if (note.trim().length < 2) {
+      alert('Note must be at least 2 characters.');
+      return;
+    }
+    setVerificationSubmitting(true);
+    try {
+      await adminApi.updateVerification(selectedPharmacy.id, 'needs_docs', note.trim());
+      setShowVerificationModal(false);
+      setSelectedPharmacy(null);
+      await refreshPendingVerifications();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setVerificationSubmitting(false);
+    }
+  };
+
   const handleBroadcastAlert = async () => {
-    if (!alertMessage.trim()) return;
-    
+    const trimmedMessage = alertMessage.trim();
+    if (!trimmedMessage) return;
+    if (trimmedMessage.length < 5) {
+      alert('Message must be at least 5 characters.');
+      return;
+    }
+
+    const detailsTrimmed = alertDetails.trim();
+    const youtubeTrimmed = youtubeLink.trim();
+
     setIsBroadcasting(true);
-    
+
     try {
       await adminApi.createAlert({
         type: alertType,
         region: alertRegion,
-        message: alertMessage,
-        details: alertDetails,
-        youtubeLink: youtubeLink
+        message: trimmedMessage,
+        ...(detailsTrimmed ? { details: detailsTrimmed } : {}),
+        ...(youtubeTrimmed ? { youtubeLink: youtubeTrimmed } : {}),
       });
 
-      // Also store locally for immediate UI feedback
-      localStorage.setItem('medcare_broadcast_alert', JSON.stringify({
-        type: alertType,
-        region: alertRegion,
-        message: alertMessage,
-        details: alertDetails,
-        youtubeLink: youtubeLink,
-        timestamp: Date.now(),
-        active: true
-      }));
+      localStorage.setItem(
+        'medcare_broadcast_alert',
+        JSON.stringify({
+          type: alertType,
+          region: alertRegion,
+          message: trimmedMessage,
+          details: detailsTrimmed || undefined,
+          youtubeLink: youtubeTrimmed || undefined,
+          timestamp: Date.now(),
+          active: true,
+        }),
+      );
 
       setHasBroadcasted(true);
       setAlertMessage('');
       setAlertDetails('');
       setYoutubeLink('');
-      
+
       setTimeout(() => {
         setHasBroadcasted(false);
       }, 3000);
-
     } catch (error) {
       console.error('Failed to broadcast alert:', error);
-      alert('Failed to broadcast alert. Please try again.');
+      alert((error as Error).message || 'Failed to broadcast alert. Please try again.');
     } finally {
       setIsBroadcasting(false);
-    }
-  };
-
-  const handleReviewAction = (action: string) => {
-    if (selectedPharmacy) {
-      setVerifications(prev => prev.filter(v => v.id !== selectedPharmacy.id));
-      setShowVerificationModal(false);
-      alert(`License application was ${action} for ${selectedPharmacy.name}`);
     }
   };
 
@@ -322,10 +448,10 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Key Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {loading ? (
           // Loading skeleton
-          Array.from({ length: 6 }).map((_, i) => (
+          Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm animate-pulse">
               <div className="w-10 h-10 bg-gray-200 rounded-xl mb-4"></div>
               <div className="h-4 bg-gray-200 rounded mb-2"></div>
@@ -357,7 +483,7 @@ export default function AdminDashboardPage() {
             />
             <MetricCard 
               title={t.pendingVerifs} 
-              value={verifications.length.toString()} 
+              value={(pendingVerificationTotal ?? verifications.length).toString()} 
               icon={FileCheck} 
               color="amber" 
             />
@@ -366,12 +492,6 @@ export default function AdminDashboardPage() {
               value={complaints.length.toString()} 
               icon={AlertOctagon} 
               color="red" 
-            />
-            <MetricCard 
-              title={t.systemUptime} 
-              value="99.99%" 
-              icon={Activity} 
-              color="purple" 
             />
           </>
         )}
@@ -387,17 +507,26 @@ export default function AdminDashboardPage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-bold text-brand-950">{t.platformTraffic}</h2>
-                <p className="text-sm text-gray-500">{t.activeUsers24h}</p>
+                <p className="text-sm text-gray-500">{trafficSubtitle}</p>
               </div>
-              <select className="bg-accent-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-2">
-                <option>{t.last24Hours}</option>
-                <option>{t.last7Days}</option>
-                <option>{t.last30Days}</option>
+              <select
+                className="bg-accent-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-2"
+                value={trafficRange}
+                onChange={(e) => setTrafficRange(e.target.value as '24h' | '7d' | '30d')}
+              >
+                <option value="24h">{t.last24Hours}</option>
+                <option value="7d">{t.last7Days}</option>
+                <option value="30d">{t.last30Days}</option>
               </select>
             </div>
             <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={TRAFFIC_DATA} margin={{ top: 5, right: 0, bottom: 0, left: 0 }}>
+              {trafficLoading ? (
+                <div className="flex h-full items-center justify-center text-sm text-gray-500">
+                  Loading…
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trafficSeries} margin={{ top: 5, right: 0, bottom: trafficRange === '30d' ? 24 : 0, left: 0 }}>
                   <defs>
                     <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#047857" stopOpacity={0.3}/>
@@ -405,14 +534,26 @@ export default function AdminDashboardPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  <XAxis
+                    dataKey="label"
+                    interval={trafficAxisInterval as number | 'preserveStartEnd'}
+                    angle={trafficRange === '30d' ? -35 : 0}
+                    height={trafficRange === '30d' ? 56 : 36}
+                    textAnchor={trafficRange === '30d' ? 'end' : 'middle'}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    dy={10}
                   />
-                  <Area type="monotone" dataKey="users" stroke="#047857" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value) => [`${Number(value ?? 0)} orders`, 'Orders']}
+                  />
+                  <Area type="monotone" dataKey="count" stroke="#047857" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </div>
           </div>
 
@@ -423,8 +564,12 @@ export default function AdminDashboardPage() {
                 <FileCheck className="w-5 h-5 text-amber-500" />
                 <h2 className="text-lg font-bold text-brand-950">{t.verificationQueue}</h2>
               </div>
-              <button className="text-sm font-bold text-brand-600 hover:text-brand-800 transition-colors">
-                {t.viewAll} (24)
+              <button
+                type="button"
+                onClick={() => router.push('/admin/verification')}
+                className="text-sm font-bold text-brand-600 hover:text-brand-800 transition-colors"
+              >
+                {t.viewAll} ({pendingVerificationTotal ?? verifications.length})
               </button>
             </div>
             <div className="divide-y divide-gray-100">
@@ -471,12 +616,12 @@ export default function AdminDashboardPage() {
                 <label className="block text-xs font-bold text-red-900 mb-1.5 uppercase tracking-wider">{t.alertType}</label>
                 <select 
                   value={alertType}
-                  onChange={(e) => setAlertType(e.target.value)}
+                  onChange={(e) => setAlertType(e.target.value as BroadcastAlertType)}
                   className="w-full bg-white border border-red-200 rounded-lg p-2.5 text-sm focus:ring-red-500 focus:border-red-500"
                 >
-                  <option>{t.outbreak}</option>
-                  <option>{t.recall}</option>
-                  <option>{t.advisory}</option>
+                  <option value="Disease Outbreak">{t.outbreak}</option>
+                  <option value="Medication Recall">{t.recall}</option>
+                  <option value="Emergency Health Advisory">{t.advisory}</option>
                 </select>
               </div>
               <div>
@@ -486,10 +631,10 @@ export default function AdminDashboardPage() {
                   onChange={(e) => setAlertRegion(e.target.value)}
                   className="w-full bg-white border border-red-200 rounded-lg p-2.5 text-sm focus:ring-red-500 focus:border-red-500"
                 >
-                  <option>{t.allRegions}</option>
-                  <option>{t.addisAbaba}</option>
-                  <option>{t.amhara}</option>
-                  <option>{t.oromia}</option>
+                  <option value={BROADCAST_REGION_VALUES[0]}>{t.allRegions}</option>
+                  <option value={BROADCAST_REGION_VALUES[1]}>{t.addisAbaba}</option>
+                  <option value={BROADCAST_REGION_VALUES[2]}>{t.amhara}</option>
+                  <option value={BROADCAST_REGION_VALUES[3]}>{t.oromia}</option>
                 </select>
               </div>
             </div>
@@ -524,7 +669,7 @@ export default function AdminDashboardPage() {
             <div className="flex justify-end relative z-10">
               <button 
                 onClick={handleBroadcastAlert}
-                disabled={!alertMessage.trim() || isBroadcasting}
+                disabled={alertMessage.trim().length < 5 || isBroadcasting}
                 className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-bold py-2.5 px-6 rounded-xl shadow-sm transition-colors flex items-center gap-2"
               >
                 <ShieldAlert className="w-4 h-4" />
@@ -547,29 +692,6 @@ export default function AdminDashboardPage() {
 
         {/* Right Column (Sidebars) */}
         <div className="space-y-8">
-          
-          {/* System Health */}
-          <div className="bg-brand-900 rounded-2xl shadow-sm p-6 text-white relative overflow-hidden">
-            <div className="absolute top-[-20%] right-[-10%] w-32 h-32 rounded-full bg-brand-500/20 blur-3xl"></div>
-            
-            <div className="flex items-center justify-between mb-6 relative z-10">
-              <h2 className="text-lg font-bold">{t.systemHealth}</h2>
-              <button 
-                onClick={() => alert("Downloading System Health Report... ")}
-                className="text-brand-200 hover:text-white transition-colors"
-                title="Download Report"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 relative z-10">
-              <HealthMetric label="API Response Time" value="45ms" status="good" icon={Server} />
-              <HealthMetric label="Database Load" value="24%" status="good" icon={Database} />
-              <HealthMetric label="CDN Status" value="Operational" status="good" icon={Globe} />
-              <HealthMetric label="Error Rate (5xx)" value="0.01%" status="warning" icon={AlertTriangle} />
-            </div>
-          </div>
 
           {/* Complaint Queue */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -609,28 +731,10 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* Audit Logs */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-brand-950">{t.auditLogs}</h2>
-            </div>
-            <div className="p-2">
-              {AUDIT_LOGS.map((log) => (
-                <div key={log.id} className="p-3 flex gap-3 text-sm">
-                  <div className="w-2 h-2 rounded-full bg-gray-300 mt-1.5 shrink-0"></div>
-                  <div>
-                    <p className="text-gray-700"><span className="font-bold text-brand-950">{log.admin}</span> {log.action}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{log.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
         </div>
       </div>
 
-      {/* Review Panel Modal (Simplified for demo) */}
+      {/* Review Panel Modal */}
       {showVerificationModal && selectedPharmacy && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -662,29 +766,52 @@ export default function AdminDashboardPage() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-3">Document Checklist</h3>
                 <div className="space-y-3">
-                  <DocumentItem name="Business Registration Certificate" status="verified" />
-                  <DocumentItem name="Pharmacy Operating License" status="pending_review" />
-                  <DocumentItem name="Facility Inspection Report" status="verified" />
+                  {VERIFICATION_DOC_KEYS.map((key) => {
+                    const doc = selectedPharmacy.verification?.documents?.[key] as
+                      | { url?: string; status?: string }
+                      | undefined;
+                    const url = doc?.url;
+                    const rawStatus = doc?.status?.toLowerCase();
+                    const status: 'verified' | 'pending' | 'missing' = !url
+                      ? 'missing'
+                      : rawStatus === 'verified'
+                        ? 'verified'
+                        : 'pending';
+                    return (
+                      <DocumentItem
+                        key={key}
+                        name={VERIFICATION_DOC_LABELS[key]}
+                        url={url}
+                        status={status}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
-            <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+            <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 flex-wrap">
               <button 
-                onClick={() => handleReviewAction('Rejected')}
-                className="px-5 py-2.5 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors"
+                type="button"
+                disabled={verificationSubmitting}
+                onClick={handleVerificationReject}
+                className="px-5 py-2.5 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors disabled:opacity-50"
               >
                 Reject License
               </button>
               <button 
-                onClick={() => handleReviewAction('Marked as needs more docs')}
-                className="px-5 py-2.5 text-sm font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors"
+                type="button"
+                disabled={verificationSubmitting}
+                onClick={handleVerificationNeedsDocs}
+                className="px-5 py-2.5 text-sm font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors disabled:opacity-50"
               >
                 Request More Docs
               </button>
               <button 
-                onClick={() => handleReviewAction('Approved')}
-                className="px-5 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm"
+                type="button"
+                disabled={verificationSubmitting}
+                onClick={handleVerificationApprove}
+                className="px-5 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm disabled:opacity-50"
               >
                 Approve License
               </button>
@@ -725,21 +852,15 @@ function MetricCard({ title, value, icon: Icon, trend, color }: any) {
   );
 }
 
-function HealthMetric({ label, value, status, icon: Icon }: any) {
-  return (
-    <div className="flex items-center justify-between bg-brand-800/50 p-3 rounded-xl border border-brand-700/50">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg ${status === 'good' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-          <Icon className="w-4 h-4" />
-        </div>
-        <span className="text-sm font-medium text-brand-100">{label}</span>
-      </div>
-      <span className="font-mono font-bold text-sm text-white">{value}</span>
-    </div>
-  );
-}
-
-function DocumentItem({ name, status }: any) {
+function DocumentItem({
+  name,
+  url,
+  status,
+}: {
+  name: string;
+  url?: string;
+  status: 'verified' | 'pending' | 'missing';
+}) {
   return (
     <div className="flex items-center justify-between p-3 border border-slate-200 rounded-xl bg-white">
       <div className="flex items-center gap-3">
@@ -749,13 +870,23 @@ function DocumentItem({ name, status }: any) {
         <span className="text-sm font-medium text-slate-700">{name}</span>
       </div>
       <div className="flex items-center gap-3">
-        <button className="text-sm font-bold text-purple-600 hover:text-purple-800 flex items-center gap-1">
-          <Eye className="w-4 h-4" /> View
-        </button>
+        {url ? (
+          <button
+            type="button"
+            onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+            className="text-sm font-bold text-purple-600 hover:text-purple-800 flex items-center gap-1"
+          >
+            <Eye className="w-4 h-4" /> View
+          </button>
+        ) : (
+          <span className="text-xs text-slate-400">Not uploaded</span>
+        )}
         {status === 'verified' ? (
           <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3" /> Verified
           </span>
+        ) : status === 'missing' ? (
+          <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-md">Missing</span>
         ) : (
           <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-md flex items-center gap-1">
             <Clock className="w-3 h-3" /> Pending

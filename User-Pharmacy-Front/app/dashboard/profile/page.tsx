@@ -10,6 +10,8 @@ import {
   Trash2, ChevronRight, CheckCircle2, Shield, Edit2, ShieldAlert, X, Image as ImageIcon
 } from 'lucide-react';
 import Link from 'next/link';
+import { clearPrescriptionScanSessionStorage } from '@/lib/prescriptionScanSession';
+import { changeMyPassword, ApiRequestError } from '@/lib/api';
 
 export default function ProfilePage() {
   const { t, language } = useLanguage();
@@ -42,6 +44,12 @@ export default function ProfilePage() {
   // Modals state
   const [showSignOutAlert, setShowSignOutAlert] = useState(false);
   const [showDeleteAddressAlert, setShowDeleteAddressAlert] = useState(false);
+
+  const [pwdCurrent, setPwdCurrent] = useState('');
+  const [pwdNew, setPwdNew] = useState('');
+  const [pwdConfirm, setPwdConfirm] = useState('');
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [pwdFeedback, setPwdFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
     const username = localStorage.getItem('medcare_user_name');
@@ -83,6 +91,7 @@ export default function ProfilePage() {
   };
 
   const handleSignOut = () => {
+    clearPrescriptionScanSessionStorage();
     localStorage.removeItem('medcare_user_name');
     localStorage.removeItem('medcare_role');
     window.location.href = '/';
@@ -90,6 +99,37 @@ export default function ProfilePage() {
 
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const handleChangePassword = async () => {
+    setPwdFeedback(null);
+    if (pwdNew !== pwdConfirm) {
+      setPwdFeedback({ type: 'err', text: t('profile.passwordMismatch') });
+      return;
+    }
+    if (pwdNew.length < 8) {
+      setPwdFeedback({ type: 'err', text: t('profile.passwordMinLength') });
+      return;
+    }
+
+    setPwdSaving(true);
+    try {
+      await changeMyPassword({ currentPassword: pwdCurrent, newPassword: pwdNew });
+      setPwdFeedback({ type: 'ok', text: t('profile.passwordUpdated') });
+      setPwdCurrent('');
+      setPwdNew('');
+      setPwdConfirm('');
+    } catch (e) {
+      if (e instanceof ApiRequestError && e.status === 401) {
+        setPwdFeedback({ type: 'err', text: t('profile.currentPasswordWrong') });
+      } else if (e instanceof ApiRequestError) {
+        setPwdFeedback({ type: 'err', text: e.message || t('profile.passwordUpdateFailed') });
+      } else {
+        setPwdFeedback({ type: 'err', text: t('profile.passwordUpdateFailed') });
+      }
+    } finally {
+      setPwdSaving(false);
+    }
   };
 
   return (
@@ -391,20 +431,63 @@ export default function ProfilePage() {
                              <div className="space-y-3">
                                <div>
                                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('profile.currentPassword')}</label>
-                                 <input type="password" placeholder="••••••••" className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-sm" />
+                                 <input
+                                   type="password"
+                                   autoComplete="current-password"
+                                   value={pwdCurrent}
+                                   onChange={(e) => {
+                                     setPwdCurrent(e.target.value);
+                                     if (pwdFeedback) setPwdFeedback(null);
+                                   }}
+                                   placeholder="••••••••"
+                                   className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-sm"
+                                 />
                                </div>
                                <div>
                                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('profile.newPassword')}</label>
-                                 <input type="password" placeholder="••••••••" className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-sm" />
+                                 <input
+                                   type="password"
+                                   autoComplete="new-password"
+                                   value={pwdNew}
+                                   onChange={(e) => {
+                                     setPwdNew(e.target.value);
+                                     if (pwdFeedback) setPwdFeedback(null);
+                                   }}
+                                   placeholder="••••••••"
+                                   className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-sm"
+                                 />
                                </div>
                                <div>
                                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('profile.confirmPassword')}</label>
-                                 <input type="password" placeholder="••••••••" className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-sm" />
+                                 <input
+                                   type="password"
+                                   autoComplete="new-password"
+                                   value={pwdConfirm}
+                                   onChange={(e) => {
+                                     setPwdConfirm(e.target.value);
+                                     if (pwdFeedback) setPwdFeedback(null);
+                                   }}
+                                   placeholder="••••••••"
+                                   className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-sm"
+                                 />
                                </div>
                              </div>
+                             {pwdFeedback && (
+                               <p
+                                 className={`mt-3 text-sm font-medium ${pwdFeedback.type === 'ok' ? 'text-emerald-700' : 'text-red-600'}`}
+                                 role="status"
+                               >
+                                 {pwdFeedback.text}
+                               </p>
+                             )}
                              <div className="pt-4">
-                                <button className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl transition-colors shadow-sm text-sm">
-                                  {t('profile.updatePassword')}
+                                <button
+                                  type="button"
+                                  onClick={() => void handleChangePassword()}
+                                  disabled={pwdSaving || !pwdCurrent || !pwdNew || !pwdConfirm}
+                                  className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors shadow-sm text-sm"
+                                >
+                                  {pwdSaving ? '…' : t('profile.updatePassword')}
                                 </button>
                              </div>
                           </div>

@@ -1,9 +1,12 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 
+/** Aligned with Med API `Complaint`; optional `ref` for legacy docs. Same DB (`pharmacy-system`) recommended. */
 export interface IComplaint extends Document {
-  ref: string;
+  ref?: string;
   reporterId: Types.ObjectId;
-  reporterName: string;
+  reporterName?: string;
+  /** Set by Med API when filing from patient or pharmacy portals */
+  reporterRole?: "patient" | "pharmacy";
   targetType: "pharmacy" | "delivery_agent" | "system" | "doctor";
   targetId?: Types.ObjectId;
   targetName?: string;
@@ -20,9 +23,10 @@ export interface IComplaint extends Document {
 
 const complaintSchema = new Schema<IComplaint>(
   {
-    ref: { type: String, required: true, index: true },
+    ref: { type: String, required: false, index: true, sparse: true },
     reporterId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    reporterName: { type: String, required: true },
+    reporterName: { type: String },
+    reporterRole: { type: String, enum: ["patient", "pharmacy"], index: true },
     targetType: { type: String, enum: ["pharmacy", "delivery_agent", "system", "doctor"], required: true },
     targetId: { type: Schema.Types.ObjectId },
     targetName: { type: String },
@@ -38,6 +42,7 @@ const complaintSchema = new Schema<IComplaint>(
 );
 
 complaintSchema.index({ status: 1, severity: -1 });
+complaintSchema.index({ reporterId: 1, createdAt: -1 });
 complaintSchema.index({ createdAt: -1 });
 
 export const Complaint = mongoose.model<IComplaint>("Complaint", complaintSchema);

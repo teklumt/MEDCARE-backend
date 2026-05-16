@@ -17,6 +17,7 @@ const pharmacySchema = new Schema<IPharmacy>(
     openingHours: { type: String },
     deliveryAvailable: { type: Boolean, default: true },
     deliveryFee: { type: Number, default: 0 },
+    deliveryRadiusKm: { type: Number, default: 5 },
     license: {
       businessLicenseNumber: { type: String },
       businessLicenseExpiry: { type: Date },

@@ -8,7 +8,7 @@ const conversationSchema = new Schema<IConversation>(
       {
         userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         name: { type: String, required: true },
-        role: { type: String, enum: ['patient', 'pharmacy'], required: true }
+        role: { type: String, enum: ['patient', 'pharmacy', 'delivery'], required: true }
       }
     ],
     lastMessage: {

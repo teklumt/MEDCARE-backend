@@ -14,9 +14,11 @@ export const validate = (schema: Schema) => {
         message: detail.message
       }));
 
+      const firstMsg = errors[0]?.message.replace(/"/g, '') ?? 'Validation failed';
+
       res.status(400).json({
         success: false,
-        error: 'Validation failed',
+        error: firstMsg,
         errors
       });
       return;

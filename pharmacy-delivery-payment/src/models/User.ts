@@ -10,7 +10,11 @@ const addressSchema = new Schema(
     subCity: { type: String },
     city: { type: String },
     additionalInfo: { type: String },
-    isDefault: { type: Boolean, default: false }
+    isDefault: { type: Boolean, default: false },
+    coordinates: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number] }
+    }
   },
   { _id: true }
 );
@@ -21,7 +25,7 @@ const userSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     phone: { type: String, required: true, unique: true, trim: true },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ['patient', 'pharmacy', 'admin'], default: 'patient' },
+    role: { type: String, enum: ['patient', 'pharmacy', 'admin', 'delivery'], default: 'patient' },
     language: { type: String, enum: ['en', 'am'], default: 'en' },
     isActive: { type: Boolean, default: true },
     isLocked: { type: Boolean, default: false },

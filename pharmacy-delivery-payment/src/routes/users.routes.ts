@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { changePasswordSchema } from '../validators/users.validator';
 import {
   addAddress,
+  changePassword,
   deleteAddress,
   getAddresses,
   getMe,
@@ -16,6 +19,7 @@ router.use(authenticate);
 
 router.get('/me', getMe);
 router.put('/me', updateMe);
+router.put('/me/password', validate(changePasswordSchema), changePassword);
 router.get('/me/addresses', getAddresses);
 router.post('/me/addresses', addAddress);
 router.put('/me/addresses/:id', updateAddress);

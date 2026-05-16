@@ -3,8 +3,10 @@ import { IComplaint } from '../types';
 
 const complaintSchema = new Schema<IComplaint>(
   {
+    ref: { type: String, required: true, unique: true, index: true },
     reporterId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     reporterName: { type: String },
+    reporterRole: { type: String, enum: ['patient', 'pharmacy'], required: true, index: true },
     targetType: { type: String, enum: ['pharmacy', 'system'], required: true },
     targetId: { type: Schema.Types.ObjectId },
     targetName: { type: String },
@@ -20,6 +22,7 @@ const complaintSchema = new Schema<IComplaint>(
 );
 
 complaintSchema.index({ status: 1, severity: -1 });
+complaintSchema.index({ reporterId: 1, createdAt: -1 });
 complaintSchema.index({ createdAt: -1 });
 
 export default mongoose.model<IComplaint>('Complaint', complaintSchema);

@@ -1,8 +1,8 @@
 import { NextFunction, Request, Response } from "express";
 import { errorResponse } from "../utils/response.js";
-import type { AdminRole } from "../types/auth.js";
+import type { UserRole } from "../types/auth.js";
 
-export const requireRole = (...roles: AdminRole[]) => (req: Request, res: Response, next: NextFunction) => {
+export const requireRole = (...roles: UserRole[]) => (req: Request, res: Response, next: NextFunction) => {
   if (!req.admin) {
     return errorResponse(res, "Unauthorized", "AUTH_REQUIRED", 401);
   }

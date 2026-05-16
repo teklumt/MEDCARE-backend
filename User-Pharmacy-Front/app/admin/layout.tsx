@@ -5,8 +5,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { 
   LayoutDashboard, Users, Store, FileCheck, ShoppingCart, 
-  Truck, AlertOctagon, BarChart2, Activity, Settings, 
-  Bell, Search, LogOut, ShieldCheck, Server
+  AlertOctagon, BarChart2, Settings, 
+  Bell, LogOut, ShieldCheck
 } from 'lucide-react';
 import { authApi } from '@/lib/auth-api';
 
@@ -16,10 +16,8 @@ const NAV_ITEMS = [
   { label: 'Pharmacies', href: '/admin/pharmacies', icon: Store },
   { label: 'License Verification', href: '/admin/verification', icon: FileCheck, badge: 3 },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
-  { label: 'Deliveries', href: '/admin/deliveries', icon: Truck },
   { label: 'Complaints', href: '/admin/complaints', icon: AlertOctagon, badge: 5 },
   { label: 'Analytics', href: '/admin/analytics', icon: BarChart2 },
-  { label: 'Audit Logs', href: '/admin/audit-logs', icon: Server },
   { label: 'System Settings', href: '/admin/settings', icon: Settings },
 ];
 

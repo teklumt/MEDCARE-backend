@@ -192,10 +192,9 @@ export default function LoginPage() {
 
     setIsLoading(true);
 
+    const loginEmail = identifier;
+
     try {
-      // For admin login, we need email format
-      let loginEmail = identifier;
-      
       // If it's a phone number, handle differently
       if (/^\+?251\d{9}$/.test(identifier.replace(/\s/g, ''))) {
         // This is a phone number, but admin backend expects email
@@ -227,19 +226,16 @@ export default function LoginPage() {
       
       // Redirect based on user role
       const userRole = response.data.user.role;
-      
+
+      setupTokenRefresh();
+
       if (userRole === 'admin') {
-        // Setup token refresh for admin
-        setupTokenRefresh();
         router.push('/admin');
       } else if (userRole === 'pharmacy') {
-        // Pharmacy users go to pharmacy dashboard
         router.push('/pharmacy');
       } else if (userRole === 'delivery') {
-        // Delivery users go to delivery dashboard
         router.push('/delivery');
       } else {
-        // Regular patients go to user dashboard
         router.push('/dashboard');
       }
 

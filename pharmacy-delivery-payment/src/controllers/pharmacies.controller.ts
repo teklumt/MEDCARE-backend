@@ -1,6 +1,7 @@
 import { Response } from 'express';
-import mongoose from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import Papa from 'papaparse';
+import DeliveryAgent from '../models/DeliveryAgent';
 import Pharmacy from '../models/Pharmacy';
 import Medication from '../models/Medication';
 import Review from '../models/Review';
@@ -8,6 +9,7 @@ import PrescriptionUpload from '../models/PrescriptionUpload';
 import Order from '../models/Order';
 import { AuthRequest } from '../middleware/auth';
 import { DEFAULT_PAGE_LIMIT } from '../config/constants';
+import { parseCoordinatesInput } from '../utils/geo';
 
 const computeStockStatus = (quantity: number, lowThreshold: number) => {
   if (quantity <= 0) return 'out_of_stock';
@@ -114,6 +116,29 @@ export const getPharmacyReviews = async (req: AuthRequest, res: Response): Promi
   }
 };
 
+const COMMENT_MAX = 2000;
+const PATIENT_NAME_MAX = 120;
+
+function isMongoDuplicateKey(err: unknown): boolean {
+  const code =
+    typeof err === 'object' && err !== null ? (err as { code?: number | string }).code : undefined;
+  return code === 11000 || code === '11000';
+}
+
+async function syncPharmacyReviewStats(pharmacyId: string): Promise<void> {
+  const oid = new mongoose.Types.ObjectId(pharmacyId);
+  const agg = await Review.aggregate([
+    { $match: { pharmacyId: oid } },
+    { $group: { _id: null, avgRating: { $avg: '$rating' }, count: { $sum: 1 } } }
+  ]);
+  const row = agg[0];
+  const avg = row?.avgRating != null ? Math.round(Number(row.avgRating) * 100) / 100 : 0;
+  const count = row?.count ?? 0;
+  await Pharmacy.findByIdAndUpdate(pharmacyId, {
+    $set: { 'stats.rating': avg, 'stats.reviewCount': count }
+  });
+}
+
 export const addPharmacyReview = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
@@ -122,20 +147,52 @@ export const addPharmacyReview = async (req: AuthRequest, res: Response): Promis
     }
 
     const { id } = req.params;
-    const { rating, comment, patientName } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, error: 'Invalid pharmacy id' });
+      return;
+    }
 
-    const review = await Review.create({
-      pharmacyId: id,
-      patientId: req.user.userId,
-      patientName,
-      rating,
-      comment
-    });
+    const pharmacyExists = await Pharmacy.exists({ _id: id });
+    if (!pharmacyExists) {
+      res.status(404).json({ success: false, error: 'Pharmacy not found' });
+      return;
+    }
 
-    await Pharmacy.findByIdAndUpdate(id, {
-      $inc: { 'stats.reviewCount': 1 },
-      $set: { 'stats.rating': rating }
-    });
+    const { rating: ratingRaw, comment: commentRaw, patientName: patientNameRaw } = req.body ?? {};
+    const r = Number(ratingRaw);
+    if (!Number.isFinite(r) || r < 1 || r > 5) {
+      res.status(400).json({ success: false, error: 'rating must be a number from 1 to 5' });
+      return;
+    }
+
+    let comment: string | undefined;
+    if (commentRaw != null && String(commentRaw).trim() !== '') {
+      comment = String(commentRaw).trim().slice(0, COMMENT_MAX);
+    }
+
+    let patientName: string | undefined;
+    if (patientNameRaw != null && String(patientNameRaw).trim() !== '') {
+      patientName = String(patientNameRaw).trim().slice(0, PATIENT_NAME_MAX);
+    }
+
+    let review;
+    try {
+      review = await Review.create({
+        pharmacyId: id,
+        patientId: req.user.userId,
+        patientName,
+        rating: r,
+        comment
+      });
+    } catch (err) {
+      if (isMongoDuplicateKey(err)) {
+        res.status(409).json({ success: false, error: 'Already reviewed', details: 'You already submitted a review for this pharmacy.' });
+        return;
+      }
+      throw err;
+    }
+
+    await syncPharmacyReviewStats(id);
 
     res.status(201).json({ success: true, message: 'Review submitted', data: review });
   } catch (error) {
@@ -163,6 +220,56 @@ export const getMyPharmacy = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
+/** Delivery users for assign-to-driver UI: scoped via deliveryagents, hydrated from users. */
+export const getMyDeliveryAgents = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+
+    const pharmacy = await Pharmacy.findOne({ ownerId: req.user.userId }).lean();
+    if (!pharmacy) {
+      res.status(404).json({ success: false, error: 'Pharmacy not found' });
+      return;
+    }
+
+    const agents = await DeliveryAgent.find({ pharmacyId: pharmacy._id }).sort({ createdAt: 1 }).lean();
+    const ids = agents.map((a) => a._id).filter(Boolean) as Types.ObjectId[];
+    if (ids.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const usersCol = mongoose.connection.db!.collection('users');
+    const userDocs = (await usersCol
+      .find({ _id: { $in: ids }, role: 'delivery' })
+      .project({ username: 1, phone: 1, email: 1 })
+      .toArray()) as { _id: Types.ObjectId; username?: string; phone?: string; email?: string }[];
+
+    const userById = new Map(
+      userDocs.map((u) => [String(u._id), u] as const)
+    );
+
+    const data = agents.map((a) => {
+      const u = userById.get(String(a._id));
+      return {
+        id: String(a._id),
+        username: u?.username,
+        phone: u?.phone,
+        email: u?.email,
+        vehicleType: (a as { vehicleType?: string }).vehicleType,
+        licensePlate: (a as { licensePlate?: string }).licensePlate,
+        isOnline: Boolean((a as { isOnline?: boolean }).isOnline)
+      };
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch delivery agents', details: (error as Error).message });
+  }
+};
+
 export const updateMyPharmacy = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
@@ -170,9 +277,66 @@ export const updateMyPharmacy = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    const update: Record<string, unknown> = {};
+
+    if (typeof req.body?.location === 'string') {
+      update.location = req.body.location.trim();
+    }
+    if (typeof req.body?.address === 'string') {
+      update.address = req.body.address.trim();
+    }
+    if (typeof req.body?.openingHours === 'string') {
+      update.openingHours = req.body.openingHours;
+    }
+    if (typeof req.body?.isOpen === 'boolean') {
+      update.isOpen = req.body.isOpen;
+    }
+
+    const coords = parseCoordinatesInput(req.body?.coordinates);
+    if (req.body?.coordinates != null) {
+      if (!coords) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid coordinates. Provide a valid map pin (not 0,0).'
+        });
+        return;
+      }
+      update.coordinates = coords;
+    }
+
+    if (typeof req.body?.deliveryRadiusKm === 'number' && Number.isFinite(req.body.deliveryRadiusKm)) {
+      const km = req.body.deliveryRadiusKm;
+      if (km < 1 || km > 50) {
+        res.status(400).json({
+          success: false,
+          error: 'deliveryRadiusKm must be between 1 and 50'
+        });
+        return;
+      }
+      update.deliveryRadiusKm = km;
+    }
+
+    if (typeof req.body?.deliveryFee === 'number' && Number.isFinite(req.body.deliveryFee)) {
+      const fee = req.body.deliveryFee;
+      if (fee < 0) {
+        res.status(400).json({ success: false, error: 'deliveryFee cannot be negative' });
+        return;
+      }
+      update.deliveryFee = fee;
+    }
+
+    if (typeof req.body?.deliveryAvailable === 'boolean') {
+      update.deliveryAvailable = req.body.deliveryAvailable;
+    }
+
+    if (Object.keys(update).length === 0) {
+      res.status(400).json({ success: false, error: 'No valid fields to update' });
+      return;
+    }
+
     const pharmacy = await Pharmacy.findOneAndUpdate(
       { ownerId: req.user.userId },
-      req.body,
+      { $set: update },
       { new: true, runValidators: true }
     ).lean();
 
@@ -514,19 +678,122 @@ export const verifyPrescription = async (req: AuthRequest, res: Response): Promi
     }
 
     const { id } = req.params;
-    const updated = await PrescriptionUpload.findByIdAndUpdate(
-      id,
-      { verifiedById: req.user.userId, verifiedAt: new Date() },
-      { new: true }
-    );
-
-    if (!updated) {
+    const upload = await PrescriptionUpload.findById(id).lean();
+    if (!upload) {
       res.status(404).json({ success: false, error: 'Prescription not found' });
       return;
     }
 
-    res.json({ success: true, message: 'Prescription verified', data: updated });
+    const order =
+      upload.orderId != null
+        ? await Order.findById(upload.orderId)
+        : await Order.findOne({ prescriptionUploadId: upload._id });
+
+    if (!order) {
+      res.status(404).json({ success: false, error: 'Linked order not found' });
+      return;
+    }
+
+    const pharmacy = await Pharmacy.findOne({ ownerId: req.user.userId }).lean();
+    if (!pharmacy || String(order.pharmacyId) !== String(pharmacy._id)) {
+      res.status(403).json({ success: false, error: 'Forbidden' });
+      return;
+    }
+
+    if (upload.rejectedAt) {
+      res.status(400).json({ success: false, error: 'Prescription was rejected' });
+      return;
+    }
+
+    if (upload.verifiedAt && order.prescriptionVerified) {
+      const updatedUpload = await PrescriptionUpload.findById(id);
+      res.json({ success: true, message: 'Prescription verified', data: updatedUpload });
+      return;
+    }
+
+    await PrescriptionUpload.findByIdAndUpdate(id, {
+      verifiedById: req.user.userId,
+      verifiedAt: new Date()
+    });
+
+    order.prescriptionVerified = true;
+    order.statusHistory.push({
+      status: order.status,
+      actorId: new Types.ObjectId(req.user.userId),
+      note: 'Prescription verified by pharmacy',
+      createdAt: new Date()
+    });
+    await order.save();
+
+    const updatedUpload = await PrescriptionUpload.findById(id);
+    res.json({ success: true, message: 'Prescription verified', data: updatedUpload });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to verify prescription', details: (error as Error).message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to verify prescription',
+      details: (error as Error).message
+    });
+  }
+};
+
+export const rejectPrescription = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+
+    const { id } = req.params;
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+
+    const upload = await PrescriptionUpload.findById(id);
+    if (!upload) {
+      res.status(404).json({ success: false, error: 'Prescription not found' });
+      return;
+    }
+
+    const order =
+      upload.orderId != null
+        ? await Order.findById(upload.orderId)
+        : await Order.findOne({ prescriptionUploadId: upload._id });
+
+    if (!order) {
+      res.status(404).json({ success: false, error: 'Linked order not found' });
+      return;
+    }
+
+    const pharmacy = await Pharmacy.findOne({ ownerId: req.user.userId }).lean();
+    if (!pharmacy || String(order.pharmacyId) !== String(pharmacy._id)) {
+      res.status(403).json({ success: false, error: 'Forbidden' });
+      return;
+    }
+
+    if (upload.rejectedAt || upload.verifiedAt) {
+      res.status(400).json({ success: false, error: 'Prescription already processed' });
+      return;
+    }
+
+    upload.rejectedAt = new Date();
+    upload.rejectedReason = note || undefined;
+    upload.rejectedById = new Types.ObjectId(req.user.userId);
+    await upload.save();
+
+    order.status = 'cancelled';
+    order.paymentId = undefined;
+    order.statusHistory.push({
+      status: 'cancelled',
+      actorId: new Types.ObjectId(req.user.userId),
+      note: note || 'Prescription rejected',
+      createdAt: new Date()
+    });
+    await order.save();
+
+    res.json({ success: true, message: 'Prescription rejected', data: upload });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reject prescription',
+      details: (error as Error).message
+    });
   }
 };

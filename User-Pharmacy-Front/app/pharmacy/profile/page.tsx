@@ -1,13 +1,19 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useRouter } from 'next/navigation';
 import { 
   Store, MapPin, ShieldCheck, Truck, Bell, Shield, LogOut, Camera, X, Check, 
-  Map as MapIcon, ChevronRight, AlertTriangle, FileText, CheckCircle2, Clock, Smartphone, Lock
+  Map as MapIcon, ChevronRight, AlertTriangle, FileText, CheckCircle2, Clock, Lock,
+  Loader2, AlertCircle
 } from 'lucide-react';
+import { clearPrescriptionScanSessionStorage } from '@/lib/prescriptionScanSession';
+import PharmacyLocationHoursForm from '@/components/pharmacy/PharmacyLocationHoursForm';
+import PharmacyDeliveryCoverageMap from '@/components/map/PharmacyDeliveryCoverageMap';
+import { getMyPharmacy, updateMyPharmacy, type UpdateMyPharmacyPayload } from '@/lib/api';
+import { parsePharmacyPosition } from '@/lib/pharmacyGeo';
 
 type Tab = 'profile' | 'location' | 'license' | 'delivery' | 'notifications' | 'security' | 'signout';
 
@@ -109,12 +115,67 @@ export default function PharmacyProfilePage() {
     showToast('Profile changes saved successfully.');
   };
 
-  const handleSaveLocation = () => {
-    showToast('Location details saved successfully.');
-  };
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const [deliverySaving, setDeliverySaving] = useState(false);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [deliveryPin, setDeliveryPin] = useState<ReturnType<typeof parsePharmacyPosition>>(null);
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState(5);
+  const [deliveryAvailable, setDeliveryAvailable] = useState(true);
+  const [feeMode, setFeeMode] = useState<'free' | 'flat' | 'condition'>('flat');
+  const [flatDeliveryFee, setFlatDeliveryFee] = useState(50);
 
-  const handleSaveDelivery = () => {
-    showToast('Delivery options saved successfully.');
+  const loadDeliverySettings = useCallback(async () => {
+    setDeliveryLoading(true);
+    setDeliveryError(null);
+    try {
+      const pharmacy = await getMyPharmacy();
+      setDeliveryPin(parsePharmacyPosition(pharmacy));
+      const km = pharmacy.deliveryRadiusKm;
+      setDeliveryRadiusKm(typeof km === 'number' && km >= 1 && km <= 50 ? km : 5);
+      setDeliveryAvailable(pharmacy.deliveryAvailable !== false);
+      const fee = pharmacy.deliveryFee ?? 0;
+      if (fee <= 0) {
+        setFeeMode('free');
+        setFlatDeliveryFee(50);
+      } else {
+        setFeeMode('flat');
+        setFlatDeliveryFee(fee);
+      }
+    } catch (e) {
+      setDeliveryError(e instanceof Error ? e.message : 'Failed to load delivery settings');
+    } finally {
+      setDeliveryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'delivery') return;
+    void loadDeliverySettings();
+  }, [activeTab, loadDeliverySettings]);
+
+  const handleSaveDelivery = async () => {
+    const km = Math.min(50, Math.max(1, Math.round(Number(deliveryRadiusKm)) || 5));
+
+    const payload: UpdateMyPharmacyPayload = {
+      deliveryRadiusKm: km,
+      deliveryAvailable
+    };
+    if (feeMode === 'free') payload.deliveryFee = 0;
+    else if (feeMode === 'flat') payload.deliveryFee = Math.max(0, Number(flatDeliveryFee) || 0);
+
+    setDeliverySaving(true);
+    setDeliveryError(null);
+    try {
+      const updated = await updateMyPharmacy(payload);
+      setDeliveryPin(parsePharmacyPosition(updated));
+      const nextKm = updated.deliveryRadiusKm;
+      if (typeof nextKm === 'number' && nextKm >= 1 && nextKm <= 50) setDeliveryRadiusKm(nextKm);
+      showToast('Delivery options saved successfully.');
+    } catch (e) {
+      setDeliveryError(e instanceof Error ? e.message : 'Failed to save delivery settings');
+    } finally {
+      setDeliverySaving(false);
+    }
   };
 
   const handleDocumentReplace = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,6 +221,7 @@ export default function PharmacyProfilePage() {
   };
 
   const handleLogout = () => {
+    clearPrescriptionScanSessionStorage();
     localStorage.removeItem('medcare_role');
     localStorage.removeItem('medcare_user_name');
     localStorage.removeItem('medcare_username');
@@ -328,89 +390,15 @@ export default function PharmacyProfilePage() {
            )}
 
            {activeTab === 'location' && (
-             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-gray-100">
-                 <h2 className="text-2xl font-serif font-bold text-gray-900">{translatedTabs.location}</h2>
-                 <p className="text-gray-500 text-sm mt-1">Set your exact location and operating hours.</p>
-               </div>
-               <div className="p-6 space-y-6">
-                 <div>
-                   <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><MapIcon className="w-5 h-5 text-brand-600" /> Map Pin (CRITICAL)</h3>
-                   <p className="text-xs text-gray-500 mb-3">This interactive map defines your exact location. The GPS coordinates from this pin are used for patient search results and deliveries. Ensure it is perfectly accurate.</p>
-                   <div className="w-full h-64 bg-gray-100 rounded-xl border border-gray-200 relative overflow-hidden flex items-center justify-center">
-                      <div className="absolute inset-0 opacity-40 bg-[url('https://maps.googleapis.com/maps/api/staticmap?center=9.0222,38.7468&zoom=14&size=800x400&sensor=false')] bg-cover bg-center"></div>
-                      <div className="relative z-10 w-10 h-10 bg-red-500 rounded-full flex items-center justify-center shadow-lg transform -translate-y-4 animate-bounce cursor-pointer border-2 border-white">
-                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                        <div className="absolute -bottom-2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-red-500"></div>
-                      </div>
-                      <button className="absolute bottom-4 right-4 bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-200 text-sm font-bold text-gray-700 flex items-center gap-2">
-                        <MapPin className="w-4 h-4" /> Use Current Location
-                      </button>
-                   </div>
-                 </div>
-
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Free Text Landmark Description *</label>
-                      <input type="text" placeholder="e.g. Near Bole Medhanealem Church, behind Dashen Bank" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Sub-city *</label>
-                      <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
-                        <option>Bole</option>
-                        <option>Yeka</option>
-                        <option>Kirkos</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Woreda *</label>
-                      <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
-                        <option>Woreda 03</option>
-                        <option>Woreda 04</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Neighborhood / Special area</label>
-                      <input type="text" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1.5">House / Building Number</label>
-                      <input type="text" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none" />
-                    </div>
-                 </div>
-
-                 <div>
-                   <h3 className="text-base font-bold text-gray-900 mb-3 border-b border-gray-100 pb-2">Weekly Operating Hours</h3>
-                   <div className="space-y-3">
-                     {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
-                        <div key={day} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                          <div className="w-28 font-bold text-gray-700 text-sm">{day}</div>
-                          <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="checkbox" className="w-4 h-4 text-brand-600 rounded focus:ring-brand-500" defaultChecked />
-                              <span className="text-sm font-medium text-gray-700">Open</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="checkbox" className="w-4 h-4 text-brand-600 rounded focus:ring-brand-500" />
-                              <span className="text-sm font-medium text-gray-700">24 Hours</span>
-                            </label>
-                          </div>
-                          <div className="flex items-center gap-2 ml-auto">
-                            <input type="time" defaultValue="08:00" className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white" />
-                            <span className="text-gray-400">-</span>
-                            <input type="time" defaultValue="20:00" className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white" />
-                          </div>
-                        </div>
-                     ))}
-                   </div>
-                 </div>
-
-                 <div className="pt-4 border-t border-gray-100 flex justify-end">
-                    <button onClick={handleSaveLocation} className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-sm transition-colors">
-                      Save Location Details
-                    </button>
-                  </div>
-               </div>
+             <motion.div
+               initial={{ opacity: 0, y: 10 }}
+               animate={{ opacity: 1, y: 0 }}
+               className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-6"
+             >
+               <PharmacyLocationHoursForm
+                 showHeader
+                 onSaved={() => showToast('Location details saved successfully.')}
+               />
              </motion.div>
            )}
 
@@ -556,73 +544,141 @@ export default function PharmacyProfilePage() {
 
            {activeTab === 'delivery' && (
              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center gap-4">
                  <div>
                    <h2 className="text-2xl font-serif font-bold text-gray-900">{translatedTabs.delivery}</h2>
                    <p className="text-gray-500 text-sm mt-1">Manage delivery options and patient reach.</p>
                  </div>
-                 <label className="flex items-center cursor-pointer">
-                    <div className="relative">
-                      <input type="checkbox" className="sr-only" defaultChecked />
-                      <div className="block bg-brand-500 w-14 h-8 rounded-full"></div>
-                      <div className="dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition transform translate-x-6"></div>
+                 <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                    <span className="text-xs font-bold text-gray-600 hidden sm:inline">Deliveries</span>
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={deliveryAvailable}
+                      onChange={(e) => setDeliveryAvailable(e.target.checked)}
+                    />
+                    <div className={`relative block w-14 h-8 rounded-full transition-colors ${deliveryAvailable ? 'bg-brand-500' : 'bg-gray-300'}`}>
+                      <div
+                        className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full shadow-sm transition-transform ${deliveryAvailable ? 'translate-x-6' : ''}`}
+                      />
                     </div>
                  </label>
                </div>
                
                <div className="p-6 space-y-6">
-                 <div>
-                   <label className="block text-sm font-bold text-gray-700 mb-1.5">Delivery Radius (km)</label>
-                   <input type="number" defaultValue="5" className="w-1/3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none" />
-                   <div className="mt-4 w-full h-40 bg-blue-50 rounded-xl border border-blue-100 flex items-center justify-center p-4">
-                     <p className="text-blue-600 text-sm font-medium text-center">Interactive map showing coverage circle goes here.</p>
+                 {deliveryLoading ? (
+                   <div className="flex justify-center py-16">
+                     <Loader2 className="w-8 h-8 text-brand-600 animate-spin" aria-label="Loading delivery settings" />
                    </div>
-                 </div>
+                 ) : (
+                   <>
+                     {deliveryError && (
+                       <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                         {deliveryError}
+                       </div>
+                     )}
 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                   <div className="md:col-span-2">
-                     <label className="block text-sm font-bold text-gray-700 mb-3">Delivery Fee Structure</label>
-                     <div className="space-y-2">
-                       <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
-                         <input type="radio" name="fee" className="w-4 h-4 text-brand-600 focus:ring-brand-500" />
-                         <span className="text-sm font-bold text-gray-900">Free on all orders</span>
-                       </label>
-                       <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer bg-brand-50 border-brand-200">
-                         <input type="radio" name="fee" defaultChecked className="w-4 h-4 text-brand-600 focus:ring-brand-500 border-brand-500" />
-                         <span className="text-sm font-bold text-brand-900">Flat fee (ETB)</span>
-                         <input type="number" defaultValue="50" className="ml-auto w-24 px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-brand-500" />
-                       </label>
-                       <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
-                         <input type="radio" name="fee" className="w-4 h-4 text-brand-600 focus:ring-brand-500" />
-                         <span className="text-sm font-bold text-gray-900">Condition based</span>
-                       </label>
+                     <div>
+                       <label className="block text-sm font-bold text-gray-700 mb-1.5">Delivery Radius (km)</label>
+                       <p className="text-xs text-gray-500 mb-2">Between 1 and 50 km. Pin position is edited under Location & Hours.</p>
+                       <input
+                         type="number"
+                         min={1}
+                         max={50}
+                         step={1}
+                         value={deliveryRadiusKm}
+                         onChange={(e) => setDeliveryRadiusKm(Number(e.target.value))}
+                         className="w-full max-w-[200px] px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
+                       />
+                       <div className="mt-4">
+                         <PharmacyDeliveryCoverageMap
+                           center={deliveryPin}
+                           radiusKm={deliveryRadiusKm}
+                           className="min-h-[260px]"
+                           onGoToLocation={() => setActiveTab('location')}
+                         />
+                       </div>
                      </div>
-                   </div>
 
-                   <div>
-                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Minimum Order Value (ETB)</label>
-                     <p className="text-xs text-gray-500 mb-2">Orders below this cannot be delivered.</p>
-                     <input type="number" defaultValue="100" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none" />
-                   </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                       <div className="md:col-span-2">
+                         <label className="block text-sm font-bold text-gray-700 mb-3">Delivery Fee Structure</label>
+                         <div className="space-y-2">
+                           <label
+                             className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50 ${feeMode === 'free' ? 'border-brand-300 bg-brand-50' : 'border-gray-200'}`}
+                           >
+                             <input
+                               type="radio"
+                               name="deliveryFeeMode"
+                               className="w-4 h-4 text-brand-600 focus:ring-brand-500"
+                               checked={feeMode === 'free'}
+                               onChange={() => setFeeMode('free')}
+                             />
+                             <span className="text-sm font-bold text-gray-900">Free on all orders</span>
+                           </label>
+                           <label
+                             className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer ${feeMode === 'flat' ? 'border-brand-300 bg-brand-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                           >
+                             <input
+                               type="radio"
+                               name="deliveryFeeMode"
+                               className="w-4 h-4 text-brand-600 focus:ring-brand-500"
+                               checked={feeMode === 'flat'}
+                               onChange={() => setFeeMode('flat')}
+                             />
+                             <span className="text-sm font-bold text-gray-900">Flat fee (ETB)</span>
+                             <input
+                               type="number"
+                               min={0}
+                               step={1}
+                               value={flatDeliveryFee}
+                               onChange={(e) => setFlatDeliveryFee(Number(e.target.value))}
+                               disabled={feeMode !== 'flat'}
+                               className="ml-auto w-24 px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-brand-500 disabled:opacity-50"
+                             />
+                           </label>
+                           <label
+                             className={`flex flex-wrap items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50 ${feeMode === 'condition' ? 'border-brand-300 bg-brand-50' : 'border-gray-200'}`}
+                           >
+                             <input
+                               type="radio"
+                               name="deliveryFeeMode"
+                               className="w-4 h-4 text-brand-600 focus:ring-brand-500"
+                               checked={feeMode === 'condition'}
+                               onChange={() => setFeeMode('condition')}
+                             />
+                             <span className="text-sm font-bold text-gray-900">Condition based</span>
+                             <span className="text-xs text-gray-500 w-full sm:w-auto sm:ml-auto">Not saved yet — fee fields stay unchanged when you save.</span>
+                           </label>
+                         </div>
+                       </div>
 
-                   <div>
-                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Estimated Delivery Time (mins)</label>
-                     <p className="text-xs text-gray-500 mb-2">Shown to patients before ordering.</p>
-                     <input type="number" defaultValue="30" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none" />
-                   </div>
+                       <div className="md:col-span-2">
+                         <label className="block text-sm font-bold text-gray-700 mb-1.5">Max Concurrent Deliveries per Agent</label>
+                         <p className="text-xs text-gray-500 mb-2">Enforced by the system. Configuration here is preview-only.</p>
+                         <input
+                           type="number"
+                           defaultValue={5}
+                           disabled
+                           className="w-full px-4 py-2.5 bg-gray-100 border border-gray-200 rounded-xl text-gray-500 cursor-not-allowed outline-none"
+                         />
+                       </div>
+                     </div>
 
-                   <div>
-                     <label className="block text-sm font-bold text-gray-700 mb-1.5">Max Concurrent Deliveries per Agent</label>
-                     <p className="text-xs text-gray-500 mb-2">Enforced by the system.</p>
-                     <input type="number" defaultValue="5" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none" />
-                   </div>
-                 </div>
-
-                 <div className="pt-4 border-t border-gray-100 flex justify-end">
-                    <button onClick={handleSaveDelivery} className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-sm transition-colors">
-                      Save Delivery Options
-                    </button>
-                  </div>
+                     <div className="pt-4 border-t border-gray-100 flex justify-end">
+                       <button
+                         type="button"
+                         disabled={deliverySaving}
+                         onClick={() => void handleSaveDelivery()}
+                         className="inline-flex items-center gap-2 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 disabled:pointer-events-none text-white font-bold rounded-xl shadow-sm transition-colors"
+                       >
+                         {deliverySaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                         Save Delivery Options
+                       </button>
+                     </div>
+                   </>
+                 )}
                </div>
              </motion.div>
            )}
@@ -709,29 +765,10 @@ export default function PharmacyProfilePage() {
              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                <div className="p-6 border-b border-gray-100">
                  <h2 className="text-2xl font-serif font-bold text-gray-900">{translatedTabs.security}</h2>
-                 <p className="text-gray-500 text-sm mt-1">Manage staff, authentication, and platform availability.</p>
+                 <p className="text-gray-500 text-sm mt-1">Manage staff and platform availability.</p>
                </div>
                
                <div className="p-6 space-y-8">
-                 {/* Multi-Factor Authentication */}
-                 <div className="bg-purple-50/50 border border-purple-100 rounded-2xl p-5">
-                   <div className="flex items-start gap-4">
-                     <Smartphone className="w-6 h-6 text-purple-600 mt-1 shrink-0" />
-                     <div>
-                       <h3 className="text-base font-bold text-purple-900 mb-1">Multi-Factor Authentication (MFA)</h3>
-                       <p className="text-sm text-purple-700/80 mb-3">Mandatory for all pharmacy accounts to protect patient data and inventory controls.</p>
-                       <div className="flex items-center gap-2 text-sm font-bold text-purple-800 bg-white border border-purple-200 w-fit px-3 py-1.5 rounded-lg">
-                         <CheckCircle2 className="w-4 h-4 text-green-500" /> Configured & Active
-                       </div>
-                       <div className="flex items-center gap-3 mt-4">
-                         <button className="text-xs font-bold text-purple-700 hover:text-purple-900 underline">Generate Backup Codes</button>
-                         <span className="text-xs text-purple-400">|</span>
-                         <button className="text-xs font-bold text-purple-700 hover:text-purple-900 underline">Reconfigure Device</button>
-                       </div>
-                     </div>
-                   </div>
-                 </div>
-
                  {/* Staff Accounts */}
                  <div>
                    <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-2">
@@ -782,7 +819,7 @@ export default function PharmacyProfilePage() {
                  <LogOut className="w-8 h-8 text-red-600" />
                </div>
                <h2 className="text-xl font-serif font-bold text-gray-900 mb-2">Confirm Sign Out</h2>
-               <p className="text-gray-500 text-sm mb-6">Are you sure you want to log out of the pharmacy dashboard? You will need your MFA device to log back in.</p>
+               <p className="text-gray-500 text-sm mb-6">Are you sure you want to log out of the pharmacy dashboard? You will need to sign in again to continue.</p>
                <div className="space-y-3">
                  <button onClick={handleLogout} className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-sm">
                    Yes, Sign Out Now

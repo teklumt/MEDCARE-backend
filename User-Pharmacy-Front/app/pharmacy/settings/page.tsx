@@ -10,6 +10,7 @@ import {
   Shield,
   CheckCircle2,
 } from "lucide-react";
+import PharmacyLocationHoursForm from "@/components/pharmacy/PharmacyLocationHoursForm";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile");
@@ -199,14 +200,7 @@ export default function SettingsPage() {
           )}
 
           {activeTab === "location" && (
-            <div className="space-y-6">
-              <h2 className="text-xl font-bold text-brand-950 mb-4">
-                Location & Hours
-              </h2>
-              <p className="text-gray-500">
-                Location settings will appear here.
-              </p>
-            </div>
+            <PharmacyLocationHoursForm showHeader={false} />
           )}
 
           {activeTab === "license" && (

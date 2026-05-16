@@ -5,50 +5,35 @@ import { MapPin, Star, Clock, CheckCircle2, XCircle, ChevronRight } from 'lucide
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useEffect, useState } from 'react';
-import { apiGet } from '@/lib/api';
-
-type PharmacyCard = {
-  id: string;
-  name: string;
-  distance: string;
-  rating: number;
-  reviews: number;
-  status: 'open' | 'closed';
-  availability: 'high' | 'medium' | 'low';
-};
-
-const pharmacies: PharmacyCard[] = [];
+import { listPharmacies } from '@/lib/api';
+import { enrichCardsWithDistance, mapPharmacyToCard, type PharmacyCardModel } from '@/lib/pharmacyGeo';
+import { useUserLocation } from '@/lib/useUserLocation';
 
 export default function NearbyPharmacies() {
   const { t } = useLanguage();
-  const [nearby, setNearby] = useState<PharmacyCard[]>(pharmacies);
+  const { status: geoStatus, position, usingFallback } = useUserLocation();
+  const [nearby, setNearby] = useState<PharmacyCardModel[]>([]);
 
   useEffect(() => {
+    if (geoStatus === 'loading') return;
     const loadPharmacies = async () => {
       try {
-        const response = await apiGet<any[]>('/pharmacies');
-        const mapped = (response.data || []).map((pharmacy: any) => {
-          const rating = pharmacy.stats?.rating || 0;
-          const availability = (rating >= 4.5 ? 'high' : rating >= 4 ? 'medium' : 'low') as 'high' | 'medium' | 'low';
-
-          return {
-            id: pharmacy._id,
-            name: pharmacy.businessName,
-            distance: pharmacy.location || 'Nearby',
-            rating,
-            reviews: pharmacy.stats?.reviewCount || 0,
-            status: (pharmacy.isOpen ? 'open' : 'closed') as 'open' | 'closed',
-            availability
-          };
+        const rows = await listPharmacies({
+          lat: position.lat,
+          lng: position.lng
         });
-        setNearby(mapped);
+        let cards = rows.map((p) => mapPharmacyToCard(p));
+        if (!usingFallback) {
+          cards = enrichCardsWithDistance(cards, position);
+        }
+        setNearby(cards);
       } catch (error) {
         console.error(error);
       }
     };
 
-    loadPharmacies();
-  }, []);
+    void loadPharmacies();
+  }, [geoStatus, position, usingFallback]);
 
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-brand-100 p-6 md:p-8">
@@ -57,7 +42,10 @@ export default function NearbyPharmacies() {
           <h2 className="text-xl font-serif font-bold text-brand-950 mb-1">{t('nearby.title')}</h2>
           <p className="text-sm text-gray-500 font-medium">{t('nearby.subtitle')}</p>
         </div>
-        <Link href="/dashboard/pharmacies" className="text-sm font-bold text-brand-700 hover:text-brand-800 transition-colors flex items-center">
+        <Link
+          href="/dashboard/pharmacies"
+          className="text-sm font-bold text-brand-700 hover:text-brand-800 transition-colors flex items-center"
+        >
           {t('nearby.viewMap')} <ChevronRight className="w-4 h-4 ml-0.5" />
         </Link>
       </div>
@@ -84,8 +72,11 @@ export default function NearbyPharmacies() {
                   <span className="flex items-center gap-1 text-amber-500">
                     <Star className="w-3 h-3 fill-current" /> {pharmacy.rating} ({pharmacy.reviews})
                   </span>
-                  <span className={`flex items-center gap-1 ${pharmacy.status === 'open' ? 'text-emerald-600' : 'text-red-500'}`}>
-                    <Clock className="w-3 h-3" /> {pharmacy.status === 'open' ? t('nearby.openNow') : t('nearby.closed')}
+                  <span
+                    className={`flex items-center gap-1 ${pharmacy.status === 'open' ? 'text-emerald-600' : 'text-red-500'}`}
+                  >
+                    <Clock className="w-3 h-3" />{' '}
+                    {pharmacy.status === 'open' ? t('nearby.openNow') : t('nearby.closed')}
                   </span>
                 </div>
               </div>
@@ -96,17 +87,28 @@ export default function NearbyPharmacies() {
                 {pharmacy.availability === 'high' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                 {pharmacy.availability === 'medium' && <CheckCircle2 className="w-4 h-4 text-amber-500" />}
                 {pharmacy.availability === 'low' && <XCircle className="w-4 h-4 text-red-500" />}
-                <span className={`text-xs font-bold uppercase tracking-wider ${
-                  pharmacy.availability === 'high' ? 'text-emerald-700' : 
-                  pharmacy.availability === 'medium' ? 'text-amber-700' : 'text-red-700'
-                }`}>
-                  {pharmacy.availability === 'high' ? t('nearby.stockHigh') : 
-                   pharmacy.availability === 'medium' ? t('nearby.stockMedium') : t('nearby.stockLow')}
+                <span
+                  className={`text-xs font-bold uppercase tracking-wider ${
+                    pharmacy.availability === 'high'
+                      ? 'text-emerald-700'
+                      : pharmacy.availability === 'medium'
+                        ? 'text-amber-700'
+                        : 'text-red-700'
+                  }`}
+                >
+                  {pharmacy.availability === 'high'
+                    ? t('nearby.stockHigh')
+                    : pharmacy.availability === 'medium'
+                      ? t('nearby.stockMedium')
+                      : t('nearby.stockLow')}
                 </span>
               </div>
-              <button className="text-sm font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-xl transition-colors">
+              <Link
+                href={`/dashboard/pharmacies/${pharmacy.id}`}
+                className="text-sm font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-xl transition-colors"
+              >
                 {t('nearby.order')}
-              </button>
+              </Link>
             </div>
           </motion.div>
         ))}

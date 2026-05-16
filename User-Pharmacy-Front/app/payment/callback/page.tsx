@@ -14,7 +14,6 @@ function PaymentCallbackContent() {
 
   useEffect(() => {
     const orderIdParam = searchParams.get('order_id');
-    const txRef = searchParams.get('tx_ref');
     const chapaStatus = searchParams.get('status');
 
     if (!orderIdParam) {
@@ -39,13 +38,38 @@ function PaymentCallbackContent() {
         setStatus('verifying');
         setMessage('Verifying your payment with the pharmacy...');
 
-        // Wait a bit for webhook to process
+        // Wait a bit for webhook to process (production webhook); localhost callbacks never arrive from Chapa.
         if (retryCount === 0) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
-        const response = await apiGet<{ paymentStatus: string; _id: string }>(`/orders/${orderIdParam}`);
-        const order = response.data;
+        type OrderPeek = {
+          paymentStatus?: string;
+          paymentMethod?: string;
+          paymentId?: string;
+        };
+
+        let response = await apiGet<OrderPeek>(`/orders/${orderIdParam}`);
+        let order = response.data;
+
+        // Ask backend to verify with Chapa API once per attempt cycle (fixes stuck "initiated" when webhook URL is unreachable).
+        const paymentId =
+          order?.paymentId != null ? String(order.paymentId) : '';
+        if (
+          retryCount <= 2 &&
+          order?.paymentMethod === 'chapa' &&
+          paymentId &&
+          order.paymentStatus !== 'success' &&
+          order.paymentStatus !== 'failed'
+        ) {
+          try {
+            await apiGet(`/payments/${paymentId}/verify`);
+            response = await apiGet<OrderPeek>(`/orders/${orderIdParam}`);
+            order = response.data;
+          } catch (verifyErr) {
+            console.warn('payments/:id/verify failed:', verifyErr);
+          }
+        }
 
         console.log('Order status:', order?.paymentStatus);
 

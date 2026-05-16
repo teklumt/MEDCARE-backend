@@ -3,6 +3,7 @@ import { Inter, Outfit, Playfair_Display } from 'next/font/google';
 import './globals.css';
 import { CartProvider } from '@/lib/CartContext';
 import { LanguageProvider } from '@/lib/i18n/LanguageContext';
+import { AuthTokenRefresh } from '@/components/auth/AuthTokenRefresh';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -34,6 +35,7 @@ export default function RootLayout({
       <body className="font-sans antialiased bg-accent-50 text-gray-900 selection:bg-brand-200 selection:text-brand-900">
         <LanguageProvider>
           <CartProvider>
+            <AuthTokenRefresh />
             {children}
           </CartProvider>
         </LanguageProvider>

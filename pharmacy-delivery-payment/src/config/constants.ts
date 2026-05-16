@@ -14,7 +14,7 @@ export const ORDER_STATUSES = [
 export const ORDER_STATUS_TRANSITIONS: Record<string, string[]> = {
   pending: ['confirmed', 'rejected', 'cancelled'],
   confirmed: ['preparing', 'cancelled'],
-  preparing: ['ready', 'cancelled'],
+  preparing: ['ready', 'dispatched', 'delivered', 'cancelled'],
   ready: ['dispatched', 'cancelled'],
   dispatched: ['delivered'],
   delivered: [],
@@ -26,6 +26,7 @@ export const PAYMENT_METHODS = ['chapa', 'cod'] as const;
 
 export const PAYMENT_STATUSES = [
   'pending',
+  'pending_prescription_review',
   'initiated',
   'success',
   'failed',

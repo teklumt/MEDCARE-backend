@@ -8,7 +8,8 @@ const messageSchema = new Schema<IMessage>(
     senderName: { type: String, required: true },
     content: { type: String, required: true },
     isRead: { type: Boolean, default: false },
-    sentAt: { type: Date, default: Date.now }
+    sentAt: { type: Date, default: Date.now },
+    kind: { type: String, enum: ['user', 'system'], default: 'user' }
   },
   { timestamps: false }
 );

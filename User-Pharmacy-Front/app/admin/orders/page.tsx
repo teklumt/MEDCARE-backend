@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { 
   Search, AlertTriangle, Filter, Globe, ChevronDown, 
@@ -8,7 +9,11 @@ import {
   CreditCard, Clock, MessageSquare, Flag, RefreshCw, XCircle 
 } from 'lucide-react';
 import Image from 'next/image';
-import { adminApi } from '@/lib/admin-api';
+import { adminApi, type OrdersTodayKpis } from '@/lib/admin-api';
+
+function formatEtbRevenueCompact(value: number): string {
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+}
 
 const TRANSLATIONS = {
   en: {
@@ -167,12 +172,17 @@ const INITIAL_ORDERS = [
   },
 ];
 
+type AdminOrderRow = (typeof INITIAL_ORDERS)[number];
+
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState(INITIAL_ORDERS);
   const { language, setLanguage } = useLanguage();
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [rxImageModal, setRxImageModal] = useState<string | null>(null);
+  const [ordersTodayKpis, setOrdersTodayKpis] = useState<OrdersTodayKpis | null>(null);
+  const [kpisLoading, setKpisLoading] = useState(true);
+  const [kpisError, setKpisError] = useState<string | null>(null);
   
   
   const toggleLanguage = (lang: 'en' | 'am') => {
@@ -227,8 +237,12 @@ export default function AdminOrdersPage() {
               method: deliveryMethod,
               address: [deliveryAddress.street, deliveryAddress.subCity, deliveryAddress.city].filter(Boolean).join(', '),
               instructions: order.deliveryInstructions || null,
-              agent: order.deliveryAgentId ? { name: order.deliveryAgentId, phone: '-', activeCount: 0 } : null,
-              estimatedTime: order.estimatedDeliveryAt ? new Date(order.estimatedDeliveryAt).toLocaleString() : null,
+              agent: order.deliveryAgentId
+                ? { name: String(order.deliveryAgentId), phone: '-', activeCount: 0 }
+                : null,
+              estimatedTime: order.estimatedDeliveryAt
+                ? new Date(order.estimatedDeliveryAt).toLocaleString()
+                : null,
               actualTime: order.deliveredAt ? new Date(order.deliveredAt).toLocaleString() : null,
             },
             payment: {
@@ -251,13 +265,36 @@ export default function AdminOrdersPage() {
             flag: null,
           };
         });
-        if (mapped.length) setOrders(mapped);
+        if (mapped.length) setOrders(mapped as unknown as AdminOrderRow[]);
       } catch (error) {
         console.error('Failed to load orders', error);
       }
     };
 
     loadOrders();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await adminApi.getOrdersTodayKpis();
+        if (!cancelled) {
+          setOrdersTodayKpis(data);
+          setKpisError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setKpisError(e instanceof Error ? e.message : 'Failed to load KPIs');
+          setOrdersTodayKpis(null);
+        }
+      } finally {
+        if (!cancelled) setKpisLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Admin Actions
@@ -457,9 +494,12 @@ export default function AdminOrdersPage() {
                 <div><span className="text-gray-500">Account ID:</span> <a href="#" className="font-bold text-brand-600 hover:underline block">{selectedOrder.patient.id}</a></div>
                 <div><span className="text-gray-500">Status:</span> <p className="font-medium text-emerald-600">{selectedOrder.patient.status}</p></div>
                 <div><span className="text-gray-500">Previous Orders:</span> <p className="font-medium text-gray-900">{selectedOrder.patient.orderCount}</p></div>
-                <button className="w-full mt-2 py-2 bg-brand-50 text-brand-700 font-bold rounded-xl hover:bg-brand-100 transition-colors">
+                <Link
+                  href="/admin/coming-soon?feature=Patient%20profile"
+                  className="block w-full mt-2 py-2 bg-brand-50 text-brand-700 font-bold rounded-xl hover:bg-brand-100 transition-colors text-center"
+                >
                   View Patient Profile
-                </button>
+                </Link>
               </div>
             </section>
 
@@ -473,9 +513,12 @@ export default function AdminOrdersPage() {
                 <div><span className="text-gray-500">Status:</span> <p className="font-medium text-emerald-600">{selectedOrder.pharmacy.status}</p></div>
                 <div><span className="text-gray-500">Phone:</span> <a href={`tel:${selectedOrder.pharmacy.phone}`} className="font-bold text-brand-600 hover:underline block">{selectedOrder.pharmacy.phone}</a></div>
                 <div><span className="text-gray-500">Address:</span> <p className="font-medium text-gray-900">{selectedOrder.pharmacy.address}</p></div>
-                <button className="w-full mt-2 py-2 bg-brand-50 text-brand-700 font-bold rounded-xl hover:bg-brand-100 transition-colors">
+                <Link
+                  href="/admin/coming-soon?feature=Pharmacy%20profile"
+                  className="block w-full mt-2 py-2 bg-brand-50 text-brand-700 font-bold rounded-xl hover:bg-brand-100 transition-colors text-center"
+                >
                   View Pharmacy Profile
-                </button>
+                </Link>
               </div>
             </section>
 
@@ -496,9 +539,15 @@ export default function AdminOrdersPage() {
                       [Static Map Thumbnail]
                     </div>
                     <div className="border-t border-gray-100 pt-2 mt-2">
-                      <span className="text-gray-500 block mb-1">Assigned Agent:</span> 
-                      <p className="font-bold text-gray-900">{selectedOrder.delivery.agent.name}</p>
-                      <p className="text-xs text-gray-500 font-mono">{selectedOrder.delivery.agent.phone}</p>
+                      <span className="text-gray-500 block mb-1">Assigned Agent:</span>
+                      {selectedOrder.delivery.agent ? (
+                        <>
+                          <p className="font-bold text-gray-900">{selectedOrder.delivery.agent.name}</p>
+                          <p className="text-xs text-gray-500 font-mono">{selectedOrder.delivery.agent.phone}</p>
+                        </>
+                      ) : (
+                        <p className="font-medium text-gray-600">Not assigned yet</p>
+                      )}
                     </div>
                   </>
                 )}
@@ -524,9 +573,12 @@ export default function AdminOrdersPage() {
                 {selectedOrder.payment.timestamp && (
                   <div><span className="text-gray-500">Confirmed At:</span> <p className="font-medium text-gray-900">{selectedOrder.payment.timestamp}</p></div>
                 )}
-                <button className="w-full mt-2 py-2 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors flex items-center justify-center gap-2">
+                <Link
+                  href="/admin/coming-soon?feature=Payment%20receipt"
+                  className="w-full mt-2 py-2 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                >
                   <FileText className="w-4 h-4" /> View Payment Receipt
-                </button>
+                </Link>
               </div>
             </section>
 
@@ -542,7 +594,12 @@ export default function AdminOrdersPage() {
                   {selectedOrder.chat.count > 0 ? (
                     <div className="bg-accent-50 rounded-xl p-3 border border-gray-100">
                       <p className="text-sm font-bold text-gray-900">{selectedOrder.chat.count} messages exchanged</p>
-                      <button className="text-xs font-bold text-brand-600 hover:underline mt-1">View Conversation Metadata</button>
+                      <Link
+                        href="/admin/coming-soon?feature=Chat%20metadata"
+                        className="text-xs font-bold text-brand-600 hover:underline mt-1 inline-block"
+                      >
+                        View Conversation Metadata
+                      </Link>
                     </div>
                   ) : (
                     <p className="text-sm text-gray-500">No chat initiated.</p>
@@ -557,16 +614,24 @@ export default function AdminOrdersPage() {
                         <div key={cmp.id} className="bg-red-50 border border-red-100 p-3 rounded-xl">
                            <p className="text-sm font-bold text-red-900">{cmp.id} • {cmp.type}</p>
                            <p className="text-xs text-red-700">Filed by {cmp.reporter} • {cmp.status}</p>
-                           <button className="text-xs font-bold text-red-600 hover:underline mt-1">View Complaint</button>
+                           <Link
+                             href="/admin/coming-soon?feature=Complaint%20details"
+                             className="text-xs font-bold text-red-600 hover:underline mt-1 inline-block"
+                           >
+                             View Complaint
+                           </Link>
                         </div>
                       ))}
                     </div>
                   ) : (
                     <p className="text-sm text-gray-500 mb-3">No complaints filed.</p>
                   )}
-                  <button className="text-sm font-bold text-gray-600 hover:text-gray-900 transition-colors">
+                  <Link
+                    href="/admin/coming-soon?feature=File%20a%20complaint"
+                    className="text-sm font-bold text-gray-600 hover:text-gray-900 transition-colors inline-block"
+                  >
                     + File New Complaint for This Order
-                  </button>
+                  </Link>
                </div>
             </section>
 
@@ -665,25 +730,56 @@ export default function AdminOrdersPage() {
       </div>
 
       {/* Stats Strip */}
-      <div className="flex flex-wrap gap-4">
-        <div className="bg-white px-6 py-4 rounded-2xl border border-gray-200 shadow-sm flex-1 min-w-[200px]">
-          <p className="text-sm text-gray-500 font-medium mb-1">{t.totalOrdersToday}</p>
-          <p className="text-2xl font-bold text-brand-950">1,245</p>
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-4">
+          <div className="bg-white px-6 py-4 rounded-2xl border border-gray-200 shadow-sm flex-1 min-w-[200px]">
+            <p className="text-sm text-gray-500 font-medium mb-1">{t.totalOrdersToday}</p>
+            <p
+              className={`text-2xl font-bold text-brand-950 ${kpisLoading ? 'animate-pulse text-gray-400' : ''}`}
+            >
+              {kpisLoading ? '—' : (ordersTodayKpis?.ordersToday ?? '—').toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-white px-6 py-4 rounded-2xl border border-gray-200 shadow-sm flex-1 min-w-[200px]">
+            <p className="text-sm text-gray-500 font-medium mb-1">{t.revenueToday}</p>
+            <p
+              className={`text-2xl font-bold text-brand-950 ${kpisLoading ? 'animate-pulse text-gray-400' : ''}`}
+            >
+              {kpisLoading ? (
+                '—'
+              ) : ordersTodayKpis ? (
+                <>
+                  {formatEtbRevenueCompact(ordersTodayKpis.revenueTodayEt)}{' '}
+                  <span className="text-sm text-gray-500 font-normal">ETB</span>
+                </>
+              ) : (
+                '—'
+              )}
+            </p>
+          </div>
+          <div className="bg-white px-6 py-4 rounded-2xl border border-gray-200 shadow-sm flex-1 min-w-[200px]">
+            <p className="text-sm text-gray-500 font-medium mb-1">{t.avgFulfillment}</p>
+            <p
+              className={`text-2xl font-bold text-brand-950 ${kpisLoading ? 'animate-pulse text-gray-400' : ''}`}
+            >
+              {kpisLoading
+                ? '—'
+                : ordersTodayKpis?.avgFulfillmentMinutes == null
+                  ? '—'
+                  : `${ordersTodayKpis.avgFulfillmentMinutes}m`}
+            </p>
+          </div>
+          <div className="bg-amber-50 px-6 py-4 rounded-2xl border border-amber-200 shadow-sm flex-1 min-w-[200px] cursor-pointer hover:bg-amber-100 transition-colors">
+            <p className="text-sm text-amber-700 font-medium mb-1">{t.stuckOrders}</p>
+            <p
+              className={`text-2xl font-bold text-amber-800 flex items-center gap-2 ${kpisLoading ? 'animate-pulse text-amber-600/70' : ''}`}
+            >
+              {kpisLoading ? '—' : (ordersTodayKpis?.stuckOrders ?? '—').toLocaleString()}{' '}
+              {!kpisLoading && ordersTodayKpis != null && <AlertTriangle className="w-5 h-5" />}
+            </p>
+          </div>
         </div>
-        <div className="bg-white px-6 py-4 rounded-2xl border border-gray-200 shadow-sm flex-1 min-w-[200px]">
-          <p className="text-sm text-gray-500 font-medium mb-1">{t.revenueToday}</p>
-          <p className="text-2xl font-bold text-brand-950">452.8k <span className="text-sm text-gray-500 font-normal">ETB</span></p>
-        </div>
-        <div className="bg-white px-6 py-4 rounded-2xl border border-gray-200 shadow-sm flex-1 min-w-[200px]">
-          <p className="text-sm text-gray-500 font-medium mb-1">{t.avgFulfillment}</p>
-          <p className="text-2xl font-bold text-brand-950">32m</p>
-        </div>
-        <div className="bg-amber-50 px-6 py-4 rounded-2xl border border-amber-200 shadow-sm flex-1 min-w-[200px] cursor-pointer hover:bg-amber-100 transition-colors">
-          <p className="text-sm text-amber-700 font-medium mb-1">{t.stuckOrders}</p>
-          <p className="text-2xl font-bold text-amber-800 flex items-center gap-2">
-            12 <AlertTriangle className="w-5 h-5" />
-          </p>
-        </div>
+        {kpisError && <p className="text-xs text-red-600 px-1">{kpisError}</p>}
       </div>
 
       {/* Orders Table */}

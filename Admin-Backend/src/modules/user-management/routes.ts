@@ -45,15 +45,40 @@ userManagementRouter.get(
 userManagementRouter.patch(
   "/:id",
   requireRole("admin"),
-  body("isActive").isBoolean(),
+  body("isActive").optional().isBoolean(),
+  body("role").optional().isIn(["patient", "pharmacy", "delivery", "admin"]),
   validateRequest,
+  (req, res, next) => {
+    const { isActive, role } = req.body as { isActive?: boolean; role?: string };
+    const hasActive = typeof isActive === "boolean";
+    const hasRole = typeof role === "string";
+    if (!hasActive && !hasRole) {
+      return errorResponse(res, "Provide at least one of isActive or role", "VALIDATION_ERROR", 400);
+    }
+    return next();
+  },
   async (req, res) => {
-    const { isActive } = req.body as { isActive: boolean };
-    const user = await User.findByIdAndUpdate(req.params.id, { $set: { isActive } }, { new: true }).lean();
+    const { isActive, role } = req.body as {
+      isActive?: boolean;
+      role?: "patient" | "pharmacy" | "delivery" | "admin";
+    };
+    const $set: Record<string, unknown> = {};
+    if (typeof isActive === "boolean") $set.isActive = isActive;
+    if (typeof role === "string") $set.role = role;
+
+    const user = await User.findByIdAndUpdate(req.params.id, { $set }, { new: true }).lean();
     if (!user) return errorResponse(res, "User not found", "NOT_FOUND", 404);
 
-    await logAudit(req, "admin.user.update", "User", String(user._id), { isActive });
-    return successResponse(res, { id: user._id, isActive: user.isActive });
+    const auditPayload: Record<string, unknown> = {};
+    if (typeof isActive === "boolean") auditPayload.isActive = isActive;
+    if (typeof role === "string") auditPayload.role = role;
+
+    await logAudit(req, "admin.user.update", "User", String(user._id), auditPayload);
+    return successResponse(res, {
+      id: user._id,
+      isActive: user.isActive,
+      role: user.role,
+    });
   },
 );
 

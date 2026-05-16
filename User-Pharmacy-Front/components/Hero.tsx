@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Search, Mic, Camera, MapPin, ArrowRight } from 'lucide-react';
+import { Search, Camera, MapPin, ArrowRight } from 'lucide-react';
 
 export default function Hero() {
-  const [searchMode, setSearchMode] = useState<'text' | 'voice' | 'image'>('text');
+  const [searchMode, setSearchMode] = useState<'text' | 'image'>('text');
 
   return (
     <section className="relative pt-12 pb-20 lg:pt-20 lg:pb-28 overflow-hidden">
@@ -32,8 +32,8 @@ export default function Hero() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-lg md:text-xl text-gray-600 mb-8"
           >
-            Search real-time inventory across verified pharmacies in Ethiopia. 
-            Upload a prescription, type a name, or use your voice.
+            Search real-time inventory across verified pharmacies in Ethiopia.
+            Upload a prescription or type a medication name.
           </motion.p>
         </div>
 
@@ -51,12 +51,6 @@ export default function Hero() {
               className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${searchMode === 'text' ? 'text-brand-900 border-b-2 border-brand-600 bg-brand-50/50' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
             >
               <Search className="w-4 h-4" /> Text Search
-            </button>
-            <button 
-              onClick={() => setSearchMode('voice')}
-              className={`flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${searchMode === 'voice' ? 'text-brand-900 border-b-2 border-brand-600 bg-brand-50/50' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
-            >
-              <Mic className="w-4 h-4" /> Voice Search
             </button>
             <button 
               onClick={() => setSearchMode('image')}
@@ -94,17 +88,6 @@ export default function Hero() {
                 <button className="bg-brand-900 hover:bg-brand-800 text-white py-4 px-8 rounded-2xl font-medium transition-colors flex items-center justify-center gap-2">
                   Search <ArrowRight className="w-4 h-4" />
                 </button>
-              </div>
-            )}
-
-            {searchMode === 'voice' && (
-              <div className="flex flex-col items-center justify-center py-8">
-                <button className="w-20 h-20 bg-brand-100 text-brand-700 rounded-full flex items-center justify-center hover:bg-brand-200 transition-colors mb-4 relative group">
-                  <div className="absolute inset-0 bg-brand-300 rounded-full animate-ping opacity-20 group-hover:opacity-40"></div>
-                  <Mic className="w-8 h-8 relative z-10" />
-                </button>
-                <p className="text-gray-900 font-medium text-lg">Tap to speak</p>
-                <p className="text-gray-500 text-sm mt-1">Supports Amharic and English</p>
               </div>
             )}
 

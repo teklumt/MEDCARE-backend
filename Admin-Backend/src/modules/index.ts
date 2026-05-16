@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { publicRouter } from "./public/routes.js";
 import { authAdminRouter } from "./auth/routes.js";
 import { adminManagementRouter } from "./admin-management/routes.js";
 import { adminDashboardRouter } from "./admin-dashboard/routes.js";
@@ -14,9 +15,11 @@ import { orderManagementRouter } from "./order-management/routes.js";
 import { deliveryManagementRouter } from "./delivery-management/routes.js";
 import { complaintManagementRouter } from "./complaint-management/routes.js";
 import { paymentManagementRouter } from "./payment-management/routes.js";
+import { platformSettingsRouter } from "./platform-settings/routes.js";
 
 export const adminRouter = Router();
 
+adminRouter.use("/public", publicRouter);
 adminRouter.use("/auth", authAdminRouter);
 adminRouter.use("/admins", adminManagementRouter);
 adminRouter.use("/", adminDashboardRouter);
@@ -33,3 +36,4 @@ adminRouter.use("/orders", orderManagementRouter);
 adminRouter.use("/deliveries", deliveryManagementRouter);
 adminRouter.use("/complaints", complaintManagementRouter);
 adminRouter.use("/payments", paymentManagementRouter);
+adminRouter.use("/platform-settings", platformSettingsRouter);
