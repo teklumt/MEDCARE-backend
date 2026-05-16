@@ -18,6 +18,7 @@ function FitCircleBounds({ center, radiusKm }: { center: LatLng; radiusKm: numbe
   const map = useMap();
 
   useEffect(() => {
+    // @ts-ignore
     if (!map || typeof google === 'undefined') return;
 
     const lat = center.lat;
@@ -27,6 +28,7 @@ function FitCircleBounds({ center, radiusKm }: { center: LatLng; radiusKm: numbe
     const cosLat = Math.cos((lat * Math.PI) / 180);
     const dLng = cosLat > 0.01 ? ((radiusKm / (111.32 * cosLat)) * pad) : dLat;
 
+    // @ts-ignore
     const bounds = new google.maps.LatLngBounds(
       { lat: lat - dLat, lng: lng - dLng },
       { lat: lat + dLat, lng: lng + dLng }

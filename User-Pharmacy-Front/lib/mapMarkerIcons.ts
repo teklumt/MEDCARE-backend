@@ -37,6 +37,7 @@ export const ROUTE_MARKER_META: Record<
 
 /** Icon config for classic google.maps.Marker (vis.gl Marker). */
 export function routeMarkerIcon(kind: RouteMarkerKind): google.maps.Icon | undefined {
+  // @ts-ignore
   if (typeof google === 'undefined') return undefined;
   const { url } = ROUTE_MARKER_META[kind];
   return {
