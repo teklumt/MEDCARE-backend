@@ -2,14 +2,14 @@ import { PlatformConfig } from "../models/PlatformConfig.js";
 
 const KEY_PLATFORM_NAME = "platform.name";
 const KEY_SUPPORT_EMAIL = "platform.support_email";
-const KEY_COMMISSION_RATE = "platform.commission_rate_percent";
+const KEY_COMMISSION_ETB_PER_DELIVERED_ORDER = "platform.commission_etb_per_delivered_order";
 const KEY_DELIVERY_RADIUS = "platform.default_delivery_radius_km";
 const KEY_MAINTENANCE_MODE = "platform.maintenance_mode";
 
 const ALL_KEYS = [
   KEY_PLATFORM_NAME,
   KEY_SUPPORT_EMAIL,
-  KEY_COMMISSION_RATE,
+  KEY_COMMISSION_ETB_PER_DELIVERED_ORDER,
   KEY_DELIVERY_RADIUS,
   KEY_MAINTENANCE_MODE,
 ] as const;
@@ -17,7 +17,7 @@ const ALL_KEYS = [
 export type PlatformGeneralSettings = {
   platformName: string;
   supportEmail: string;
-  commissionRatePercent: number;
+  commissionEtbPerDeliveredOrder: number;
   defaultDeliveryRadiusKm: number;
   maintenanceMode: boolean;
 };
@@ -25,14 +25,14 @@ export type PlatformGeneralSettings = {
 const DEFAULTS: PlatformGeneralSettings = {
   platformName: "MedCare Platform",
   supportEmail: "support@medcare.com",
-  commissionRatePercent: 5,
+  commissionEtbPerDeliveredOrder: 5,
   defaultDeliveryRadiusKm: 10,
   maintenanceMode: false,
 };
 
-function clampPercent(n: number): number {
-  if (!Number.isFinite(n)) return DEFAULTS.commissionRatePercent;
-  return Math.min(100, Math.max(0, n));
+function clampCommissionEtb(n: number): number {
+  if (!Number.isFinite(n)) return DEFAULTS.commissionEtbPerDeliveredOrder;
+  return Math.min(1000, Math.max(0, n));
 }
 
 function clampRadius(n: number): number {
@@ -49,17 +49,18 @@ async function loadRaw(): Promise<Record<string, string>> {
 
 export async function getGeneralPlatformSettings(): Promise<PlatformGeneralSettings> {
   const raw = await loadRaw();
-  const commission = Number(raw[KEY_COMMISSION_RATE]);
+  const etb = Number(raw[KEY_COMMISSION_ETB_PER_DELIVERED_ORDER]);
   const radius = Number(raw[KEY_DELIVERY_RADIUS]);
+
+  const commissionEtbPerDeliveredOrder = Number.isFinite(etb)
+    ? clampCommissionEtb(etb)
+    : DEFAULTS.commissionEtbPerDeliveredOrder;
+
   return {
     platformName: raw[KEY_PLATFORM_NAME]?.trim() || DEFAULTS.platformName,
     supportEmail: raw[KEY_SUPPORT_EMAIL]?.trim() || DEFAULTS.supportEmail,
-    commissionRatePercent: clampPercent(
-      Number.isFinite(commission) ? commission : DEFAULTS.commissionRatePercent,
-    ),
-    defaultDeliveryRadiusKm: clampRadius(
-      Number.isFinite(radius) ? radius : DEFAULTS.defaultDeliveryRadiusKm,
-    ),
+    commissionEtbPerDeliveredOrder,
+    defaultDeliveryRadiusKm: clampRadius(Number.isFinite(radius) ? radius : DEFAULTS.defaultDeliveryRadiusKm),
     maintenanceMode: raw[KEY_MAINTENANCE_MODE] === "true",
   };
 }
@@ -75,10 +76,10 @@ export async function upsertGeneralPlatformSettings(
   if (partial.supportEmail !== undefined) {
     ops.push({ key: KEY_SUPPORT_EMAIL, value: partial.supportEmail.trim().toLowerCase() });
   }
-  if (partial.commissionRatePercent !== undefined) {
+  if (partial.commissionEtbPerDeliveredOrder !== undefined) {
     ops.push({
-      key: KEY_COMMISSION_RATE,
-      value: String(clampPercent(partial.commissionRatePercent)),
+      key: KEY_COMMISSION_ETB_PER_DELIVERED_ORDER,
+      value: String(clampCommissionEtb(partial.commissionEtbPerDeliveredOrder)),
     });
   }
   if (partial.defaultDeliveryRadiusKm !== undefined) {

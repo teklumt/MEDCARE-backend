@@ -23,7 +23,7 @@ platformSettingsRouter.patch(
   "/",
   body("platformName").optional().isString().trim().notEmpty().isLength({ max: 200 }),
   body("supportEmail").optional().isEmail(),
-  body("commissionRatePercent").optional().isFloat({ min: 0, max: 100 }),
+  body("commissionEtbPerDeliveredOrder").optional().isFloat({ min: 0, max: 1000 }),
   body("defaultDeliveryRadiusKm").optional().isFloat({ min: 0.1, max: 500 }),
   body("maintenanceMode").optional().isBoolean(),
   validateRequest,
@@ -31,7 +31,7 @@ platformSettingsRouter.patch(
     const bodyInput = req.body as Partial<{
       platformName: string;
       supportEmail: string;
-      commissionRatePercent: number;
+      commissionEtbPerDeliveredOrder: number;
       defaultDeliveryRadiusKm: number;
       maintenanceMode: boolean;
     }>;

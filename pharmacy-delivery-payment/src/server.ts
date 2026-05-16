@@ -10,6 +10,7 @@ import pharmacyRoutes from './routes/pharmacy.routes';
 import medicationsRoutes from './routes/medications.routes';
 import ordersRoutes from './routes/orders.routes';
 import paymentsRoutes from './routes/payments.routes';
+import commissionRoutes from './routes/commission.routes';
 import prescriptionsRoutes from './routes/prescriptions.routes';
 import conversationsRoutes from './routes/conversations.routes';
 import hospitalsRoutes from './routes/hospitals.routes';
@@ -47,6 +48,7 @@ app.use('/api/v1/medications', medicationsRoutes);
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/orders', ordersRoutes);
 app.use('/api/v1/payments', paymentsRoutes);
+app.use('/api/v1/commission', commissionRoutes);
 app.use('/api/v1/prescriptions', prescriptionsRoutes);
 app.use('/api/v1/conversations', conversationsRoutes);
 app.use('/api/v1/hospitals', hospitalsRoutes);
@@ -69,6 +71,7 @@ app.get('/api/v1', (_req: Request, res: Response) => {
       search: '/api/v1/search',
       orders: '/api/v1/orders',
       payments: '/api/v1/payments',
+      commission: '/api/v1/commission',
       prescriptions: '/api/v1/prescriptions',
       conversations: '/api/v1/conversations',
       hospitals: '/api/v1/hospitals',

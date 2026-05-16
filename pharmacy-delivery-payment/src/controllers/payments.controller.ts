@@ -5,6 +5,7 @@ import Order from '../models/Order';
 import User from '../models/User';
 import { AuthRequest } from '../middleware/auth';
 import { chapaService } from '../services/chapa.service';
+import { verifyAndFinalizeCommissionPaymentByTxRef } from '../services/commission.service';
 
 const isValidEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const resolveChapaEmail = (candidate: string): string => {
@@ -136,6 +137,16 @@ export const chapaWebhook = async (req: AuthRequest, res: Response): Promise<voi
 
     const payment = await Payment.findOne({ txRef: tx_ref });
     if (!payment) {
+      const txStr = typeof tx_ref === 'string' ? tx_ref : String(tx_ref ?? '');
+      const commissionResult = await verifyAndFinalizeCommissionPaymentByTxRef(
+        txStr,
+        req.body as Record<string, unknown>,
+        new Date()
+      );
+      if (commissionResult) {
+        res.json({ success: true, message: 'Commission webhook processed' });
+        return;
+      }
       res.status(404).json({ success: false, error: 'Payment not found' });
       return;
     }

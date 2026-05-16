@@ -165,6 +165,36 @@ export interface IOrder extends Document {
   updatedAt: Date;
 }
 
+export interface ICommissionAccrual extends Document {
+  pharmacyId: Types.ObjectId;
+  orderId: Types.ObjectId;
+  amountEtb: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ICommissionPayment extends Document {
+  pharmacyId: Types.ObjectId;
+  ownerUserId: Types.ObjectId;
+  txRef: string;
+  checkoutUrl?: string;
+  amount: number;
+  currency: string;
+  chapaCharge?: number;
+  paymentMethod: string;
+  status: string;
+  chapaStatus?: string;
+  chapaReference?: string;
+  mode?: string;
+  webhookReceivedAt?: Date;
+  verifiedAt?: Date;
+  webhookPayload?: Record<string, unknown>;
+  retryCount: number;
+  lastRetryAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface IPayment extends Document {
   orderId: Types.ObjectId;
   patientId: Types.ObjectId;
@@ -272,6 +302,7 @@ export interface IHealthAlert extends Document {
 }
 
 export interface IPlatformConfig extends Document {
+  key?: string;
   value: string;
 }
 

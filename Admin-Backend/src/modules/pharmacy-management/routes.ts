@@ -1,4 +1,5 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { body } from "express-validator";
 import { Pharmacy } from "../../models/Pharmacy.js";
 import { Order } from "../../models/Order.js";
@@ -10,6 +11,7 @@ import { validateRequest } from "../../middleware/validate.js";
 import { errorResponse, successResponse } from "../../utils/response.js";
 import { sendMail } from "../../utils/mailer.js";
 import { logAudit } from "../../utils/audit.js";
+import { CommissionAccrualModel, CommissionPaymentModel } from "../../models/CommissionLedger.js";
 
 export const pharmacyManagementRouter = Router();
 pharmacyManagementRouter.use(requireAuth);
@@ -29,7 +31,35 @@ pharmacyManagementRouter.get("/", requireRole("admin"), async (req, res) => {
   if (license) filter["verification.status"] = license;
 
   const pharmacies = await Pharmacy.find(filter).sort({ createdAt: -1 }).lean();
-  return successResponse(res, pharmacies);
+
+  if (pharmacies.length === 0) return successResponse(res, pharmacies);
+
+  const ids = pharmacies.map((p) => p._id);
+  type IdAggRow = { _id: mongoose.Types.ObjectId; total: number };
+
+  const [accRows, payRows] = await Promise.all([
+    CommissionAccrualModel.aggregate<IdAggRow>([
+      { $match: { pharmacyId: { $in: ids } } },
+      { $group: { _id: "$pharmacyId", total: { $sum: "$amountEtb" } } },
+    ]),
+    CommissionPaymentModel.aggregate<IdAggRow>([
+      { $match: { pharmacyId: { $in: ids }, status: "success" } },
+      { $group: { _id: "$pharmacyId", total: { $sum: "$amount" } } },
+    ]),
+  ]);
+
+  const accMap = new Map(accRows.map((r) => [String(r._id), r.total]));
+  const payMap = new Map(payRows.map((r) => [String(r._id), r.total]));
+
+  const enriched = pharmacies.map((p) => {
+    const id = String(p._id);
+    const accrued = accMap.get(id) ?? 0;
+    const paid = payMap.get(id) ?? 0;
+    const commissionDebtEtb = Math.max(0, accrued - paid);
+    return { ...p, commissionDebtEtb };
+  });
+
+  return successResponse(res, enriched);
 });
 
 pharmacyManagementRouter.get("/unverified", requireRole("admin"), async (_req, res) => {

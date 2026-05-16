@@ -13,6 +13,7 @@ import { chapaService } from '../services/chapa.service';
 import { ensurePharmacyDriverConversation } from '../services/pharmacyDriverConversation';
 import { IOrderStatusHistory } from '../types';
 import { parseCoordinatesInput } from '../utils/geo';
+import { recordCommissionAccrualIfEligible } from '../services/commission.service';
 
 function buildDeliveryAddress(raw: unknown): Record<string, unknown> | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -494,6 +495,10 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
 
     await order.save();
 
+    if (order.status === 'delivered') {
+      await recordCommissionAccrualIfEligible(order);
+    }
+
     if (order.status === 'dispatched' && order.deliveryMethod === 'delivery' && order.deliveryAgentId) {
       await ensurePharmacyDriverConversation(order._id);
     }
@@ -620,6 +625,8 @@ export const confirmPatientReceipt = async (req: AuthRequest, res: Response): Pr
     order.deliveredAt = new Date();
     order.statusHistory.push(buildStatusEntry('delivered', patientOid, 'patient_confirmed_receipt'));
     await order.save();
+
+    await recordCommissionAccrualIfEligible(order);
 
     res.json({ success: true, message: 'Delivery confirmed', data: order });
   } catch (error) {

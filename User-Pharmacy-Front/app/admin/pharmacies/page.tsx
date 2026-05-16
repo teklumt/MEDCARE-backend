@@ -19,6 +19,7 @@ const TRANSLATIONS = {
     status: 'Status',
     rating: 'Rating',
     ordersTotalActive: 'Orders (Total/Active)',
+    commissionDebt: 'Commission owed (ETB)',
     actions: 'Actions',
     viewDetails: 'View Details'
   },
@@ -35,15 +36,46 @@ const TRANSLATIONS = {
     status: 'ሁኔታ',
     rating: 'ደረጃ',
     ordersTotalActive: 'ትዕዛዞች (አጠቃላይ/ንቁ)',
+    commissionDebt: 'የኮሚሽን የተቀረ (ብር)',
     actions: 'ድርጊቶች',
     viewDetails: 'ዝርዝሮችን ይመልከቱ'
   }
 };
 
 const INITIAL_PHARMACIES = [
-  { id: 'PH-101', name: 'Selam Pharmacy', location: 'Bole, Addis Ababa', status: 'Verified', rating: 4.8, orders: 1240, activeOrders: 12, joinDate: '2023-11-05' },
-  { id: 'PH-102', name: 'Kidus Pharmacy', location: 'Piasa, Addis Ababa', status: 'Pending Verification', rating: 0, orders: 0, activeOrders: 0, joinDate: '2024-04-10' },
-  { id: 'PH-103', name: 'Tenna Pharmacy', location: 'Mekanisa, Addis Ababa', status: 'Suspended', rating: 2.1, orders: 450, activeOrders: 0, joinDate: '2023-12-15' },
+  {
+    id: 'PH-101',
+    name: 'Selam Pharmacy',
+    location: 'Bole, Addis Ababa',
+    status: 'Verified',
+    rating: 4.8,
+    orders: 1240,
+    activeOrders: 12,
+    joinDate: '2023-11-05',
+    commissionDebtEtb: 0,
+  },
+  {
+    id: 'PH-102',
+    name: 'Kidus Pharmacy',
+    location: 'Piasa, Addis Ababa',
+    status: 'Pending Verification',
+    rating: 0,
+    orders: 0,
+    activeOrders: 0,
+    joinDate: '2024-04-10',
+    commissionDebtEtb: 0,
+  },
+  {
+    id: 'PH-103',
+    name: 'Tenna Pharmacy',
+    location: 'Mekanisa, Addis Ababa',
+    status: 'Suspended',
+    rating: 2.1,
+    orders: 450,
+    activeOrders: 0,
+    joinDate: '2023-12-15',
+    commissionDebtEtb: 0,
+  },
 ];
 
 export default function AdminPharmaciesPage() {
@@ -84,6 +116,7 @@ export default function AdminPharmaciesPage() {
             orders: 0,
             activeOrders: 0,
             joinDate: pharmacy.createdAt ? new Date(pharmacy.createdAt).toISOString().slice(0, 10) : '-',
+            commissionDebtEtb: Number(pharmacy.commissionDebtEtb) || 0,
           };
         });
         if (mapped.length) setPharmacies(mapped);
@@ -199,6 +232,7 @@ export default function AdminPharmaciesPage() {
                 <th className="p-4 font-medium">{t.status}</th>
                 <th className="p-4 font-medium">{t.rating}</th>
                 <th className="p-4 font-medium">{t.ordersTotalActive}</th>
+                <th className="p-4 font-medium">{t.commissionDebt}</th>
                 <th className="p-4 font-medium text-right">{t.actions}</th>
               </tr>
             </thead>
@@ -239,6 +273,9 @@ export default function AdminPharmaciesPage() {
                   <td className="p-4 text-sm text-gray-600">
                     <span className="font-bold text-brand-950">{pharmacy.orders}</span> / {pharmacy.activeOrders}
                   </td>
+                  <td className="p-4 text-sm font-semibold text-amber-800">
+                    {pharmacy.commissionDebtEtb.toFixed(2)} ETB
+                  </td>
                   <td className="p-4 text-right flex items-center justify-end gap-2">
                     <button 
                       onClick={() => handleToggleStatus(pharmacy.id, pharmacy.status)}
@@ -268,7 +305,7 @@ export default function AdminPharmaciesPage() {
               ))}
               {filteredPharmacies.length === 0 && (
                 <tr>
-                   <td colSpan={6} className="p-8 text-center text-gray-500 bg-white">
+                   <td colSpan={7} className="p-8 text-center text-gray-500 bg-white">
                       No pharmacies found.
                    </td>
                 </tr>

@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useRouter } from 'next/navigation';
-import { apiGet } from '@/lib/api';
+import { apiGet, getPharmacyCommissionSummary, initiateCommissionChapaPayment } from '@/lib/api';
+import type { PharmacyCommissionSummary } from '@/lib/api';
 import { 
   TrendingUp, AlertTriangle, 
   Package, ShoppingCart, DollarSign, Clock, CheckCircle2,
-  ShieldCheck, FileText, Calendar, Globe, ChevronDown
+  ShieldCheck, FileText, Calendar, Globe, ChevronDown, Wallet, X
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -69,7 +70,20 @@ const TRANSLATIONS = {
     licenseNumber: 'Business License Number',
     licenseValidity: 'Business License Validity',
     profLicenseValidity: 'Professional License Validity',
-    expires: 'Expires'
+    expires: 'Expires',
+    outstandingCommission: 'Outstanding commission',
+    accruedThisMonth: 'Accrued this month (ETB)',
+    payCommission: 'Pay with Chapa',
+    commissionCaughtUp: 'No commission balance due.',
+    commissionFailed: 'Could not start payment. Try again.',
+    commissionPayTitle: 'Pay commission',
+    commissionPaySubtitle: 'Enter how much you want to pay in ETB (not more than your balance).',
+    commissionPayAmountLabel: 'Amount (ETB)',
+    commissionPayFull: 'Use full balance',
+    commissionPayBalance: 'Outstanding balance',
+    commissionPayCancel: 'Cancel',
+    commissionPaySubmit: 'Continue to Chapa',
+    commissionAmountInvalid: 'Enter a valid amount greater than 0 and not more than what you owe.',
   },
   am: {
     dashboard: 'ዳሽቦርድ',
@@ -112,7 +126,20 @@ const TRANSLATIONS = {
     licenseNumber: 'የንግድ ፈቃድ ቁጥር',
     licenseValidity: 'የንግድ ፈቃድ ማብቂያ ቀን',
     profLicenseValidity: 'የሙያ ፈቃድ ማብቂያ ቀን',
-    expires: ''
+    expires: '',
+    outstandingCommission: 'የቀረ ኮሚሽን',
+    accruedThisMonth: 'በዚህ ወር የተሰበሰበ (ብር)',
+    payCommission: 'በ Chapa ይክፈሉ',
+    commissionCaughtUp: 'የኮሚሽን ቀሪ ሂሳብ የለም።',
+    commissionFailed: 'ክፍያ ማስጀመር አልተሳካም።',
+    commissionPayTitle: 'ኮሚሽን ይክፈሉ',
+    commissionPaySubtitle: 'መክፈል የሚፈልጉትን መጠን በ ብር ይግለጹ።',
+    commissionPayAmountLabel: 'መጠን (ብር)',
+    commissionPayFull: 'ሙሉ ቀሪ ሂሳብ ለመምረጥ',
+    commissionPayBalance: 'የተቀረ ቀሪ ሂሳብ',
+    commissionPayCancel: 'ይቅር',
+    commissionPaySubmit: 'ወደ Chapa',
+    commissionAmountInvalid: 'ከ 0 አነስተኛ ያለፈ እና ከመከተብ የማያልፍ ትክክለኛ መጠን ያስገቡ።',
   }
 };
 
@@ -125,6 +152,11 @@ export default function PharmacyDashboardPage() {
   const [orders, setOrders] = useState(ACTIVE_ORDERS);
   const [alerts, setAlerts] = useState(INVENTORY_ALERTS);
   const [metrics, setMetrics] = useState({ ordersToday: 0, pendingOrders: 0, revenue: 0 });
+  const [commission, setCommission] = useState<PharmacyCommissionSummary | null>(null);
+  const [commissionPaying, setCommissionPaying] = useState(false);
+  const [commissionPayModalOpen, setCommissionPayModalOpen] = useState(false);
+  const [commissionPayAmountInput, setCommissionPayAmountInput] = useState('');
+  const [commissionPayError, setCommissionPayError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -182,6 +214,13 @@ export default function PharmacyDashboardPage() {
           pendingOrders: pendingCount,
           revenue: analyticsRes.data?.revenue || 0
         });
+
+        try {
+          const summary = await getPharmacyCommissionSummary();
+          setCommission(summary);
+        } catch {
+          setCommission({ outstandingDebtEtb: 0, accruedThisMonthEtb: 0 });
+        }
       } catch (error) {
         console.error(error);
       } finally {
@@ -257,6 +296,163 @@ export default function PharmacyDashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Platform commission (flat ETB / Chapa) */}
+      <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-6 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800 shrink-0">
+            <Wallet className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-brand-950">{t.outstandingCommission}</h2>
+            <p className="text-3xl font-bold text-amber-900 mt-1">
+              {commission != null ? commission.outstandingDebtEtb.toFixed(2) : '—'}{' '}
+              <span className="text-base font-semibold text-gray-600">ETB</span>
+            </p>
+            <p className="text-sm text-gray-600 mt-1">
+              {t.accruedThisMonth}:{' '}
+              <span className="font-semibold">
+                {commission != null ? commission.accruedThisMonthEtb.toFixed(2) : '—'}
+              </span>
+            </p>
+            {commission != null && commission.outstandingDebtEtb <= 0 && (
+              <p className="text-sm text-emerald-700 font-medium mt-2">{t.commissionCaughtUp}</p>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={commissionPaying || !commission || commission.outstandingDebtEtb <= 0}
+          onClick={() => {
+            if (!commission || commission.outstandingDebtEtb <= 0) return;
+            setCommissionPayAmountInput(commission.outstandingDebtEtb.toFixed(2));
+            setCommissionPayError(null);
+            setCommissionPayModalOpen(true);
+          }}
+          className="shrink-0 bg-brand-900 hover:bg-brand-800 disabled:opacity-50 disabled:pointer-events-none text-white px-6 py-3 rounded-xl font-bold shadow-sm transition-colors"
+        >
+          {commissionPaying ? '…' : t.payCommission}
+        </button>
+      </div>
+
+      {commissionPayModalOpen && commission && commission.outstandingDebtEtb > 0 && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="commission-pay-title"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setCommissionPayModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl border border-gray-200 shadow-xl max-w-md w-full p-6 space-y-4"
+            onMouseDown={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 id="commission-pay-title" className="text-lg font-bold text-brand-950">
+                  {t.commissionPayTitle}
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">{t.commissionPaySubtitle}</p>
+                <p className="text-xs text-amber-800 font-medium mt-2">
+                  {t.commissionPayBalance}:{' '}
+                  <span className="font-bold">{commission.outstandingDebtEtb.toFixed(2)} ETB</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label={t.commissionPayCancel}
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 shrink-0"
+                onClick={() => setCommissionPayModalOpen(false)}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700" htmlFor="commission-pay-amount">
+                {t.commissionPayAmountLabel}
+              </label>
+              <input
+                id="commission-pay-amount"
+                type="number"
+                min={0.01}
+                step={0.01}
+                max={commission.outstandingDebtEtb}
+                inputMode="decimal"
+                autoFocus
+                value={commissionPayAmountInput}
+                onChange={(e) => {
+                  setCommissionPayAmountInput(e.target.value);
+                  setCommissionPayError(null);
+                }}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none font-mono tabular-nums"
+              />
+              <button
+                type="button"
+                className="text-xs font-bold text-brand-700 hover:text-brand-900"
+                onClick={() => {
+                  setCommissionPayAmountInput(commission.outstandingDebtEtb.toFixed(2));
+                  setCommissionPayError(null);
+                }}
+              >
+                {t.commissionPayFull}
+              </button>
+            </div>
+
+            {commissionPayError && (
+              <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {commissionPayError}
+              </p>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                className="flex-1 py-3 rounded-xl font-bold border border-gray-200 hover:bg-gray-50 text-gray-800"
+                onClick={() => setCommissionPayModalOpen(false)}
+              >
+                {t.commissionPayCancel}
+              </button>
+              <button
+                type="button"
+                disabled={commissionPaying}
+                className="flex-1 py-3 rounded-xl font-bold bg-brand-900 hover:bg-brand-800 disabled:opacity-50 text-white shadow-sm"
+                onClick={async () => {
+                  const maxDebt = commission.outstandingDebtEtb;
+                  const parsed = Number(String(commissionPayAmountInput).replace(',', '.'));
+                  if (!Number.isFinite(parsed) || parsed <= 0) {
+                    setCommissionPayError(t.commissionAmountInvalid);
+                    return;
+                  }
+                  const rounded = Math.round(parsed * 100) / 100;
+                  if (rounded > maxDebt + 0.005) {
+                    setCommissionPayError(t.commissionAmountInvalid);
+                    return;
+                  }
+
+                  const toPay = Math.min(rounded, maxDebt);
+
+                  setCommissionPaying(true);
+                  setCommissionPayError(null);
+                  try {
+                    const { checkoutUrl } = await initiateCommissionChapaPayment({ amount: toPay });
+                    if (checkoutUrl) window.location.href = checkoutUrl;
+                    else throw new Error('no checkout');
+                  } catch (e) {
+                    console.error(e);
+                    setCommissionPaying(false);
+                    alert(t.commissionFailed);
+                  }
+                }}
+              >
+                {commissionPaying ? '…' : t.commissionPaySubmit}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

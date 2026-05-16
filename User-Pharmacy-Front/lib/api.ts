@@ -730,3 +730,30 @@ export const sendConversationMessage = async (
 export const markConversationRead = async (conversationId: string): Promise<void> => {
   await apiPatch(`/conversations/${conversationId}/read`, {});
 };
+
+// --- Pharmacy platform commission (flat ETB per delivered order, Chapa settlement) ---
+
+export type PharmacyCommissionSummary = {
+  outstandingDebtEtb: number;
+  accruedThisMonthEtb: number;
+};
+
+export type CommissionChapaInitResponse = {
+  checkoutUrl?: string;
+  txRef: string;
+  commissionPaymentId: string;
+};
+
+export const getPharmacyCommissionSummary = async (): Promise<PharmacyCommissionSummary> => {
+  const res = await apiGet<PharmacyCommissionSummary>('/commission/summary');
+  if (!res.data) throw new Error('Could not load commission summary');
+  return res.data;
+};
+
+export const initiateCommissionChapaPayment = async (body?: {
+  amount?: number;
+}): Promise<CommissionChapaInitResponse> => {
+  const res = await apiPost<CommissionChapaInitResponse>('/commission/chapa/initiate', body ?? {});
+  if (!res.data) throw new Error('Could not start commission payment');
+  return res.data;
+};

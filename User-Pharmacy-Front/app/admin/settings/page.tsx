@@ -11,14 +11,14 @@ export default function AdminSettingsPage() {
 
   const [platformName, setPlatformName] = useState('');
   const [supportEmail, setSupportEmail] = useState('');
-  const [commissionRatePercent, setCommissionRatePercent] = useState(5);
+  const [commissionEtbPerDeliveredOrder, setCommissionEtbPerDeliveredOrder] = useState(5);
   const [defaultDeliveryRadiusKm, setDefaultDeliveryRadiusKm] = useState(10);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
   const applySettings = useCallback((s: PlatformGeneralSettings) => {
     setPlatformName(s.platformName);
     setSupportEmail(s.supportEmail);
-    setCommissionRatePercent(s.commissionRatePercent);
+    setCommissionEtbPerDeliveredOrder(s.commissionEtbPerDeliveredOrder);
     setDefaultDeliveryRadiusKm(s.defaultDeliveryRadiusKm);
     setMaintenanceMode(s.maintenanceMode);
   }, []);
@@ -58,7 +58,7 @@ export default function AdminSettingsPage() {
       const payload: PlatformGeneralSettings = {
         platformName: platformName.trim(),
         supportEmail: supportEmail.trim(),
-        commissionRatePercent,
+        commissionEtbPerDeliveredOrder,
         defaultDeliveryRadiusKm,
         maintenanceMode,
       };
@@ -134,19 +134,22 @@ export default function AdminSettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700" htmlFor="commission-rate">
-                    Platform Commission Rate (%)
+                  <label className="text-sm font-bold text-gray-700" htmlFor="commission-etb">
+                    Commission (ETB) per delivered order
                   </label>
                   <input
-                    id="commission-rate"
+                    id="commission-etb"
                     type="number"
                     min={0}
-                    max={100}
-                    step={0.01}
-                    value={commissionRatePercent}
-                    onChange={(e) => setCommissionRatePercent(Number(e.target.value))}
+                    max={1000}
+                    step={1}
+                    value={commissionEtbPerDeliveredOrder}
+                    onChange={(e) => setCommissionEtbPerDeliveredOrder(Number(e.target.value))}
                     className="w-full px-4 py-2.5 bg-accent-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
                   />
+                  <p className="text-xs text-gray-500">
+                    Flat platform fee accrued once per order when it is marked delivered (default 5 ETB).
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-gray-700" htmlFor="delivery-radius">

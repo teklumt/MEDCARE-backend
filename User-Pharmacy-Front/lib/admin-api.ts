@@ -124,7 +124,7 @@ export type AnalyticsUsersSummary = {
 export type PlatformGeneralSettings = {
   platformName: string;
   supportEmail: string;
-  commissionRatePercent: number;
+  commissionEtbPerDeliveredOrder: number;
   defaultDeliveryRadiusKm: number;
   maintenanceMode: boolean;
 };
