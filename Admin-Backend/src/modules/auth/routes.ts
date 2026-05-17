@@ -9,8 +9,56 @@ import { logAudit } from "../../utils/audit.js";
 import { authService } from "../../services/auth.service.js";
 import { registrationService } from "../../services/registration.service.js";
 import { pharmacySignupVerificationService } from "../../services/pharmacy-signup-verification.service.js";
+import { passwordResetService } from "../../services/password-reset.service.js";
 
 export const authAdminRouter = Router();
+
+authAdminRouter.post(
+  "/forgot-password/send-code",
+  authRateLimiter,
+  body("email").isEmail(),
+  validateRequest,
+  async (req, res) => {
+    const email = (req.body as { email: string }).email;
+    const result = await passwordResetService.requestCode(email);
+    if (!result.ok) {
+      const status =
+        result.code === "SMTP_NOT_CONFIGURED"
+          ? 503
+          : result.code === "EMAIL_SEND_FAILED"
+            ? 502
+            : 400;
+      return errorResponse(res, result.message, result.code, status);
+    }
+    return successResponse(res, {
+      sent: true,
+      message: "If an account exists for this email, a reset code has been sent.",
+    });
+  },
+);
+
+authAdminRouter.post(
+  "/forgot-password/reset",
+  authRateLimiter,
+  body("email").isEmail(),
+  body("verificationCode").isString().trim().matches(/^\d{6}$/).withMessage("Must be a 6-digit code"),
+  body("newPassword").isString().isLength({ min: 8, max: 128 }),
+  validateRequest,
+  async (req, res) => {
+    const raw = req.body as { email: string; verificationCode: string; newPassword: string };
+    const result = await passwordResetService.resetWithCode(
+      raw.email,
+      raw.verificationCode,
+      raw.newPassword,
+    );
+    if (!result.ok) {
+      const status = result.code === "TOO_MANY_ATTEMPTS" ? 429 : 400;
+      return errorResponse(res, result.message, result.code, status);
+    }
+    await logAudit(req, "auth.password_reset.completed", "User", result.userId);
+    return successResponse(res, { reset: true });
+  },
+);
 
 authAdminRouter.post(
   "/register/patient/send-verification",

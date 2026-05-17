@@ -29,9 +29,13 @@ const translations = {
     backupCode: "Use a backup code instead",
     totpCode: "Use authenticator app instead",
     backToLogin: "Back to login",
-    resetPhoneInstr: "Enter your registered phone number and we will send you a reset code.",
+    forgotBackEditEmail: "Edit email",
+    forgotBackToCode: "Back to verification code",
+    resetEmailInstr: "Enter the email registered to your account. We’ll send you a reset code.",
+    invalidResetEmail: "Please enter a valid email address.",
     sendResetCode: "Send Reset Code",
-    codeSentMsg: "If this number is registered, you will receive a code shortly.",
+    codeSentMsg:
+      "If an account exists for this email, a reset code has been sent.",
     resend: "Resend code",
     setNewPassword: "Set New Password",
     confirmNewPassword: "Confirm new password",
@@ -43,11 +47,11 @@ const translations = {
     unknownError: "Something went wrong. Please check your connection and try again.",
     successReset: "Password reset successful! Please log in.",
     codeEntryTitle: "Enter Verification Code",
-    codeEntryDesc: "We've sent a 6-digit code to your phone number.",
+    codeEntryDesc: "We've sent a 6-digit code to your email.",
     lockError: "Your account has been temporarily locked for security. Please try again in 30 minutes or reset your password.",
     welcomeBack: "Welcome back",
     resetPasswordTitle: "Reset password",
-    checkYourPhone: "Check your phone",
+    checkYourEmail: "Check your email",
     newPasswordTitle: "New password",
     secureLogin: "Secure login",
     signInToAccess: "Sign in to access your account.",
@@ -74,9 +78,12 @@ const translations = {
     backupCode: "የመጠባበቂያ ኮድ ይጠቀሙ",
     totpCode: "በauthenticator መተግበሪያ ይጠቀሙ",
     backToLogin: "ወደ መግቢያው ተመለስ",
-    resetPhoneInstr: "ስልክ ቁጥርዎን ያስገቡ።",
+    forgotBackEditEmail: "ኢሜይል ቀይር",
+    forgotBackToCode: "ወደ የማረጋገጫ ኮድ ተመለስ",
+    resetEmailInstr: "ወደ መለያዎ የተመዘገበ ኢሜይል ያስገቡ። የማረጋገጫ ኮድ እንልክልዎታለን።",
+    invalidResetEmail: "ትክክለኛ ኢሜይል ያስገቡ።",
     sendResetCode: "ኮድ ላክ",
-    codeSentMsg: "ይህ ስልክ ከተመዘገበ ኮዱን በቅርቡ ይቀበላሉ።",
+    codeSentMsg: "ለዚህ ኢሜይል መለያ ካለ ኮዱ በወቅቱ እንልክልዎታለን።",
     resend: "እንደገና ላክ",
     setNewPassword: "አዲስ የምስጢር ቃል ያስገቡ",
     confirmNewPassword: "አዲሱን የምስጢር ቃል ያረጋግጡ",
@@ -88,11 +95,11 @@ const translations = {
     unknownError: "ችግር ተፈጥሯል። እንደገና ይሞክሩ።",
     successReset: "የምስጢር ቃል በተሳካ ሁኔታ ተቀይሯል! እባክዎ ይግቡ።",
     codeEntryTitle: "የማረጋገጫ ኮድ ያስገቡ",
-    codeEntryDesc: "ወደ ስልክ ቁጥርዎ 6-አሃዝ ኮድ ልከናል::",
+    codeEntryDesc: "ወደ ኢሜይልዎ 6-አሃዝ ኮድ ልከናል።",
     lockError: "መለያዎ ለ 30 ደቂቃ ተዘግቷል።",
     welcomeBack: "እንኳን ደህና መጡ",
     resetPasswordTitle: "የምስጢር ቃል ይቀይሩ",
-    checkYourPhone: "ስልክዎን ያረጋግጡ",
+    checkYourEmail: "ኢሜይልዎን ያረጋግጡ",
     newPasswordTitle: "አዲሱ የምስጢር ቃል",
     secureLogin: "ደህንነቱ የተጠበቀ መግቢያ",
     signInToAccess: "ወደ መለያዎ ለመግባት እባክዎ መረጃዎን ያስገቡ።",
@@ -100,7 +107,9 @@ const translations = {
   }
 };
 
-type ViewState = 'login' | 'forgot-phone' | 'forgot-otp' | 'forgot-new' | 'mfa';
+const SIMPLE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type ViewState = 'login' | 'forgot-email' | 'forgot-otp' | 'forgot-new' | 'mfa';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -122,6 +131,7 @@ export default function LoginPage() {
   const [passwordError, setPasswordError] = useState('');
   const [generalError, setGeneralError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [forgotInfoMsg, setForgotInfoMsg] = useState('');
 
   // MFA states
   const [mfaCode, setMfaCode] = useState(['', '', '', '', '', '']);
@@ -134,7 +144,7 @@ export default function LoginPage() {
   const [pendingUser, setPendingUser] = useState('');
 
   // Forgot states
-  const [forgotPhone, setForgotPhone] = useState('');
+  const [forgotEmail, setForgotEmail] = useState('');
   const [forgotOtp, setForgotOtp] = useState(['', '', '', '', '', '']);
   const forgotRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [newPassword, setNewPassword] = useState('');
@@ -317,23 +327,31 @@ export default function LoginPage() {
     }
   };
 
-  const handleForgotPhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/\D/g, '');
-    if (val.length > 3) val = val.slice(0, 3) + ' ' + val.slice(3);
-    if (val.length > 7) val = val.slice(0, 7) + ' ' + val.slice(7);
-    setForgotPhone(val.slice(0, 11));
+  const handleForgotEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForgotEmail(e.target.value);
     setGeneralError('');
+    setForgotInfoMsg('');
   };
 
-  const handleSendReset = () => {
-    if (!forgotPhone) return;
+  const handleSendReset = async () => {
+    const trimmed = forgotEmail.trim();
+    if (!SIMPLE_EMAIL_REGEX.test(trimmed)) {
+      setGeneralError(tLocal.invalidResetEmail);
+      return;
+    }
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setGeneralError(tLocal.codeSentMsg); // We show this as a "general message" or use success state
+    setGeneralError('');
+    try {
+      await authApi.sendForgotPasswordCode(trimmed);
+      setForgotInfoMsg(tLocal.codeSentMsg);
       setView('forgot-otp');
       setResetTimer(60);
-    }, 800);
+      setForgotOtp(['', '', '', '', '', '']);
+    } catch (err: unknown) {
+      setGeneralError(err instanceof Error ? err.message : tLocal.unknownError);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleForgotOtpChange = (index: number, value: string) => {
@@ -342,7 +360,6 @@ export default function LoginPage() {
     newCode[index] = value;
     setForgotOtp(newCode);
     setGeneralError('');
-
     if (value && index < 5) {
       forgotRefs.current[index + 1]?.focus();
     }
@@ -355,20 +372,13 @@ export default function LoginPage() {
   };
 
   const handleVerifyResetOtp = () => {
-    if (forgotOtp.join('').length < 6) return;
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      if (forgotOtp.join('') === '000000') {
-        setGeneralError(tLocal.otpIncorrect);
-      } else {
-        setView('forgot-new');
-        setGeneralError('');
-      }
-    }, 800);
+    const code = forgotOtp.join('');
+    if (code.length < 6) return;
+    setGeneralError('');
+    setView('forgot-new');
   };
 
-  const handleSetNewPassword = () => {
+  const handleSetNewPassword = async () => {
     setGeneralError('');
     if (newPassword !== confirmPassword) {
       setGeneralError(tLocal.passwordMismatch);
@@ -380,17 +390,49 @@ export default function LoginPage() {
       return;
     }
 
+    const trimmedEmail = forgotEmail.trim();
+    if (!SIMPLE_EMAIL_REGEX.test(trimmedEmail)) {
+      setGeneralError(tLocal.invalidResetEmail);
+      return;
+    }
+
+    const verificationCode = forgotOtp.join('');
+    if (!/^\d{6}$/.test(verificationCode)) {
+      setGeneralError(tLocal.otpIncorrect);
+      return;
+    }
+
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await authApi.resetPasswordWithCode({
+        email: trimmedEmail,
+        verificationCode,
+        newPassword,
+      });
+      setForgotInfoMsg('');
       setSuccessMsg(tLocal.successReset);
       setView('login');
       setPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setForgotPhone('');
+      setForgotEmail('');
       setForgotOtp(['', '', '', '', '', '']);
-    }, 800);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes('code') ||
+        lower.includes('expired') ||
+        lower.includes('invalid') ||
+        lower.includes('attempt')
+      ) {
+        setGeneralError(tLocal.otpIncorrect);
+      } else {
+        setGeneralError(msg || tLocal.unknownError);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const isPhoneActive = email.trim() === '';
@@ -480,8 +522,8 @@ export default function LoginPage() {
             <div className="hidden lg:block mb-8">
               <h2 className="font-heading font-bold text-3xl text-brand-950 mb-2">{
                 view === 'login' ? tLocal.welcomeBack :
-                view === 'forgot-phone' ? tLocal.resetPasswordTitle :
-                view === 'forgot-otp' ? tLocal.checkYourPhone :
+                view === 'forgot-email' ? tLocal.resetPasswordTitle :
+                view === 'forgot-otp' ? tLocal.checkYourEmail :
                 view === 'forgot-new' ? tLocal.newPasswordTitle :
                 tLocal.secureLogin
               }</h2>
@@ -495,6 +537,13 @@ export default function LoginPage() {
                 <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
                   <p className="text-sm font-medium">{successMsg}</p>
+                </div>
+              )}
+
+              {forgotInfoMsg && view === 'forgot-otp' && (
+                <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                  <p className="text-sm font-medium">{forgotInfoMsg}</p>
                 </div>
               )}
 
@@ -559,7 +608,16 @@ export default function LoginPage() {
                   <div className="relative mt-2">
                     <div className="flex justify-between items-center mb-2">
                        <label className="block text-sm font-bold text-gray-700">{tLocal.password}</label>
-                       <button type="button" onClick={() => { setView('forgot-phone'); setGeneralError(''); }} className="text-xs font-bold text-brand-600 hover:text-brand-800 transition-colors">
+                       <button
+                         type="button"
+                         onClick={() => {
+                           setView('forgot-email');
+                           setGeneralError('');
+                           setForgotInfoMsg('');
+                           setForgotEmail(email.trim());
+                         }}
+                         className="text-xs font-bold text-brand-600 hover:text-brand-800 transition-colors"
+                       >
                          {tLocal.forgot}
                        </button>
                     </div>
@@ -618,40 +676,52 @@ export default function LoginPage() {
                 </form>
               )}
 
-              {/* VIEW: FORGOT PHONE */}
-              {view === 'forgot-phone' && (
+              {/* VIEW: FORGOT EMAIL */}
+              {view === 'forgot-email' && (
                 <div className="flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
-                  <button onClick={() => setView('login')} className="w-fit flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 mb-2 transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView('login');
+                      setGeneralError('');
+                      setForgotInfoMsg('');
+                    }}
+                    className="w-fit flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 mb-2 transition-colors"
+                  >
                     <ChevronLeft className="w-4 h-4 mr-1" /> {tLocal.backToLogin}
                   </button>
                   
                   <h2 className="text-xl font-bold text-gray-900">{tLocal.forgot}</h2>
-                  <p className="text-sm text-gray-600 leading-relaxed">{tLocal.resetPhoneInstr}</p>
+                  <p className="text-sm text-gray-600 leading-relaxed">{tLocal.resetEmailInstr}</p>
 
                   <div className="relative mt-2">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">{tLocal.phone}</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">{tLocal.email}</label>
                     <div className="flex items-center border border-gray-200 focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10 rounded-2xl bg-white overflow-hidden transition-all h-14">
-                      <div className="flex items-center gap-2 pl-4 pr-3 border-r border-gray-100 bg-gray-50 h-full shrink-0">
-                        <span className="text-lg leading-none" role="img" aria-label="Ethiopia flag">🇪🇹</span>
-                        <span className="text-sm font-bold text-gray-500">+251</span>
+                      <div className="pl-4 shrink-0">
+                        <Mail className="w-5 h-5 text-gray-400" />
                       </div>
-                      <input 
-                        type="tel"
-                        value={forgotPhone}
-                        onChange={handleForgotPhoneChange}
-                        placeholder="91 234 5678"
-                        className="w-full h-full px-4 bg-transparent outline-none text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal"
+                      <input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={handleForgotEmailChange}
+                        placeholder="name@example.com"
+                        autoComplete="email"
+                        className="w-full h-full px-3 bg-transparent outline-none text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal"
                       />
                     </div>
                   </div>
 
                   <button 
                     type="button" 
-                    onClick={handleSendReset}
-                    disabled={isLoading || forgotPhone.replace(/\D/g, '').length !== 9}
+                    onClick={() => void handleSendReset()}
+                    disabled={isLoading || !SIMPLE_EMAIL_REGEX.test(forgotEmail.trim())}
                     className="w-full bg-brand-900 hover:bg-brand-800 text-white rounded-full font-bold text-lg transition-colors mt-4 flex justify-center items-center h-14 disabled:opacity-50 shadow-md hover:shadow-lg"
                   >
-                    {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : tLocal.sendResetCode}
+                    {isLoading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      tLocal.sendResetCode
+                    )}
                   </button>
                 </div>
               )}
@@ -659,8 +729,15 @@ export default function LoginPage() {
               {/* VIEW: FORGOT OTP */}
               {view === 'forgot-otp' && (
                 <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 duration-200">
-                   <button onClick={() => setView('login')} className="w-fit flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 mb-2 transition-colors">
-                    <ChevronLeft className="w-4 h-4 mr-1" /> {tLocal.backToLogin}
+                   <button
+                    type="button"
+                    onClick={() => {
+                      setView('forgot-email');
+                      setGeneralError('');
+                    }}
+                    className="w-fit flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 mb-2 transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> {tLocal.forgotBackEditEmail}
                   </button>
 
                   <h2 className="text-xl font-bold text-gray-900">{tLocal.codeEntryTitle}</h2>
@@ -695,7 +772,12 @@ export default function LoginPage() {
                     {resetTimer > 0 ? (
                        <span className="text-sm font-medium text-gray-500">00:{resetTimer < 10 ? `0${resetTimer}` : resetTimer}</span>
                     ) : (
-                       <button onClick={() => setResetTimer(60)} className="text-sm font-bold text-brand-600 hover:text-brand-800 transition-colors">
+                       <button
+                         type="button"
+                         disabled={isLoading}
+                         onClick={() => void handleSendReset()}
+                         className="text-sm font-bold text-brand-600 hover:text-brand-800 transition-colors disabled:opacity-50"
+                       >
                          {tLocal.resend}
                        </button>
                     )}
@@ -706,8 +788,15 @@ export default function LoginPage() {
               {/* VIEW: FORGOT NEW PASSWORD */}
               {view === 'forgot-new' && (
                 <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 duration-200">
-                   <button onClick={() => setView('login')} className="w-fit flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 mb-2 transition-colors">
-                    <ChevronLeft className="w-4 h-4 mr-1" /> {tLocal.backToLogin}
+                   <button
+                    type="button"
+                    onClick={() => {
+                      setView('forgot-otp');
+                      setGeneralError('');
+                    }}
+                    className="w-fit flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 mb-2 transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> {tLocal.forgotBackToCode}
                   </button>
 
                   <h2 className="text-xl font-bold text-gray-900">{tLocal.setNewPassword}</h2>

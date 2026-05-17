@@ -47,10 +47,8 @@ function FitBounds({
   const map = useMap();
 
   useEffect(() => {
-    // @ts-ignore
     if (!map || typeof google === 'undefined') return;
 
-    // @ts-ignore
     const bounds = new google.maps.LatLngBounds();
     bounds.extend(userPosition);
     pharmacies.forEach((p) => bounds.extend(p.position));

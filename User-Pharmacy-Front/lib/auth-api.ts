@@ -216,6 +216,34 @@ export const authApi = {
     }
   },
 
+  sendForgotPasswordCode: async (email: string): Promise<void> => {
+    const response = await fetch(`${AUTH_API_BASE}/auth/forgot-password/send-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Could not send reset code');
+    }
+  },
+
+  resetPasswordWithCode: async (body: {
+    email: string;
+    verificationCode: string;
+    newPassword: string;
+  }): Promise<void> => {
+    const response = await fetch(`${AUTH_API_BASE}/auth/forgot-password/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Could not reset password');
+    }
+  },
+
   verifyMFA: async (mfaData: MFARequest): Promise<LoginResponse> => {
     const response = await fetch(`${AUTH_API_BASE}/auth/verify-mfa`, {
       method: 'POST',
