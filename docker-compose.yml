@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  admin-backend:
+    build: 
+      context: ./Admin-Backend
+      dockerfile: Dockerfile
+    container_name: admin-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./Admin-Backend/.env
+
+  pharmacy-backend:
+    build:
+      context: ./pharmacy-delivery-payment
+      dockerfile: Dockerfile
+    container_name: pharmacy-backend
+    restart: always
+    ports:
+      - "5001:5001"
+    env_file:
+      - ./pharmacy-delivery-payment/.env
