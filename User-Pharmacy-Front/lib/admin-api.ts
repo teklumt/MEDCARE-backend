@@ -61,6 +61,26 @@ export type VerificationsMeta = { page: number; limit: number; total: number };
 /** Matches Admin-Backend User.role and PATCH /users/:id */
 export type UserRoleKey = 'patient' | 'pharmacy' | 'delivery' | 'admin';
 
+/** GET /users/:id — sanitized (no secrets) */
+export type AdminUserDetail = {
+  _id: string;
+  username: string;
+  email: string;
+  phone: string;
+  role: UserRoleKey;
+  language: string;
+  isActive: boolean;
+  isLocked: boolean;
+  failedLoginAttempts?: number;
+  lockExpiresAt?: string | null;
+  lastLoginAt?: string | null;
+  mfaEnabled: boolean;
+  addresses?: Array<Record<string, unknown>>;
+  createdAt?: string;
+  updatedAt?: string;
+  profilePhotoUrl?: string;
+};
+
 function patchUserRequest(
   id: string,
   body: { isActive?: boolean; role?: UserRoleKey },
@@ -139,6 +159,8 @@ export const adminApi = {
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return adminFetch<any[]>(`/users${suffix}`);
   },
+  getUser: (id: string) =>
+    adminFetch<AdminUserDetail>(`/users/${encodeURIComponent(id)}`),
   patchUser: patchUserRequest,
   updateUserStatus: (id: string, isActive: boolean) => patchUserRequest(id, { isActive }),
   deleteUser: (id: string) => adminFetch<{ id: string; deleted: boolean }>(`/users/${id}`, { method: 'DELETE' }),

@@ -97,19 +97,31 @@ export const getPharmacyInventory = async (req: AuthRequest, res: Response): Pro
 export const getPharmacyReviews = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, error: 'Invalid pharmacy id' });
+      return;
+    }
+
+    const pharmacyObjectId = new mongoose.Types.ObjectId(id);
+
     const page = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
     const limit = DEFAULT_PAGE_LIMIT;
     const skip = (page - 1) * limit;
 
+    const filter = {
+      pharmacyId: pharmacyObjectId
+    };
+
     const [items, total] = await Promise.all([
-      Review.find({ pharmacyId: id }).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      Review.countDocuments({ pharmacyId: id })
+      Review.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Review.countDocuments(filter)
     ]);
 
     res.json({
       success: true,
       data: items,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) || 0 }
     });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to fetch reviews', details: (error as Error).message });

@@ -33,6 +33,8 @@ export interface IUser extends Document {
     backupCodes: string[];
   };
   addresses: IUserAddress[];
+  /** Persisted HTTPS URL from Cloudinary or local uploads */
+  profilePhotoUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }

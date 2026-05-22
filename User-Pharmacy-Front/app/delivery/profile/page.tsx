@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { 
-  User, Phone, Store, LogOut, ChevronRight, Bell, Shield, MapPin, 
+  User, Phone, LogOut, ChevronRight, Bell, Shield, MapPin, 
   Search, Camera, Lock, CheckCircle, AlertTriangle, X, ChevronDown, Check,
   Smartphone, Laptop
 } from 'lucide-react';
@@ -11,9 +11,25 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'motion/react';
 import { clearPrescriptionScanSessionStorage } from '@/lib/prescriptionScanSession';
+import {
+  ApiRequestError,
+  getDeliveryMeProfile,
+  uploadDeliveryProfilePhotoApi,
+  deleteDeliveryProfilePhotoApi,
+  type DeliveryMeProfile
+} from '@/lib/api';
 
 // Mocks & Types
 type VehicleType = 'Motorcycle' | 'Bicycle' | 'On Foot' | 'Three-Wheeler (Bajaj)' | 'Car';
+
+const ALLOWED_VEHICLE_TYPES: VehicleType[] = [
+  'Motorcycle',
+  'Bicycle',
+  'On Foot',
+  'Three-Wheeler (Bajaj)',
+  'Car'
+];
+
 type AgentProfile = {
   fullName: string;
   phoneNumber: string;
@@ -32,16 +48,47 @@ type NotificationPrefs = {
   messagesChannel: 'Push' | 'SMS' | 'Both';
 };
 
-const MOCK_PROFILE: AgentProfile = {
-  fullName: 'Abebe Bekele',
-  phoneNumber: '911234567',
-  nationalId: 'ET-12345678',
+/** Baseline until GET /delivery/me/profile succeeds or when falling back offline. */
+const PROFILE_FALLBACK: AgentProfile = {
+  fullName: 'Driver',
+  phoneNumber: '',
+  nationalId: '',
   vehicleType: 'Motorcycle',
-  licensePlate: 'AA 12345',
-  pharmacyName: 'Kenema Pharmacy #4',
-  pharmacyAddress: 'Bole Road, Dembel',
-  avatarUrl: 'https://images.unsplash.com/photo-1542909168-82c3e7fdca5c?w=150&q=80',
+  licensePlate: '',
+  pharmacyName: '',
+  pharmacyAddress: '',
+  avatarUrl: ''
 };
+
+function mergeLocalProfileOverrides(base: AgentProfile): AgentProfile {
+  if (typeof window === 'undefined') return base;
+  const merged = { ...base };
+  const storedName = localStorage.getItem('medcare_user_name');
+  const storedPhone = localStorage.getItem('medcare_delivery_phone');
+  const storedPharmacy = localStorage.getItem('medcare_delivery_pharmacy');
+  if (storedName) merged.fullName = storedName;
+  if (storedPhone) {
+    merged.phoneNumber = storedPhone.replace(/^\+251\s?/, '').replace(/\s/g, '');
+  }
+  if (storedPharmacy) merged.pharmacyName = storedPharmacy;
+  return merged;
+}
+
+function mapApiDeliveryProfileToAgent(p: DeliveryMeProfile): AgentProfile {
+  const vehicleType = ALLOWED_VEHICLE_TYPES.includes(p.vehicleType as VehicleType)
+    ? (p.vehicleType as VehicleType)
+    : 'Motorcycle';
+  return {
+    fullName: p.fullName?.trim() || PROFILE_FALLBACK.fullName,
+    phoneNumber: p.phoneNumber ?? '',
+    nationalId: p.nationalId ?? '',
+    vehicleType,
+    licensePlate: p.licensePlate ?? '',
+    pharmacyName: p.pharmacyName ?? '',
+    pharmacyAddress: p.pharmacyAddress ?? '',
+    avatarUrl: p.profilePhotoUrl?.trim() ?? ''
+  };
+}
 
 const MOCK_NOTIFS: NotificationPrefs = {
   newAssignment: true,
@@ -65,7 +112,7 @@ export default function DeliveryProfile() {
   const [isSaving, setIsSaving] = useState(false);
   
   // Data State
-  const [profile, setProfile] = useState<AgentProfile>(MOCK_PROFILE);
+  const [profile, setProfile] = useState<AgentProfile>(PROFILE_FALLBACK);
   const [notifs, setNotifs] = useState<NotificationPrefs>(MOCK_NOTIFS);
   const [sessions, setSessions] = useState(SESSIONS);
   const [activeDelivery, setActiveDelivery] = useState(false);
@@ -75,7 +122,7 @@ export default function DeliveryProfile() {
   
   // Edit Form States (Personal Info)
   const [isEditingInfo, setIsEditingInfo] = useState(false);
-  const [editForm, setEditForm] = useState<AgentProfile>(MOCK_PROFILE);
+  const [editForm, setEditForm] = useState<AgentProfile>(PROFILE_FALLBACK);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Phone Edit States
@@ -108,34 +155,48 @@ export default function DeliveryProfile() {
   };
 
   useEffect(() => {
-    // Initial fetch mock
-    setTimeout(() => {
-      const storedName = localStorage.getItem('medcare_user_name');
-      const storedPhone = localStorage.getItem('medcare_delivery_phone');
-      const storedPharmacy = localStorage.getItem('medcare_delivery_pharmacy');
-      setActiveDelivery(localStorage.getItem('medcare_active_delivery') === 'true');
+    let cancelled = false;
+    const load = async () => {
+      setActiveDelivery(
+        typeof window !== 'undefined' && localStorage.getItem('medcare_active_delivery') === 'true'
+      );
 
-      const merged = { ...MOCK_PROFILE };
-      if (storedName) merged.fullName = storedName;
-      if (storedPhone) merged.phoneNumber = storedPhone.replace('+251 ', '');
-      if (storedPharmacy) merged.pharmacyName = storedPharmacy;
-      
-      setProfile(merged);
-      setEditForm(merged);
-      setIsLoading(false);
-    }, 1000);
+      try {
+        const apiProfile = await getDeliveryMeProfile();
+        if (cancelled) return;
+        const merged = mergeLocalProfileOverrides(mapApiDeliveryProfileToAgent(apiProfile));
+        setProfile(merged);
+        setEditForm(merged);
+      } catch {
+        if (cancelled) return;
+        const merged = mergeLocalProfileOverrides({ ...PROFILE_FALLBACK });
+        setProfile(merged);
+        setEditForm(merged);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setShowAvatarMenu(false);
-      setIsUploadingAvatar(true);
-      // simulate upload
-      setTimeout(() => {
-        setProfile(prev => ({...prev, avatarUrl: URL.createObjectURL(e.target.files![0])}));
-        setIsUploadingAvatar(false);
-        showToast('Profile photo updated.');
-      }, 1500);
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setShowAvatarMenu(false);
+    setIsUploadingAvatar(true);
+    try {
+      const url = await uploadDeliveryProfilePhotoApi(file);
+      setProfile(prev => ({ ...prev, avatarUrl: url }));
+      showToast('Profile photo updated.');
+    } catch (err) {
+      const msg = err instanceof ApiRequestError ? err.message : 'Could not upload photo.';
+      showToast(msg);
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -297,7 +358,6 @@ export default function DeliveryProfile() {
                 alt="Profile"
                 width={80}
                 height={80}
-                unoptimized
                 className={`object-cover w-full h-full transition-opacity ${isUploadingAvatar ? 'opacity-50' : 'group-hover:opacity-80'}`}
               />
             ) : (
@@ -650,18 +710,27 @@ export default function DeliveryProfile() {
             <motion.div initial={{y: '100%'}} animate={{y:0}} exit={{y:'100%'}} className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 relative z-10">
               <h3 className="text-lg font-bold text-gray-900 mb-4 whitespace-nowrap overflow-hidden text-ellipsis">Update Profile Photo</h3>
               <div className="space-y-3">
-                <button onClick={() => fileInputRef.current?.click()} className="w-full py-4 bg-gray-50 hover:bg-gray-100 text-gray-900 font-bold rounded-xl border border-gray-200 flex justify-center items-center gap-2">
-                  <Camera className="w-5 h-5" /> Take Photo
-                </button>
-                <button onClick={() => fileInputRef.current?.click()} className="w-full py-4 bg-gray-50 hover:bg-gray-100 text-gray-900 font-bold rounded-xl border border-gray-200 flex justify-center items-center gap-2">
-                  <Store className="w-5 h-5" /> Choose from Gallery
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-4 bg-gray-50 hover:bg-gray-100 text-gray-900 font-bold rounded-xl border border-gray-200 flex justify-center items-center gap-2"
+                >
+                  <Camera className="w-5 h-5" /> Upload photo
                 </button>
                 {profile.avatarUrl && (
                   <button 
+                    type="button"
                     onClick={() => {
-                      setProfile(prev => ({...prev, avatarUrl: ''}));
-                      setShowAvatarMenu(false);
-                      setToastMsg('Profile photo removed');
+                      void (async () => {
+                        setShowAvatarMenu(false);
+                        try {
+                          await deleteDeliveryProfilePhotoApi();
+                          setProfile(prev => ({ ...prev, avatarUrl: '' }));
+                          showToast('Profile photo removed.');
+                        } catch {
+                          showToast('Could not remove profile photo.');
+                        }
+                      })();
                     }} 
                     className="w-full py-4 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl flex justify-center items-center gap-2"
                   >
@@ -688,7 +757,14 @@ export default function DeliveryProfile() {
               
               {phoneStep === 1 && (
                 <>
-                  <p className="text-sm text-gray-600 mb-6">Current number: <span className="font-bold">+251 9{(profile.phoneNumber).substring(1, 4).replace(/./g, '×')} {(profile.phoneNumber).substring(4, 7).replace(/./g, '×')} {(profile.phoneNumber).substring(7)}</span></p>
+                  <p className="text-sm text-gray-600 mb-6">
+                    Current number:{' '}
+                    <span className="font-bold">
+                      {profile.phoneNumber.length >= 8
+                        ? `+251 9${profile.phoneNumber.substring(1, 4).replace(/./g, '×')} ${profile.phoneNumber.substring(4, 7).replace(/./g, '×')} ${profile.phoneNumber.substring(7)}`
+                        : '+251 —'}
+                    </span>
+                  </p>
                   <label className="block text-xs font-bold text-gray-700 mb-1">New phone number</label>
                   <div className="flex flex-col gap-1 mb-6">
                     <div className="flex border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500">

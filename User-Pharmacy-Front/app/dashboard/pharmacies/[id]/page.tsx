@@ -35,6 +35,7 @@ import {
 } from '@/lib/api';
 import { availabilityFromRating, parsePharmacyPosition } from '@/lib/pharmacyGeo';
 import SingleMarkerMap from '@/components/map/SingleMarkerMap';
+import MapFallback from '@/components/map/MapFallback';
 import { googleMapsDirectionsUrl } from '@/lib/mapGeo';
 
 export default function PharmacyDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -140,14 +141,11 @@ export default function PharmacyDetailsPage({ params }: { params: Promise<{ id: 
   const image = `https://picsum.photos/seed/${imageSeed}/800/600`;
 
   const pharmacyPosition = parsePharmacyPosition(pharmacy);
-  const mapKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-  const mapQuery = encodeURIComponent(`${pharmacy.businessName} ${address}`);
-  const mapUrl = mapKey
-    ? `https://www.google.com/maps/embed/v1/place?key=${mapKey}&q=${mapQuery}`
-    : '';
+  /** Only use `{lat,lng}` pin — Google "place?q=..." embed resolves to unrelated businesses and shows Google ratings instead of MedCare stats. */
+  const mapDestinationQuery = encodeURIComponent(`${pharmacy.businessName} ${address}`);
   const directionsUrl = pharmacyPosition
     ? googleMapsDirectionsUrl(pharmacyPosition)
-    : `https://www.google.com/maps/dir/?api=1&destination=${mapQuery}`;
+    : `https://www.google.com/maps/dir/?api=1&destination=${mapDestinationQuery}`;
 
   const handleAddToCart = (med: PharmacyMedicationItem) => {
     addToCart({
@@ -314,21 +312,19 @@ export default function PharmacyDetailsPage({ params }: { params: Promise<{ id: 
                     title={pharmacy.businessName}
                     className="h-full w-full rounded-none"
                   />
-                ) : mapUrl ? (
-                  <iframe
-                    width="100%"
-                    height="100%"
-                    style={{ border: 0 }}
-                    loading="lazy"
-                    allowFullScreen
-                    referrerPolicy="no-referrer-when-downgrade"
-                    src={mapUrl}
-                    title={`Map showing location of ${pharmacy.businessName}`}
-                  />
                 ) : (
-                  <div className="flex items-center justify-center h-full text-sm text-gray-500">
-                    Map location not available
-                  </div>
+                  <MapFallback className="h-full w-full rounded-none">
+                    <>
+                      <MapPin className="mb-2 h-8 w-8 text-gray-400" aria-hidden />
+                      <p className="text-sm font-semibold text-gray-800">Map pin not set</p>
+                      <p className="mt-2 max-w-sm text-xs leading-relaxed text-gray-600">
+                        This pharmacy hasn’t saved GPS coordinates yet. We don’t use address-search maps—they can pick a
+                        different business and show <span className="font-medium text-gray-800">Google</span> reviews
+                        that don’t match the <span className="font-medium text-gray-800">MedCare rating</span> above. Use{' '}
+                        <span className="font-medium text-gray-800">Get directions</span> for the listing address.
+                      </p>
+                    </>
+                  </MapFallback>
                 )}
               </div>
 

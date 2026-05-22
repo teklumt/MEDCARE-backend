@@ -11,7 +11,7 @@ const transporter = canSendMail
   ? nodemailer.createTransport({
       host: env.smtp.host,
       port: env.smtp.port,
-      secure: env.smtp.port === 465, // Use true for 465, false for 587
+      secure: false,
       auth: {
         user: env.smtp.user,
         pass: env.smtp.pass,

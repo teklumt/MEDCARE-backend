@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { CheckCircle, AlertTriangle, Truck } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Truck, User, Navigation } from 'lucide-react';
 import Image from 'next/image';
 import {
   getMyDeliveryOrders,
@@ -10,6 +10,7 @@ import {
   startDeliveryTrip,
   confirmDriverHandoff,
   updateDriverLocation,
+  getDeliveryMeProfile,
   type DeliveryAssignedOrder,
   type DeliveryAssignmentPharmacy
 } from '@/lib/api';
@@ -22,7 +23,6 @@ import {
   formatDeliveryAddressCompact,
   formatPharmacyPickupForDisplay
 } from '@/lib/mapGeo';
-import { Navigation } from 'lucide-react';
 
 function isPopulatedPharmacy(p: DeliveryAssignedOrder['pharmacyId']): p is DeliveryAssignmentPharmacy {
   return typeof p === 'object' && p !== null && 'businessName' in p;
@@ -36,6 +36,7 @@ export default function DeliveryHome() {
   const [linkedPharmacyName, setLinkedPharmacyName] = useState('Pharmacy');
   const [assignments, setAssignments] = useState<DeliveryAssignedOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -53,11 +54,29 @@ export default function DeliveryHome() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const storedName = localStorage.getItem('medcare_user_name');
-    const storedPharmacy = localStorage.getItem('medcare_delivery_pharmacy');
-    if (storedName) setAgentName(storedName);
-    if (storedPharmacy) setLinkedPharmacyName(storedPharmacy);
+    let cancelled = false;
+    const loadProfileHeader = async () => {
+      if (typeof window === 'undefined') return;
+      const storedName = localStorage.getItem('medcare_user_name');
+      const storedPharmacy = localStorage.getItem('medcare_delivery_pharmacy');
+      if (storedName) setAgentName(storedName);
+      if (storedPharmacy) setLinkedPharmacyName(storedPharmacy);
+
+      try {
+        const profile = await getDeliveryMeProfile();
+        if (cancelled) return;
+        if (profile.fullName?.trim()) setAgentName(profile.fullName.trim());
+        if (profile.pharmacyName?.trim()) setLinkedPharmacyName(profile.pharmacyName.trim());
+        setAvatarUrl(profile.profilePhotoUrl?.trim() ?? '');
+      } catch {
+        if (cancelled) return;
+        setAvatarUrl('');
+      }
+    };
+    void loadProfileHeader();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -182,15 +201,18 @@ export default function DeliveryHome() {
     <div className="min-h-full bg-gray-50 flex flex-col p-4 sm:p-6 lg:p-8 pb-24 sm:pb-8 max-w-lg mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-gray-200">
-            <Image
-              src="https://images.unsplash.com/photo-1542909168-82c3e7fdca5c?w=150&q=80"
-              alt="Profile"
-              width={48}
-              height={48}
-              unoptimized
-              className="object-cover w-full h-full"
-            />
+          <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-gray-200 bg-gray-100 flex items-center justify-center">
+            {avatarUrl ? (
+              <Image
+                src={avatarUrl}
+                alt="Profile"
+                width={48}
+                height={48}
+                className="object-cover w-full h-full"
+              />
+            ) : (
+              <User className="w-6 h-6 text-gray-400" aria-hidden />
+            )}
           </div>
           <div>
             <h1 className="font-bold text-gray-900 text-lg">{agentName}</h1>

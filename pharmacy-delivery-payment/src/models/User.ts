@@ -36,7 +36,8 @@ const userSchema = new Schema<IUser>(
       secret: { type: String, default: null },
       backupCodes: { type: [String], default: [] }
     },
-    addresses: { type: [addressSchema], default: [] }
+    addresses: { type: [addressSchema], default: [] },
+    profilePhotoUrl: { type: String }
   },
   { timestamps: true }
 );

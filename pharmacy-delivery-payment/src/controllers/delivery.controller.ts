@@ -2,10 +2,13 @@ import { Response } from 'express';
 import mongoose, { Types } from 'mongoose';
 import Order from '../models/Order';
 import DeliveryAgent from '../models/DeliveryAgent';
+import User from '../models/User';
+import Pharmacy from '../models/Pharmacy';
 import { AuthRequest } from '../middleware/auth';
 import { IOrderStatusHistory } from '../types';
 import { DEFAULT_PAGE_LIMIT } from '../config/constants';
 import { parseLatLngBody } from '../utils/geo';
+import { getDeliveryProfileFileUrl } from '../config/upload';
 
 type DeliveryPeriod = 'today' | 'week' | 'month' | 'all';
 
@@ -65,6 +68,131 @@ const tripStartedHistoryEntry = (actorId: Types.ObjectId): IOrderStatusHistory =
   note: 'delivery_trip_started',
   createdAt: new Date()
 });
+
+/** Stored Driver vehicle enum → signup form labels */
+const STORED_VEHICLE_TO_UI: Record<string, string> = {
+  motorcycle: 'Motorcycle',
+  bicycle: 'Bicycle',
+  on_foot: 'On Foot',
+  three_wheeler: 'Three-Wheeler (Bajaj)',
+  car: 'Car'
+};
+
+function displayNameFromUsername(username: string): string {
+  const s = username.replace(/_/g, ' ').trim();
+  if (!s) return username;
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Local part after +251 for UI that renders "+251 {phoneNumber}" */
+function phoneLocalEt(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length >= 12 && digits.startsWith('251')) {
+    return digits.slice(3);
+  }
+  return phone.replace(/^\+251\s?/, '').replace(/\s/g, '') || phone;
+}
+
+export const getMyDeliveryProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+    if (req.user.role !== 'delivery') {
+      res.status(403).json({ success: false, error: 'Forbidden' });
+      return;
+    }
+
+    const uid = req.user.userId;
+    const [user, agent] = await Promise.all([
+      User.findById(uid).select('username email phone role profilePhotoUrl').lean(),
+      DeliveryAgent.findById(uid).lean()
+    ]);
+
+    if (!user || user.role !== 'delivery') {
+      res.status(404).json({ success: false, error: 'Delivery profile not found' });
+      return;
+    }
+
+    const pharmacyDoc = agent?.pharmacyId
+      ? await Pharmacy.findById(agent.pharmacyId).select('businessName address location').lean()
+      : null;
+
+    const vt = typeof agent?.vehicleType === 'string' ? agent.vehicleType : '';
+    const vehicleType = (STORED_VEHICLE_TO_UI[vt] ?? vt) || 'Motorcycle';
+
+    res.json({
+      success: true,
+      data: {
+        fullName: displayNameFromUsername(String(user.username || '')),
+        email: user.email,
+        phoneNumber: phoneLocalEt(String(user.phone || '')),
+        nationalId: String(agent?.nationalId ?? ''),
+        vehicleType,
+        licensePlate: String(agent?.licensePlate ?? ''),
+        pharmacyName: String(pharmacyDoc?.businessName ?? ''),
+        pharmacyAddress: String(pharmacyDoc?.address || pharmacyDoc?.location || ''),
+        profilePhotoUrl: typeof user.profilePhotoUrl === 'string' && user.profilePhotoUrl.trim() !== ''
+          ? user.profilePhotoUrl
+          : undefined
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load profile',
+      details: (error as Error).message
+    });
+  }
+};
+
+export const uploadDeliveryProfilePhoto = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || req.user.role !== 'delivery') {
+      res.status(403).json({ success: false, error: 'Forbidden' });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ success: false, error: 'Image file is required (field name: file).' });
+      return;
+    }
+
+    const url = getDeliveryProfileFileUrl(req.file);
+
+    await User.findByIdAndUpdate(req.user.userId, { $set: { profilePhotoUrl: url } }).exec();
+
+    res.json({
+      success: true,
+      data: { profilePhotoUrl: url }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to upload profile photo',
+      details: (error as Error).message
+    });
+  }
+};
+
+export const deleteDeliveryProfilePhoto = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || req.user.role !== 'delivery') {
+      res.status(403).json({ success: false, error: 'Forbidden' });
+      return;
+    }
+
+    await User.findByIdAndUpdate(req.user.userId, { $unset: { profilePhotoUrl: 1 } }).exec();
+
+    res.json({ success: true, data: { profilePhotoUrl: null } });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove profile photo',
+      details: (error as Error).message
+    });
+  }
+};
 
 export const getMyAssignedOrders = async (req: AuthRequest, res: Response): Promise<void> => {
   try {

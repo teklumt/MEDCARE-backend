@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { body, query } from "express-validator";
+import { body, param, query } from "express-validator";
 import { User } from "../../models/User.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/role.js";
@@ -39,6 +39,41 @@ userManagementRouter.get(
     ]);
 
     return successResponse(res, items, { page: p, limit: l, total });
+  },
+);
+
+userManagementRouter.get(
+  "/:id",
+  requireRole("admin"),
+  param("id").isMongoId().withMessage("Invalid user id"),
+  validateRequest,
+  async (req, res) => {
+    const user = await User.findById(req.params.id).lean();
+    if (!user) return errorResponse(res, "User not found", "NOT_FOUND", 404);
+
+    const ext = user as unknown as Record<string, unknown>;
+    const dto: Record<string, unknown> = {
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      language: user.language,
+      isActive: user.isActive,
+      isLocked: user.isLocked,
+      failedLoginAttempts: user.failedLoginAttempts,
+      lockExpiresAt: user.lockExpiresAt ?? null,
+      lastLoginAt: user.lastLoginAt ?? null,
+      mfaEnabled: Boolean(user.mfa?.enabled),
+      addresses: Array.isArray(user.addresses) ? user.addresses : [],
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+    if (typeof ext.profilePhotoUrl === "string" && ext.profilePhotoUrl.trim() !== "") {
+      dto.profilePhotoUrl = ext.profilePhotoUrl.trim();
+    }
+
+    return successResponse(res, dto);
   },
 );
 

@@ -277,10 +277,30 @@ export const getPharmacyReviews = async (
   pharmacyId: string,
   params?: { page?: number }
 ): Promise<PharmacyReviewsResult> => {
-  const res = await apiGet<PharmacyReviewItem[]>(`/pharmacies/${pharmacyId}/reviews`, params);
+  const res = await apiGet<PharmacyReviewItem[] | PharmacyReviewItem>(`/pharmacies/${pharmacyId}/reviews`, params);
+  const raw = res.data;
+  const items: PharmacyReviewItem[] = Array.isArray(raw)
+    ? raw.map((row) => ({
+        ...row,
+        _id: typeof row._id === 'string' ? row._id : row._id != null ? String(row._id) : '',
+        rating: Number(row.rating) || 0
+      }))
+    : raw && typeof raw === 'object' && '_id' in raw
+      ? [
+          {
+            ...(raw as PharmacyReviewItem),
+            _id:
+              typeof (raw as PharmacyReviewItem)._id === 'string'
+                ? (raw as PharmacyReviewItem)._id
+                : String((raw as { _id?: unknown })._id ?? ''),
+            rating: Number((raw as PharmacyReviewItem).rating) || 0
+          }
+        ]
+      : [];
   return {
-    items: res.data ?? [],
-    pagination: res.pagination ?? { page: 1, limit: 20, total: 0, pages: 0 }
+    items,
+    pagination:
+      res.pagination ?? { page: 1, limit: 20, total: items.length, pages: items.length ? 1 : 0 }
   };
 };
 
@@ -476,6 +496,42 @@ export const getMyDeliveryEarnings = async (): Promise<DeliveryEarningsResponse>
   const res = await apiGet<DeliveryEarningsResponse>('/delivery/me/earnings');
   if (!res.data) throw new Error(res.error || res.message || 'Failed to load earnings');
   return res.data;
+};
+
+/** Driver profile fields from GET /delivery/me/profile (same JWT as other delivery endpoints). */
+export type DeliveryMeProfile = {
+  fullName: string;
+  email?: string;
+  phoneNumber?: string;
+  nationalId?: string;
+  vehicleType: string;
+  licensePlate?: string;
+  pharmacyName?: string;
+  pharmacyAddress?: string;
+  profilePhotoUrl?: string;
+};
+
+export const getDeliveryMeProfile = async (): Promise<DeliveryMeProfile> => {
+  const res = await apiGet<DeliveryMeProfile>('/delivery/me/profile');
+  if (!res.data) throw new ApiRequestError(res.error || res.message || 'Profile unavailable', 500);
+  return res.data;
+};
+
+/** Multipart upload; field name `file` — returns persisted image URL (Cloudinary or local). */
+export const uploadDeliveryProfilePhotoApi = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await apiPost<{ profilePhotoUrl: string }>('/delivery/me/profile-photo', formData);
+  const url = res.data?.profilePhotoUrl;
+  if (!url || typeof url !== 'string') {
+    throw new ApiRequestError('Upload succeeded but no image URL returned', 500);
+  }
+  return url;
+};
+
+/** Clears `profilePhotoUrl` on the user document server-side. */
+export const deleteDeliveryProfilePhotoApi = async (): Promise<void> => {
+  await apiDelete<{ profilePhotoUrl: null }>('/delivery/me/profile-photo');
 };
 
 /** Patient confirms home delivery receipt (after driver handoff). */

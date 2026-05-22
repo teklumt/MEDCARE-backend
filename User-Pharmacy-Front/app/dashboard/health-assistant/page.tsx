@@ -3,10 +3,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Link from 'next/link';
-import { 
-  ChevronLeft, Globe, AlertTriangle, X, Send, 
-  Mic, Bot, Shield, Activity, MapPin, Square,
-  CheckCircle2, AlertCircle, XCircle, Paperclip, FileText, Image as ImageIcon
+import {
+  ChevronLeft,
+  Globe,
+  AlertTriangle,
+  X,
+  Send,
+  Bot,
+  Shield,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
+  FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { sendMedcareAiChat } from '@/lib/api';
@@ -57,11 +66,8 @@ export default function HealthAssistantPage() {
     { id: 'sys-1', role: 'system', content: t('assistant.private') }
   ]);
   const [input, setInput] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
   const [showLangDropdown, setShowLangDropdown] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -94,32 +100,16 @@ export default function HealthAssistantPage() {
 
   const handleSend = async (text: string = input) => {
     const trimmed = text.trim();
-    if (!trimmed && !selectedFile) return;
-
-    if (!trimmed && selectedFile) {
-      setChatError('Add a message to send. Attachments are shown in the chat for your reference only; MedCare AI currently accepts text.');
-      return;
-    }
-
-    let attachmentData = undefined;
-    if (selectedFile) {
-      attachmentData = {
-        name: selectedFile.name,
-        type: selectedFile.type,
-        url: URL.createObjectURL(selectedFile)
-      };
-    }
+    if (!trimmed) return;
 
     const newUserMsg: Message = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: trimmed || 'Sent an attachment',
-      attachment: attachmentData
+      content: trimmed,
     };
 
     setMessages((prev) => [...prev, newUserMsg]);
     setInput('');
-    setSelectedFile(null);
     setChatError(null);
     setIsTyping(true);
 
@@ -178,19 +168,6 @@ export default function HealthAssistantPage() {
     } finally {
       setIsTyping(false);
     }
-  };
-
-  const toggleRecording = () => {
-    if (isRecording) {
-      setIsRecording(false);
-      setChatError('Voice input is not connected to MedCare AI yet. Please type your message.');
-    } else {
-      setIsRecording(true);
-    }
-  };
-
-  const cancelRecording = () => {
-    setIsRecording(false);
   };
 
   return (
@@ -461,122 +438,35 @@ export default function HealthAssistantPage() {
               </button>
             </div>
           )}
-          
-          {isRecording ? (
-            <div className="flex items-center justify-between bg-red-50 border border-red-100 rounded-full px-4 py-2.5">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                <span className="text-red-600 font-medium text-sm">{t('assistant.listening')}</span>
-                {/* Simulated waveform */}
-                <div className="flex items-center gap-1 h-4 ml-2">
-                  <div className="w-1 bg-red-400 rounded-full h-full animate-[bounce_1s_infinite]"></div>
-                  <div className="w-1 bg-red-400 rounded-full h-2/3 animate-[bounce_1s_infinite_100ms]"></div>
-                  <div className="w-1 bg-red-400 rounded-full h-full animate-[bounce_1s_infinite_200ms]"></div>
-                  <div className="w-1 bg-red-400 rounded-full h-1/2 animate-[bounce_1s_infinite_300ms]"></div>
-                  <div className="w-1 bg-red-400 rounded-full h-3/4 animate-[bounce_1s_infinite_400ms]"></div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={cancelRecording}
-                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-red-100 rounded-full transition-colors"
-                >
-                  <Square className="w-5 h-5 fill-current" />
-                </button>
-                <button 
-                  onClick={toggleRecording}
-                  className="p-2 text-white bg-red-500 hover:bg-red-600 rounded-full transition-colors shadow-sm"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {/* File Preview */}
-              {selectedFile && (
-                <div className="flex items-center gap-3 bg-brand-50 p-2 rounded-xl mb-1 mx-12 border border-brand-100">
-                  <div className="w-10 h-10 rounded-lg bg-brand-200 flex items-center justify-center shrink-0 overflow-hidden">
-                    {selectedFile.type.startsWith('image/') ? (
-                      <img src={URL.createObjectURL(selectedFile)} alt={selectedFile.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <FileText className="w-5 h-5 text-brand-700" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-brand-900 truncate">{selectedFile.name}</p>
-                    <p className="text-xs text-brand-500 font-medium whitespace-nowrap">
-                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => setSelectedFile(null)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors mr-1"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
 
-              <div className="flex items-end gap-2">
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  className="hidden" 
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) setSelectedFile(file);
-                    // reset input so same file can be selected again
-                    e.target.value = '';
-                  }}
-                  accept="image/*,.pdf,.doc,.docx"
-                />
-                
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`p-3 transition-colors shrink-0 ${
-                    selectedFile ? 'text-brand-600' : 'text-gray-400 hover:text-brand-600'
-                  }`}
-                  aria-label="Upload file"
-                >
-                  <Paperclip className="w-6 h-6" />
-                </button>
-                
-                <div className="flex-1 bg-gray-100 rounded-3xl relative">
-                  <textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        void handleSend();
-                      }
-                    }}
-                    placeholder={t('assistant.placeholder')}
-                    className="w-full bg-transparent border-0 focus:ring-0 resize-none py-3.5 px-4 text-gray-900 placeholder-gray-500 max-h-32 min-h-[52px]"
-                    rows={1}
-                  />
-                </div>
-
-                {input.trim() ? (
-                  <button 
-                    onClick={() => void handleSend()}
-                    className="p-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-full transition-colors shadow-sm shrink-0"
-                  >
-                    <Send className="w-5 h-5" />
-                  </button>
-                ) : (
-                  <button 
-                    onClick={toggleRecording}
-                    className="p-3.5 bg-brand-100 hover:bg-brand-200 text-brand-700 rounded-full transition-colors shrink-0"
-                  >
-                    <Mic className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
+          <div className="flex items-end gap-2">
+            <div className="flex-1 bg-gray-100 rounded-3xl relative">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleSend();
+                  }
+                }}
+                placeholder={t('assistant.placeholder')}
+                className="w-full bg-transparent border-0 focus:ring-0 resize-none py-3.5 px-4 text-gray-900 placeholder-gray-500 max-h-32 min-h-[52px]"
+                rows={1}
+              />
             </div>
-          )}
-          
+
+            <button
+              type="button"
+              onClick={() => void handleSend()}
+              disabled={!input.trim()}
+              className="p-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-full transition-colors shadow-sm shrink-0 disabled:opacity-40 disabled:pointer-events-none disabled:hover:bg-brand-600"
+              aria-label={language === 'am' ? 'መልዕክት ላክ' : 'Send message'}
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          </div>
+
         </div>
       </div>
     </main>

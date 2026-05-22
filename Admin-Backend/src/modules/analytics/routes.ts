@@ -4,6 +4,7 @@ import { Pharmacy } from "../../models/Pharmacy.js";
 import { Order } from "../../models/Order.js";
 import { Driver } from "../../models/Driver.js";
 import { DiseaseAlert } from "../../models/DiseaseAlert.js";
+import { CommissionPaymentModel } from "../../models/CommissionLedger.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/role.js";
 import { errorResponse, successResponse } from "../../utils/response.js";
@@ -58,11 +59,15 @@ analyticsRouter.use(requireAuth);
 analyticsRouter.use(requireRole("admin"));
 
 analyticsRouter.get("/overview", async (_req, res) => {
-  const [users, pharmacies, drivers, ordersAgg] = await Promise.all([
+  const [users, pharmacies, drivers, ordersAgg, commissionAgg] = await Promise.all([
     User.countDocuments(),
     Pharmacy.countDocuments(),
     Driver.countDocuments(),
     Order.aggregate([{ $group: { _id: null, totalOrders: { $sum: 1 }, revenue: { $sum: "$totalAmount" } } }]),
+    CommissionPaymentModel.aggregate<{ _id: null; total: number }>([
+      { $match: { status: "success" } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]),
   ]);
 
   return successResponse(res, {
@@ -70,7 +75,10 @@ analyticsRouter.get("/overview", async (_req, res) => {
     totalPharmacies: pharmacies,
     totalDrivers: drivers,
     totalOrders: ordersAgg[0]?.totalOrders ?? 0,
+    /** Sum of Order.totalAmount (GMV-style); KPI card uses commission total instead */
     totalRevenue: ordersAgg[0]?.revenue ?? 0,
+    /** ETB collected from pharmacies via successful commission payments (Chapa) */
+    totalCommissionReceivedEt: commissionAgg[0]?.total ?? 0,
   });
 });
 

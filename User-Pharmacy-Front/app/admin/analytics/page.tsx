@@ -24,7 +24,7 @@ const TRANSLATIONS = {
     rangeLast7d: 'Last 7 days',
     rangeLast30d: 'Last 30 days',
     exportReport: 'Export Report',
-    totalPlatformRevenue: 'Total Platform Revenue',
+    totalPlatformRevenue: 'Total received from pharmacies',
     totalUsers: 'Total users',
     totalOrders: 'Total Orders',
     pharmaciesAndDrivers: 'Pharmacies & drivers',
@@ -47,7 +47,7 @@ const TRANSLATIONS = {
     rangeLast7d: 'ያለፉት 7 ቀናት',
     rangeLast30d: 'ያለፉት 30 ቀናት',
     exportReport: 'ሪፖርት አውጣ',
-    totalPlatformRevenue: 'አጠቃላይ የመድረክ ገቢ',
+    totalPlatformRevenue: 'ከፋርማሲዎች የተከፈለ ኮሚሽን (ጠቅላላ ብር)',
     totalUsers: 'ጠቅላላ ተጠቃሚዎች',
     totalOrders: 'አጠቃላይ ትዕዛዞች',
     pharmaciesAndDrivers: 'ፋርማሲዎች እና አሽከርካሪዎች',
@@ -83,7 +83,7 @@ export default function AdminAnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [metrics, setMetrics] = useState({
-    totalRevenue: 0,
+    totalCommissionFromPharmaciesEt: 0,
     totalUsers: 0,
     totalOrders: 0,
     totalPharmacies: 0,
@@ -126,12 +126,15 @@ export default function AdminAnalyticsPage() {
         ]);
         if (cancelled) return;
 
+        const overviewRec = overview as Record<string, unknown>;
+        const commissionEt = Number(overviewRec.totalCommissionReceivedEt ?? 0);
+
         setMetrics({
-          totalRevenue: Number((overview as Record<string, unknown>).totalRevenue ?? 0),
-          totalUsers: Number((overview as Record<string, unknown>).totalUsers ?? 0),
-          totalOrders: Number((overview as Record<string, unknown>).totalOrders ?? 0),
-          totalPharmacies: Number((overview as Record<string, unknown>).totalPharmacies ?? 0),
-          totalDrivers: Number((overview as Record<string, unknown>).totalDrivers ?? 0),
+          totalCommissionFromPharmaciesEt: Number.isFinite(commissionEt) ? commissionEt : 0,
+          totalUsers: Number(overviewRec.totalUsers ?? 0),
+          totalOrders: Number(overviewRec.totalOrders ?? 0),
+          totalPharmacies: Number(overviewRec.totalPharmacies ?? 0),
+          totalDrivers: Number(overviewRec.totalDrivers ?? 0),
         });
 
         const rev = (ordersAgg.revenueTrends ?? []).map((row) => ({
@@ -268,7 +271,7 @@ export default function AdminAnalyticsPage() {
               </div>
               <h3 className="text-gray-500 text-sm font-medium mb-1">{t.totalPlatformRevenue}</h3>
               <p className="text-3xl font-bold text-brand-950">
-                {metrics.totalRevenue.toLocaleString()} <span className="text-lg text-gray-500 font-normal">{t.etb}</span>
+                {metrics.totalCommissionFromPharmaciesEt.toLocaleString()} <span className="text-lg text-gray-500 font-normal">{t.etb}</span>
               </p>
             </div>
 

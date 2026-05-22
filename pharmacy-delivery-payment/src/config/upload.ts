@@ -44,6 +44,7 @@ if (isCloudinaryConfigured()) {
 // Local storage configuration
 const uploadDir = path.join(process.cwd(), 'uploads');
 const prescriptionsDir = path.join(uploadDir, 'prescriptions');
+const deliveryProfilesDir = path.join(uploadDir, 'delivery-profiles');
 
 // Ensure upload directories exist
 if (!fs.existsSync(uploadDir)) {
@@ -51,6 +52,9 @@ if (!fs.existsSync(uploadDir)) {
 }
 if (!fs.existsSync(prescriptionsDir)) {
   fs.mkdirSync(prescriptionsDir, { recursive: true });
+}
+if (!fs.existsSync(deliveryProfilesDir)) {
+  fs.mkdirSync(deliveryProfilesDir, { recursive: true });
 }
 
 // Local storage for prescriptions
@@ -76,6 +80,39 @@ const cloudinaryPrescriptionStorage = isCloudinaryConfigured()
       } as any
     })
   : null;
+
+// Cloudinary storage for delivery driver profile photos
+const cloudinaryDeliveryProfileStorage = isCloudinaryConfigured()
+  ? new CloudinaryStorage({
+      cloudinary: cloudinary,
+      params: {
+        folder: 'delivery/profiles',
+        allowed_formats: ['jpg', 'jpeg', 'png'],
+        transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face' }]
+      } as any
+    })
+  : null;
+
+const localDeliveryProfileStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, deliveryProfilesDir);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `delivery-profile-${uniqueSuffix}${ext}`);
+  }
+});
+
+/** JPEG/PNG only (no PDF) — profile avatars */
+const deliveryProfileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowed = ['image/jpeg', 'image/jpg', 'image/png'];
+  if (allowed.includes(file.mimetype)) {
+    cb(null, true);
+    return;
+  }
+  cb(new Error('Invalid file type. Only JPEG or PNG images are allowed for profile photo.'));
+};
 
 // File filter
 const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
@@ -105,6 +142,12 @@ export const scanPrescriptionMemory = multer({
   fileFilter
 });
 
+export const uploadDeliveryProfile = multer({
+  storage: cloudinaryDeliveryProfileStorage || localDeliveryProfileStorage,
+  limits: { fileSize: fileSizeLimit },
+  fileFilter: deliveryProfileFilter
+});
+
 // Helper to get file URL
 export const getFileUrl = (file: Express.Multer.File): string => {
   // Check if file was uploaded to Cloudinary (has path property from CloudinaryStorage)
@@ -119,6 +162,19 @@ export const getFileUrl = (file: Express.Multer.File): string => {
     const baseUrl = process.env.APP_URL || 'http://localhost:5000';
     return `${baseUrl}/uploads/prescriptions/${file.filename}`;
   }
+};
+
+/** URL for a delivery profile photo after multer processed the file */
+export const getDeliveryProfileFileUrl = (file: Express.Multer.File): string => {
+  const p = (file as any).path;
+  if (p && typeof p === 'string' && p.includes('cloudinary')) {
+    return p;
+  }
+  if (isCloudinaryConfigured() && p && typeof p === 'string') {
+    return p;
+  }
+  const baseUrl = process.env.APP_URL || 'http://localhost:5000';
+  return `${baseUrl}/uploads/delivery-profiles/${file.filename}`;
 };
 
 export { cloudinary, isCloudinaryConfigured };

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { Search, Star, ShieldAlert, Store, Edit, Trash2, Globe, ChevronDown } from 'lucide-react';
 import { adminApi } from '@/lib/admin-api';
@@ -283,9 +284,12 @@ export default function AdminPharmaciesPage() {
                     >
                       Toggle Status
                     </button>
-                    <button className="text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg transition-colors">
+                    <Link
+                      href={`/admin/pharmacies/${encodeURIComponent(pharmacy.id)}`}
+                      className="inline-flex items-center justify-center text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg transition-colors"
+                    >
                       {t.viewDetails}
-                    </button>
+                    </Link>
                     <button 
                       onClick={() => handleEditPharmacy(pharmacy.id, pharmacy.name)}
                       title="Edit Pharmacy Name"
