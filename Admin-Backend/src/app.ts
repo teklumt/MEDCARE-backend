@@ -13,10 +13,9 @@ export const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: ["*"],
-    credentials: true,
+    origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   }),
 );
 app.use(express.json({ limit: "1mb" }));
