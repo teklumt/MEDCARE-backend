@@ -1,0 +1,569 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medcare-ai",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "218b49d6-12a5-4b04-b83f-5265054b5629",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-176, 1248],
+      "webhookId": "medcare-ethiopia-ai-v2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst body = item.json.body || item.json;\n\nconst image = body.image || null;\n\nreturn [{\n  json: {\n    user_id: body.userId || '',\n    conversation_id: body.conversationId || '',\n    role: body.role || 'end_user',\n    message: body.content || '',\n    \n    has_image: !!image,\n\n    image_url: image?.url || null,\n    image_file_name: image?.fileName || null,\n    image_mime_type: image?.mimeType || 'image/jpeg',\n\n    sent_at: body.sentAt || new Date().toISOString()\n  }\n}];\n\n"
+      },
+      "id": "5cfc76df-0286-415d-9167-ed23c271323f",
+      "name": "Extract Image Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [48, 1248]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nreturn [{ json: {\n  user_id: item.user_id || '',\n  conversation_id: item.conversation_id || '',\n  role: item.role || 'end_user',\n  message: item.message || '',\n  has_image: item.has_image || false,\n  image_url: item.image_url || null,\n  image_mime_type: item.image_mime_type || null,\n  sent_at: item.sent_at || new Date().toISOString(),\n  prescription_data: {\n    is_prescription: false,\n    medications: [],\n    doctor_name: null,\n    clinic_name: null,\n    diagnosis: null,\n    raw_ocr: ''\n  }\n}}];"
+      },
+      "id": "82585579-c91c-41fa-9f39-6d16324df624",
+      "name": "Set Prescription Empty",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [272, 1248]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── User Resolver ─────────────────────────────────────────────────────────\n// Determines role-based collection without $env (blocked in task runner).\n// The AI agent uses native MongoDB tools for actual user data lookups.\nconst mergedData = $input.first().json;\nconst userId = mergedData.user_id || '';\nconst role   = mergedData.role    || 'end_user';\n\nlet collection = 'users';\nif (role === 'pharmacy' || role === 'pharmacy_owner') collection = 'pharmacies';\nelse if (role === 'admin' || role === 'super_admin' || role === 'moderator') collection = 'admins';\n\n// userDoc is empty here — the AI agent will query MongoDB directly via tools\nreturn [{ json: {\n  ...mergedData,\n  userDoc: {},\n  resolvedCollection: collection,\n  resolvedRole: role\n}}];"
+      },
+      "id": "f8c5fffd-4233-4ea2-95f1-4b1b186f661b",
+      "name": "User Resolver",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [496, 1248]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst userDoc         = item.userDoc || {};\nconst prescriptionData = item.prescription_data || { is_prescription: false, medications: [] };\nconst userId          = item.user_id  || '';\nconst message         = item.message  || '';\nconst resolvedRole    = item.resolvedRole || userDoc.role || 'end_user';\n\nconst userName            = userDoc.fullName || userDoc.ownerName || userDoc.businessName || 'User';\nconst userFirstName       = userName.split(' ')[0];\nconst userCity            = userDoc.city || (userDoc.address && userDoc.address.city) || 'Addis Ababa';\nconst userPhone           = userDoc.phone || 'N/A';\nconst userEmail           = userDoc.email || 'N/A';\nconst pharmacyId          = (resolvedRole === 'pharmacy' || resolvedRole === 'pharmacy_owner') ? String(userDoc._id || '') : '';\nconst pharmacyBusinessName= userDoc.businessName || 'your pharmacy';\n\nconst isPatient  = resolvedRole === 'end_user'  || resolvedRole === 'patient';\nconst isPharmacy = resolvedRole === 'pharmacy'  || resolvedRole === 'pharmacy_owner';\nconst isAdmin    = resolvedRole === 'admin'     || resolvedRole === 'super_admin' || resolvedRole === 'moderator';\n\n// ── Prescription context block ──────────────────────────────────────────────\nlet pcx;\nif (prescriptionData.is_prescription) {\n  const medList = (prescriptionData.medications || []).length > 0\n    ? (prescriptionData.medications || []).map(m =>\n        `       • ${m.name}${m.dosage?' – '+m.dosage:''}${m.frequency?', '+m.frequency:''}${m.duration?', '+m.duration:''}`\n      ).join('\\n')\n    : '       (medications parsed but no table rows found)';\n  pcx =\n    '✅ PRESCRIPTION DETECTED (OCR: ' + (prescriptionData.ocr_model || 'mistral-ocr-latest') + ')\\n' +\n    '   Doctor    : ' + (prescriptionData.doctor_name    || 'Not found') + '\\n' +\n    '   Specialty : ' + (prescriptionData.doctor_specialty || 'Not found') + '\\n' +\n    '   Clinic    : ' + (prescriptionData.clinic_name    || 'Not found') + '\\n' +\n    '   Patient   : ' + (prescriptionData.patient_name   || 'Not found') + '\\n' +\n    '   Date      : ' + (prescriptionData.date           || 'Not found') + '\\n' +\n    '   Diagnosis : ' + (prescriptionData.diagnosis      || 'Not stated') + '\\n' +\n    '   Refills   : ' + (prescriptionData.refills        || 'Not stated') + '\\n' +\n    '   Medications:\\n' + medList;\n} else {\n  pcx = '📎 No prescription image uploaded this turn.';\n}\n\n// ── MONGODB TOOL USAGE GUIDE (injected into every prompt) ──────────────────\nconst MONGO_TOOLS_GUIDE =\n  '════════════════════════════════════\\n' +\n  '🛠️ AVAILABLE MONGODB TOOLS\\n' +\n  '════════════════════════════════════\\n' +\n  'You have FOUR native MongoDB tools. Always pick the correct one:\\n\\n' +\n\n  '1️⃣  MongoDB Find\\n' +\n  '   Use for: reading documents from a collection.\\n' +\n  '   Provide: collection name, JSON filter, optional projection & limit.\\n' +\n  '   Example filter for medicines by name:\\n' +\n  '   { \"$or\": [ {\"drugName\":{\"$regex\":\"amoxicillin\",\"$options\":\"i\"}}, {\"genericName\":{\"$regex\":\"amoxicillin\",\"$options\":\"i\"}} ], \"stock.quantity\":{\"$gt\":0}, \"isAvailable\":true }\\n\\n' +\n\n  '2️⃣  MongoDB Aggregate\\n' +\n  '   Use for: complex queries that need $lookup, $group, $unwind, $match across collections.\\n' +\n  '   Provide: collection name, JSON pipeline array.\\n' +\n  '   Example — medicines joined with pharmacies (for stock search):\\n' +\n  '   [ {\"$match\":{\"isAvailable\":true,\"stock.quantity\":{\"$gt\":0}}}, {\"$lookup\":{\"from\":\"pharmacies\",\"localField\":\"pharmacyId\",\"foreignField\":\"_id\",\"as\":\"pharmacy\"}}, {\"$unwind\":\"$pharmacy\"}, {\"$match\":{\"pharmacy.status\":\"active\",\"pharmacy.address.city\":{\"$regex\":\"Addis Ababa\",\"$options\":\"i\"}}}, {\"$limit\":5} ]\\n\\n' +\n\n  '3️⃣  MongoDB Insert\\n' +\n  '   Use for: creating new documents (orders only for patient sessions).\\n' +\n  '   Provide: collection name (\"orders\"), the full document object.\\n' +\n  '   Always include: patientId, pharmacyId, items, totalAmount, delivery, payment, status: \"pending\", createdAt.\\n\\n' +\n\n  '4️⃣  MongoDB Update\\n' +\n  '   Use for: updating existing documents (order status only).\\n' +\n  '   Provide: collection name (\"orders\"), filter (by _id + pharmacyId), update ($set + $push).\\n' +\n  '   Always push to statusHistory: { status, updatedByRole, note, timestamp }.\\n\\n' +\n\n  '⚙️ ObjectId format in queries: use { \"$oid\": \"24-char-hex-id\" }\\n' +\n  '⚙️ Always add { \"$limit\": N } in pipelines to cap results.\\n' +\n  '⚙️ Never fabricate _id values — only use IDs you received from a prior tool result.\\n';\n\nlet systemPrompt = '';\nlet userPrompt   = '';\nlet displayRole  = '';\n\n// ────────────────────────────────────────────────────────────────────────────\n// 👤 PATIENT\n// ────────────────────────────────────────────────────────────────────────────\nif (isPatient) {\n  displayRole = 'patient';\n  systemPrompt =\n    'You are MedCare AI — a highly qualified medical expert and compassionate health assistant for Medcare Ethiopia.\\n' +\n    'You combine the knowledge of a board-certified physician, clinical pharmacist, and patient advocate.\\n' +\n    'Your dual mission: (1) provide expert-level medical guidance, and (2) help patients find and order their medications.\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '📋 PATIENT SESSION\\n' +\n    '════════════════════════════════════\\n' +\n    'Name     : ' + userName + '\\n' +\n    'City     : ' + userCity + '\\n' +\n    'Phone    : ' + userPhone + '\\n' +\n    'User ID  : ' + userId + '\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '💊 PRESCRIPTION CONTEXT\\n' +\n    '════════════════════════════════════\\n' +\n    pcx + '\\n\\n' +\n\n    MONGO_TOOLS_GUIDE + '\\n' +\n\n    '════════════════════════════════════\\n' +\n    '🔐 PATIENT — ALLOWED COLLECTIONS & OPERATIONS\\n' +\n    '════════════════════════════════════\\n' +\n    '✅ MongoDB Find / Aggregate:\\n' +\n    '   • medicines  — search drug availability in city: \"' + userCity + '\" ONLY.\\n' +\n    '   • pharmacies — read only as part of a $lookup from medicines.\\n' +\n    '   • orders     — ONLY filter: { \"patientId\": { \"$oid\": \"' + userId + '\" } }\\n\\n' +\n    '✅ MongoDB Insert:\\n' +\n    '   • orders     — patientId MUST be \"' + userId + '\". Confirm stock first. Get consent.\\n\\n' +\n    '✅ MongoDB Update: NOT ALLOWED for patients.\\n\\n' +\n\n    '🚫 FORBIDDEN FOR PATIENTS:\\n' +\n    '   • Do NOT query: admins, audit_log, users (other patients), or any non-listed collection.\\n' +\n    '   • Do NOT return pharmacy data outside city \"' + userCity + '\".\\n' +\n    '   • Do NOT use MongoDB Update.\\n' +\n    '   • Do NOT use a patientId other than \"' + userId + '\".\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '🩺 MEDICAL EXPERT GUIDELINES\\n' +\n    '════════════════════════════════════\\n' +\n    'You are empowered to give full, detailed medical guidance. You MUST:\\n\\n' +\n\n    '1. SYMPTOM ASSESSMENT — When a patient describes symptoms:\\n' +\n    '   • NEVER ask about location, city, or where they live — this is irrelevant to clinical assessment.\\n' +\n    '   • Give a direct, precise medical answer immediately, like a real doctor would.\\n' +\n    '   • If clarification is needed, ask ONLY clinically relevant follow-up questions:\\n' +\n    '     - Onset: \"When did this start? Was it sudden or gradual?\"\\n' +\n    '     - Pain location & radiation: \"Where exactly is the pain? Does it spread anywhere?\"\\n' +\n    '     - Character: \"How would you describe it — sharp, dull, burning, throbbing?\"\\n' +\n    '     - Severity: \"On a scale of 1–10, how severe is it?\"\\n' +\n    '     - Timing: \"Is it constant or does it come and go?\"\\n' +\n    '     - Aggravating/Relieving factors: \"What makes it better or worse?\"\\n' +\n    '     - Associated symptoms: \"Any fever, nausea, fatigue, or other symptoms?\"\\n' +\n    '     - Relevant history: \"Any similar episodes before? Any chronic conditions or current medications?\"\\n' +\n    '   • Ask a MAXIMUM of 3 follow-up questions at once — never overwhelm the patient.\\n' +\n    '   • Provide a structured differential diagnosis with likelihoods even before full info if possible.\\n' +\n    '   • Clearly explain what each possible condition means in plain language.\\n\\n' +\n\n    '2. MEDICAL QUESTIONS — Answer with full clinical depth:\\n' +\n    '   • Drug mechanisms, interactions, side effects, contraindications.\\n' +\n    '   • Disease pathophysiology, progression, and prognosis.\\n' +\n    '   • Lab results interpretation, normal vs. abnormal ranges.\\n' +\n    '   • Treatment protocols and evidence-based guidelines (WHO, Ethiopian Federal MOH).\\n' +\n    '   • Dosage guidance with weight/age considerations when relevant.\\n' +\n    '   • Dietary, lifestyle, and preventive health recommendations.\\n' +\n    '   • Chronic disease management: diabetes, hypertension, asthma, TB, HIV, etc.\\n' +\n    '   • Maternal health, pediatric health, mental health, and sexual health queries.\\n\\n' +\n\n    '3. MEDICATION GUIDANCE — You may advise:\\n' +\n    '   • Appropriate OTC medications for common complaints.\\n' +\n    '   • Whether a prescription drug is typically used for a stated condition.\\n' +\n    '   • Drug-drug and drug-food interaction warnings.\\n' +\n    '   • When to take medications (with/without food, timing, etc.).\\n' +\n    '   • Storage conditions and expiry awareness.\\n' +\n    '   • Generic vs. brand equivalents available in Ethiopia.\\n\\n' +\n\n    '4. EMERGENCY TRIAGE — Immediately flag and escalate:\\n' +\n    '   • Chest pain with radiation, severe shortness of breath → \"⚠️ Possible cardiac emergency. Go to the nearest ER NOW or call 907 (Addis Ababa emergency).\"\\n' +\n    '   • Stroke signs (FAST: Face drooping, Arm weakness, Speech difficulty, Time) → immediate referral.\\n' +\n    '   • Severe allergic reaction, uncontrolled bleeding, loss of consciousness → emergency escalation.\\n' +\n    '   • High fever in infants under 3 months → urgent referral.\\n' +\n    '   • Always provide Ethiopia emergency number: 907 (ambulance/emergency).\\n\\n' +\n\n    '5. PRESCRIPTION HANDLING — When a prescription is uploaded:\\n' +\n    '   • Confirm the medications match the stated diagnosis.\\n' +\n    '   • Flag any unusual dosages or potential interactions.\\n' +\n    '   • Explain what each medication does in simple terms.\\n' +\n    '   • Then proactively search availability in ' + userCity + '.\\n\\n' +\n\n    '6. MENTAL HEALTH — Handle with full compassion and clinical seriousness:\\n' +\n    '   • Screen sensitively for depression, anxiety, stress, sleep disorders.\\n' +\n    '   • Provide evidence-based coping strategies.\\n' +\n    '   • Recommend professional help when needed.\\n' +\n    '   • Never dismiss or minimise mental health concerns.\\n\\n' +\n\n    '7. LANGUAGE & CONTEXT:\\n' +\n    '   • Use international drug names and mention Ethiopian market equivalents/generics where known.\\n' +\n    '   • If patient uses Amharic terms or phrases, understand and respond in English with clarity.\\n' +\n    '   • NEVER ask about or reference the patient\\'s city, region, or location in medical advice — it is irrelevant.\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '📝 RESPONSE FORMAT — PATIENT\\n' +\n    '════════════════════════════════════\\n' +\n    '• Greet by first name (' + userFirstName + ') on the first message.\\n' +\n    '• ALWAYS give a direct, precise medical answer first — do not deflect or ask about location.\\n' +\n    '• Structure medical answers with clear sections:\\n' +\n    '  🔍 Assessment | 💡 Possible Causes | 💊 Recommended Action | ⚠️ Warning Signs\\n' +\n    '• Only ask follow-up questions if clinically necessary, and keep them to 3 max.\\n' +\n    '• Stock results format per line:\\n' +\n    '  💊 [Drug] [Dosage] — [Pharmacy], [Address] — ETB [Price]\\n' +\n    '• If medication not found: say so, suggest alternatives if clinically appropriate.\\n' +\n    '• Summarise order items and total before creating — wait for confirmation.\\n' +\n    '• For non-urgent advice always add: \"For a definitive diagnosis, please consult a licensed physician.\"\\n' +\n    '• For emergencies: lead with the emergency action — do not bury it.\\n' +\n    '• End every reply with: \"Is there anything else I can help you with?\"\\n' +\n    '• Never fabricate drug names, prices, stock levels, or dosages.\\n' +\n    '• Never refuse a health question — always engage helpfully and safely.';\n\n  userPrompt = prescriptionData.is_prescription\n    ? 'I have uploaded my prescription.\\n' +\n      'Doctor: '    + (prescriptionData.doctor_name  || 'N/A') + '\\n' +\n      'Clinic: '    + (prescriptionData.clinic_name  || 'N/A') + '\\n' +\n      'Diagnosis: ' + (prescriptionData.diagnosis    || 'N/A') + '\\n' +\n      'Medications: ' + JSON.stringify(prescriptionData.medications || []) + '\\n\\nMy question: ' + message\n    : message;\n\n// ────────────────────────────────────────────────────────────────────────────\n// 🏥 PHARMACY OWNER\n// ────────────────────────────────────────────────────────────────────────────\n} else if (isPharmacy) {\n  displayRole = 'pharmacy_owner';\n  systemPrompt =\n    'You are MedCare AI, a professional operations assistant for pharmacy owners at Medcare Ethiopia.\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '🏥 PHARMACY OWNER SESSION\\n' +\n    '════════════════════════════════════\\n' +\n    'Business    : ' + pharmacyBusinessName + '\\n' +\n    'Owner       : ' + userName + '\\n' +\n    'Pharmacy ID : ' + pharmacyId + '\\n' +\n    'City        : ' + userCity + '\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '💊 PRESCRIPTION CONTEXT\\n' +\n    '════════════════════════════════════\\n' +\n    pcx + '\\n\\n' +\n\n    MONGO_TOOLS_GUIDE + '\\n' +\n\n    '════════════════════════════════════\\n' +\n    '🔐 PHARMACY OWNER — ALLOWED COLLECTIONS & OPERATIONS\\n' +\n    '════════════════════════════════════\\n' +\n    '✅ MongoDB Find:\\n' +\n    '   • medicines — ONLY where pharmacyId = { \"$oid\": \"' + pharmacyId + '\" }\\n' +\n    '     Use $addFields to flag isLowStock: { \"$lte\": [\"$stock.quantity\", \"$stock.lowThreshold\"] }\\n' +\n    '   • orders    — ONLY where pharmacyId = { \"$oid\": \"' + pharmacyId + '\" }\\n' +\n    '     May $lookup drivers for delivery tracking.\\n\\n' +\n    '✅ MongoDB Aggregate:\\n' +\n    '   • medicines + pharmacies pipeline (own pharmacy only).\\n\\n' +\n    '✅ MongoDB Update:\\n' +\n    '   • orders — ONLY orders with pharmacyId = { \"$oid\": \"' + pharmacyId + '\" }\\n' +\n    '     Valid status flow: pending → accepted → preparing → ready → out_for_delivery → delivered.\\n' +\n    '     Also allowed: rejected, cancelled.\\n' +\n    '     Always push to statusHistory with timestamp.\\n' +\n    '     Show old → new status and confirm before applying.\\n\\n' +\n    '✅ MongoDB Insert: NOT ALLOWED for pharmacy owners.\\n\\n' +\n\n    '🚫 FORBIDDEN FOR PHARMACY OWNERS:\\n' +\n    '   • Do NOT query: users, admins, audit_log.\\n' +\n    '   • Do NOT access any other pharmacy\\'s data (always enforce pharmacyId = \"' + pharmacyId + '\").\\n' +\n    '   • Do NOT create orders.\\n' +\n    '   • Do NOT modify patient profiles.\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '📝 RESPONSE FORMAT — PHARMACY OWNER\\n' +\n    '════════════════════════════════════\\n' +\n    '• Inventory table: Drug Name | Stock Qty | Unit | Expiry Date | Price (ETB) | Status\\n' +\n    '• Flag low-stock with ⚠️, items expiring within 60 days with 🔴.\\n' +\n    '• Order list: Order ID | Patient | Items | Total (ETB) | Status | Created\\n' +\n    '• Always confirm before updating order status.\\n' +\n    '• Tone: professional, concise, action-oriented.';\n\n  userPrompt = prescriptionData.is_prescription\n    ? 'A patient presented a prescription.\\nMedications: ' +\n      JSON.stringify(prescriptionData.medications || []) + '\\n\\nMy request: ' + message\n    : message;\n\n// ────────────────────────────────────────────────────────────────────────────\n// 🛡️ ADMIN\n// ────────────────────────────────────────────────────────────────────────────\n} else if (isAdmin) {\n  displayRole = 'admin';\n  systemPrompt =\n    'You are MedCare AI — System Administrator Assistant for Medcare Ethiopia.\\n' +\n    'You are in ADMIN MODE with elevated system access.\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '🛡️ ADMIN SESSION\\n' +\n    '════════════════════════════════════\\n' +\n    'Admin Name  : ' + userName + '\\n' +\n    'Admin Email : ' + userEmail + '\\n' +\n    'Admin Role  : ' + resolvedRole + '\\n' +\n    'Scope       : System-wide\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '💊 PRESCRIPTION CONTEXT\\n' +\n    '════════════════════════════════════\\n' +\n    pcx + '\\n\\n' +\n\n    MONGO_TOOLS_GUIDE + '\\n' +\n\n    '════════════════════════════════════\\n' +\n    '🔐 ADMIN — ALLOWED COLLECTIONS & OPERATIONS\\n' +\n    '════════════════════════════════════\\n' +\n    'READ (Find / Aggregate) — ALL approved collections:\\n' +\n    '   users, admins, pharmacies, medicines, drivers, orders, audit_log\\n\\n' +\n    'INSERT (MongoDB Insert):\\n' +\n    '   users, pharmacies, medicines, drivers, orders\\n' +\n    '   ❌ audit_log — READ ONLY, never insert/update directly.\\n\\n' +\n    'UPDATE (MongoDB Update):\\n' +\n    '   users, pharmacies, medicines, drivers, orders\\n' +\n    '   ❌ audit_log — READ ONLY.\\n\\n' +\n    '⚠️ ADMIN SAFEGUARDS:\\n' +\n    '1. ALWAYS ask for explicit confirmation before any destructive UPDATE or bulk operation.\\n' +\n    '   Show: \"⚠️ CONFIRM: You are about to [action]. Type YES to proceed.\"\\n' +\n    '2. Never expose API keys, env vars, or connection strings.\\n' +\n    '3. Show the MongoDB collection and operation used in every response.\\n' +\n    '4. Lead data-heavy responses with a summary before the full data.\\n' +\n    '5. Every admin action is auto-logged in audit_log — be precise in all queries.\\n\\n' +\n\n    '════════════════════════════════════\\n' +\n    '📝 RESPONSE FORMAT — ADMIN\\n' +\n    '════════════════════════════════════\\n' +\n    '• Always show record counts.\\n' +\n    '• Show [collection | operation] tag for every query.\\n' +\n    '• Use structured tables with headers.\\n' +\n    '• Confirmation prompt BEFORE any destructive operation — never after.';\n\n  userPrompt =\n    '[ADMIN QUERY — Role: ' + resolvedRole + ']\\n' +\n    (prescriptionData.is_prescription\n      ? 'Prescription for admin review:\\n' + JSON.stringify(prescriptionData, null, 2) + '\\n\\nInstruction: ' + message\n      : message);\n\n} else {\n  displayRole  = 'unknown';\n  systemPrompt = 'You are MedCare AI. This user\\'s role could not be verified. Do not provide medical, pharmacy, or order assistance. Ask them to contact support@medcare.et or log in again.';\n  userPrompt   = message;\n}\n\nreturn [{ json: {\n  user_id:            userId,\n  user_role:          displayRole,\n  user_name:          userName,\n  user_city:          userCity,\n  pharmacy_id:        pharmacyId,\n  preferred_language: 'en',\n  prescription_data:  prescriptionData,\n  original_message:   message,\n  system_prompt:      systemPrompt,\n  user_prompt:        userPrompt\n}}];"
+      },
+      "id": "dbe0582e-ceae-4b92-a0f6-cf7126cb2348",
+      "name": "Build Context & Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 1248]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.user_prompt }}",
+        "options": {
+          "systemMessage": "={{ $json.system_prompt }}",
+          "maxIterations": 10,
+          "returnIntermediateSteps": false
+        }
+      },
+      "id": "73d72083-a019-4e45-afe2-866c52791b56",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [1256, 1248]
+    },
+    {
+      "parameters": {
+        "collection": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Collection', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "9abd5963-279d-4e4b-9257-14ba7cf4e781",
+      "name": "MongoDB Find",
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.2,
+      "position": [1200, 1472],
+      "credentials": {
+        "mongoDb": {
+          "id": "ckzYs6zLm3VX7iLn",
+          "name": "MongoDB account main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Collection', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "a6684047-e423-4648-ae49-9bf42de93213",
+      "name": "MongoDB Aggregate",
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.2,
+      "position": [1328, 1472],
+      "credentials": {
+        "mongoDb": {
+          "id": "ckzYs6zLm3VX7iLn",
+          "name": "MongoDB account main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Collection', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "854d1361-e8f4-40b8-80e2-31f6b4bd7ba3",
+      "name": "MongoDB Insert",
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.2,
+      "position": [1456, 1472],
+      "credentials": {
+        "mongoDb": {
+          "id": "ckzYs6zLm3VX7iLn",
+          "name": "MongoDB account main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Collection', ``, 'string') }}",
+        "options": {}
+      },
+      "id": "292d6b85-6ca5-4db5-9c21-f99d6d4e2116",
+      "name": "MongoDB Update",
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.2,
+      "position": [1584, 1472],
+      "credentials": {
+        "mongoDb": {
+          "id": "ckzYs6zLm3VX7iLn",
+          "name": "MongoDB account main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "audit_log",
+        "fields": "={{ JSON.stringify({ userId: $('Build Context & Prompts').first().json.user_id, userRole: $('Build Context & Prompts').first().json.user_role, userName: $('Build Context & Prompts').first().json.user_name, action: 'ai_interaction', query: $('Build Context & Prompts').first().json.original_message, response: $('AI Agent').first().json.output, prescriptionDetected: $('Build Context & Prompts').first().json.prescription_data.is_prescription || false, sessionId: $execution.id, timestamp: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "id": "7001a17d-d106-405f-aaae-95b8cab77ab4",
+      "name": "Audit Log Writer",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.2,
+      "position": [1920, 1248],
+      "credentials": {
+        "mongoDb": {
+          "id": "ckzYs6zLm3VX7iLn",
+          "name": "MongoDB account main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "resp-001",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "resp-002",
+              "name": "session_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-003",
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-004",
+              "name": "user.id",
+              "value": "={{ $('Build Context & Prompts').first().json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-005",
+              "name": "user.name",
+              "value": "={{ $('Build Context & Prompts').first().json.user_name }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-006",
+              "name": "user.role",
+              "value": "={{ $('Build Context & Prompts').first().json.user_role }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-007",
+              "name": "user.city",
+              "value": "={{ $('Build Context & Prompts').first().json.user_city }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-008",
+              "name": "message.text",
+              "value": "={{ $json.ai_output_clean }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-009",
+              "name": "message.language",
+              "value": "={{ $('Build Context & Prompts').first().json.preferred_language }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-010",
+              "name": "prescription.detected",
+              "value": "={{ $('Build Context & Prompts').first().json.prescription_data.is_prescription || false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "resp-011",
+              "name": "prescription.doctor",
+              "value": "={{ $('Build Context & Prompts').first().json.prescription_data.doctor_name || null }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-012",
+              "name": "prescription.clinic",
+              "value": "={{ $('Build Context & Prompts').first().json.prescription_data.clinic_name || null }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-013",
+              "name": "prescription.medications",
+              "value": "={{ $('Build Context & Prompts').first().json.prescription_data.medications || [] }}",
+              "type": "array"
+            },
+            {
+              "id": "resp-014",
+              "name": "user.pharmacy_id",
+              "value": "={{ $('Build Context & Prompts').first().json.pharmacy_id }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-015",
+              "name": "prescription.ocr_model",
+              "value": "={{ $('Build Context & Prompts').first().json.prescription_data.ocr_model || null }}",
+              "type": "string"
+            },
+            {
+              "id": "resp-016",
+              "name": "prescription.page_count",
+              "value": "={{ $('Build Context & Prompts').first().json.prescription_data.page_count || 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "165300cc-63ee-4a18-b89f-38d1d07ed758",
+      "name": "Response Formatter",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2368, 1248]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "X-Session-ID",
+                "value": "={{ $execution.id }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "799357e4-0d30-481e-93de-7545e8f6c42d",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2592, 1248]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [944, 1472],
+      "id": "52df2b7f-275b-40cf-a90e-79d441813dbe",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "MuYB9N7SPdNnt1YC",
+          "name": "Google Gemini(PaLM) Api account xxx"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Extract Image Data').item.json.user_id }}",
+        "collectionName": "ai_chat_history"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryMongoDbChat",
+      "typeVersion": 1,
+      "position": [1072, 1472],
+      "id": "72606ecd-f2e4-471b-9412-b5d386aa16ee",
+      "name": "MongoDB Chat Memory",
+      "credentials": {
+        "mongoDb": {
+          "id": "KuvSBwU1eW0cARLO",
+          "name": "MongoDB account production"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [1712, 1472],
+      "id": "9ae5225f-4ae1-4b77-af99-fe3427379dcd",
+      "name": "HTTP Request",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('AI Agent').first().json.output || '';\n\nconst plain = raw\n  // Headers: ### Title → Title\n  .replace(/^#{1,6}\\s+/gm, '')\n  // Bold/Italic: ***text***, **text**, *text*, __text__, _text_\n  .replace(/\\*{1,3}([^*]+)\\*{1,3}/g, '$1')\n  .replace(/_{1,2}([^_]+)_{1,2}/g, '$1')\n  // Inline code: `code`\n  .replace(/`([^`]+)`/g, '$1')\n  // Code blocks: ```...```\n  .replace(/```[\\s\\S]*?```/g, '')\n  // Blockquotes: > text\n  .replace(/^>\\s+/gm, '')\n  // Horizontal rules\n  .replace(/^[-*_]{3,}\\s*$/gm, '')\n  // Links: [text](url) → text\n  .replace(/\\[([^\\]]+)\\]\\([^)]+\\)/g, '$1')\n  // Images: ![alt](url) → alt\n  .replace(/!\\[([^\\]]*)\\]\\([^)]+\\)/g, '$1')\n  // Unordered list bullets: - item, * item, • item → item\n  .replace(/^[\\s]*[-*•]\\s+/gm, '')\n  // Ordered list numbers: 1. item → item\n  .replace(/^[\\s]*\\d+\\.\\s+/gm, '')\n  // Tables: strip | separators and alignment rows\n  .replace(/^\\|(.+)\\|$/gm, (_, inner) =>\n    inner.split('|').map(c => c.trim()).filter(c => !/^[-:]+$/.test(c)).join('  ')\n  )\n  .replace(/^[\\s|:-]+$/gm, '')\n  // Collapse 3+ newlines to 2\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\nreturn [{ json: { ...$input.first().json, ai_output_clean: plain } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2144, 1248],
+      "id": "9e724d4f-7205-4dbe-9a7d-2f93b62ec59e",
+      "name": "Markdown Stripper (Code node)"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Image Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Image Data": {
+      "main": [
+        [
+          {
+            "node": "Set Prescription Empty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Prescription Empty": {
+      "main": [
+        [
+          {
+            "node": "User Resolver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Resolver": {
+      "main": [
+        [
+          {
+            "node": "Build Context & Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context & Prompts": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Audit Log Writer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB Find": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB Aggregate": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB Insert": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB Update": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Log Writer": {
+      "main": [
+        [
+          {
+            "node": "Markdown Stripper (Code node)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Formatter": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Markdown Stripper (Code node)": {
+      "main": [
+        [
+          {
+            "node": "Response Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "Webhook": [
+      {
+        "headers": {
+          "connection": "upgrade",
+          "host": "dawit-sema.dev",
+          "x-real-ip": "64.227.2.138",
+          "x-forwarded-for": "64.227.2.138",
+          "x-forwarded-proto": "https",
+          "content-length": "166",
+          "content-type": "application/json",
+          "accept": "*/*",
+          "accept-language": "*",
+          "sec-fetch-mode": "cors",
+          "user-agent": "node",
+          "accept-encoding": "br, gzip, deflate"
+        },
+        "params": {},
+        "query": {},
+        "body": {
+          "userId": "6a1f0e6f0c77015938f42174",
+          "conversationId": "2142",
+          "messageType": "textMessage",
+          "content": "how can i treat it naturally",
+          "sentAt": "2026-06-03T08:53:27.750Z"
+        },
+        "webhookUrl": "https://dawit-sema.dev/webhook/medcare-ai",
+        "executionMode": "production"
+      }
+    ]
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8f76e6c2ea34efc84fce91f150eadc601668fda22850bce967042be6b67592b1"
+  }
+}
