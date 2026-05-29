@@ -1,0 +1,25 @@
+Voice Search (Amharic/English)	❌ Missing	Document specifies voice input for multimodal search. Not implemented anywhere.
+Semantic Search via Pinecone	❌ Missing	Chapter 5 says MongoDB Atlas Search replaced Pinecone, but code uses only basic $text search — no $search aggregation.
+SMS OTP via EthioTelecom	❌ Missing	Sequence diagram 3.3.4.1.1 specifies SMS OTP. Email-based OTP exists but no SMS integration.
+MFA for Suppliers (Pharmacies)	❌ Missing	MFA is implemented for admin only. Document requires MFA for suppliers too.
+End-to-End Encryption (RSA + AES-256)	❌ Missing	ENCRYPTION_KEY env var exists and models have encryptedContent fields, but messages are stored as plaintext (content field). No encrypt/decrypt logic.
+FHIR Standards for Health Data Exchange	❌ Missing	No FHIR implementation or health data interoperability.
+
+Driver Rating System	❌ Missing	No driver-specific rating or accountability system.
+Cash on Delivery (UC-05)	❌ Missing	Only Chapa payment implemented. No COD option.
+Subscription Management	❌ Missing	Document describes a Subscription entity. Not implemented.
+Kafka Event Streaming	❌ Missing	kafkajs not in any package.json. No Kafka producer/consumer code despite being mentioned in Chapter 5.
+
+9. Integration with External Systems
+Requirement	Status	Details
+DHIS2 Integration	❌ Missing	Document specifies integration with national health systems.
+eCHIS Integration	❌ Missing	Not implemented.
+Master Facility Registry	❌ Missing	Not referenced in code.
+EthioTelecom SMS Gateway	❌ Missing	Not integrated.
+
+
+
+enhancment
+
+GPS-based Real-time Driver Tracking	❌ Missing	Delivery driver location endpoint saves coordinates but no real-time tracking UI or map fee
+Dynamic Delivery Pricing	❌ Missing	No distance/urgency-based pricing logic.
