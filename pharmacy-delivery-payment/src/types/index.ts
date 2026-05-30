@@ -478,6 +478,24 @@ export interface IChatMessage extends Document {
   updatedAt: Date;
 }
 
+/** Stored notification (`notifications` collection, shared DB). */
+export type NotificationCategory = 'order' | 'complaint';
+export type NotificationEntityType = 'order' | 'complaint';
+
+export interface INotification extends Document {
+  recipientId: Types.ObjectId;
+  category: NotificationCategory;
+  /** Stable machine key, e.g. `order_confirmed`. */
+  event: string;
+  title: string;
+  body: string;
+  entityType: NotificationEntityType;
+  entityId: Types.ObjectId;
+  readAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface IAdmin extends Document {
   fullName: string;
   email: string;

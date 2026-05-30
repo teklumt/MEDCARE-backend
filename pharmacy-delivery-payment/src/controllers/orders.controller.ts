@@ -14,6 +14,12 @@ import { ensurePharmacyDriverConversation } from '../services/pharmacyDriverConv
 import { IOrderStatusHistory } from '../types';
 import { parseCoordinatesInput } from '../utils/geo';
 import { recordCommissionAccrualIfEligible } from '../services/commission.service';
+import {
+  emitNewOrderPendingForPharmacyOwner,
+  emitOrderStatusChangeNotifications,
+  emitPatientCancelledPendingOrder,
+  emitPatientConfirmedReceipt
+} from '../services/notification.service';
 
 function buildDeliveryAddress(raw: unknown): Record<string, unknown> | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -310,6 +316,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
 
     if (useDeferPaymentPath && validatedUploadId) {
       await PrescriptionUpload.findByIdAndUpdate(validatedUploadId, { orderId: order._id });
+      await emitNewOrderPendingForPharmacyOwner(order);
       res.status(201).json({
         success: true,
         message: 'Order submitted for prescription review',
@@ -320,6 +327,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
 
     try {
       const { payment } = await attachPaymentToOrder(order);
+      await emitNewOrderPendingForPharmacyOwner(order);
       res.status(201).json({
         success: true,
         message: 'Order created',
@@ -455,6 +463,8 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
+    const prevStatus = order.status;
+
     if (
       status === 'delivered' &&
       order.deliveryMethod === 'delivery' &&
@@ -501,6 +511,10 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
 
     if (order.status === 'dispatched' && order.deliveryMethod === 'delivery' && order.deliveryAgentId) {
       await ensurePharmacyDriverConversation(order._id);
+    }
+
+    if (status !== prevStatus && status !== 'preparing' && status !== 'ready') {
+      await emitOrderStatusChangeNotifications(order.toObject());
     }
 
     res.json({ success: true, message: 'Order status updated', data: order });
@@ -628,6 +642,8 @@ export const confirmPatientReceipt = async (req: AuthRequest, res: Response): Pr
 
     await recordCommissionAccrualIfEligible(order);
 
+    await emitPatientConfirmedReceipt(order.toObject());
+
     res.json({ success: true, message: 'Delivery confirmed', data: order });
   } catch (error) {
     res.status(500).json({
@@ -741,6 +757,8 @@ export const cancelOrder = async (req: AuthRequest, res: Response): Promise<void
     order.status = 'cancelled';
     order.statusHistory.push(buildStatusEntry('cancelled', new Types.ObjectId(req.user.userId)));
     await order.save();
+
+    await emitPatientCancelledPendingOrder(order.toObject());
 
     res.json({ success: true, message: 'Order cancelled', data: order });
   } catch (error) {

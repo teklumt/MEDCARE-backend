@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { clearPrescriptionScanSessionStorage } from '@/lib/prescriptionScanSession';
+import NotificationBell from '@/components/NotificationBell';
 
 const NAV_ITEMS = [
   { id: 'Dashboard', href: '/pharmacy', icon: LayoutDashboard },
@@ -191,8 +192,11 @@ export default function PharmacyLayout({ children }: { children: React.ReactNode
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-accent-50/30">
-        {children}
+      <main className="flex-1 overflow-y-auto bg-accent-50/30 flex flex-col min-h-0">
+        <div className="shrink-0 flex justify-end px-4 py-2 border-b border-brand-50/70 bg-white/95 overflow-visible relative z-30">
+          <NotificationBell api="med" portal="pharmacy" panelAlign="end" />
+        </div>
+        <div className="flex-1 min-h-0">{children}</div>
       </main>
     </div>
   );

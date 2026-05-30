@@ -1,16 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, Menu, X, Home, Search, Package, MessageSquare, User, ShoppingCart, HelpCircle } from 'lucide-react';
+import { Menu, X, Home, Search, Package, MessageSquare, User, ShoppingCart, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCart } from '@/lib/CartContext';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import NotificationBell from '@/components/NotificationBell';
 
 export default function DashboardNavbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [hasNotifications, setHasNotifications] = useState(true);
   const pathname = usePathname();
   const { itemCount } = useCart();
   const router = useRouter();
@@ -116,12 +116,7 @@ export default function DashboardNavbar() {
                   አማ
                 </button>
               </div>
-              <button className="p-2.5 text-gray-600 hover:text-brand-900 hover:bg-brand-50 rounded-full transition-colors relative">
-                <Bell className="w-5 h-5" />
-                {hasNotifications && (
-                  <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-accent-50"></span>
-                )}
-              </button>
+              <NotificationBell api="med" portal="patient" />
               <div className="h-8 w-px bg-gray-200 mx-1"></div>
               <Link href="/dashboard/profile" className="flex items-center gap-3 hover:bg-brand-50 p-1.5 pr-4 rounded-full transition-colors border border-transparent hover:border-brand-100">
                 <div className="w-9 h-9 rounded-full bg-brand-200 flex items-center justify-center text-brand-800 font-bold font-heading">
@@ -136,12 +131,7 @@ export default function DashboardNavbar() {
 
             {/* Mobile menu button */}
             <div className="flex md:hidden items-center space-x-3">
-              <button className="p-2 text-gray-600 relative">
-                <Bell className="w-5 h-5" />
-                {hasNotifications && (
-                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-accent-50"></span>
-                )}
-              </button>
+              <NotificationBell api="med" portal="patient" className="p-0" />
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className="text-gray-600 hover:text-brand-900 p-2 bg-white rounded-full shadow-sm border border-gray-100"

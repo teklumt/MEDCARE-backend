@@ -3,6 +3,17 @@ import { clearMedcareAiSessionStorage } from '@/lib/medcareAiSession';
 
 const AUTH_API_BASE = process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ?? 'http://localhost:5000/api/admin';
 
+/** Merge API `details.diagnostic` (dev email-provider errors from Admin-Backend) into user-visible message. */
+function formatAdminAuthErrorMessage(data: unknown, fallback: string): string {
+  const d = data as {
+    message?: unknown;
+    details?: { diagnostic?: unknown };
+  };
+  const msg = typeof d.message === 'string' ? d.message : fallback;
+  const diag = typeof d.details?.diagnostic === 'string' ? d.details.diagnostic.trim() : '';
+  return diag ? `${msg}\n\n${diag}` : msg;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -115,7 +126,7 @@ export const authApi = {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'Could not send verification email');
+      throw new Error(formatAdminAuthErrorMessage(data, 'Could not send verification email'));
     }
   },
 
@@ -127,7 +138,7 @@ export const authApi = {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'Could not send verification email');
+      throw new Error(formatAdminAuthErrorMessage(data, 'Could not send verification email'));
     }
   },
 
@@ -139,7 +150,7 @@ export const authApi = {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'Could not send verification email');
+      throw new Error(formatAdminAuthErrorMessage(data, 'Could not send verification email'));
     }
   },
 
@@ -224,7 +235,7 @@ export const authApi = {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'Could not send reset code');
+      throw new Error(formatAdminAuthErrorMessage(data, 'Could not send reset code'));
     }
   },
 
@@ -302,6 +313,7 @@ export const authApi = {
     // Clear all auth-related data from localStorage
     localStorage.removeItem('admin_access_token');
     localStorage.removeItem('admin_refresh_token');
+    localStorage.removeItem('medcare_access_token');
     localStorage.removeItem('medcare_role');
     localStorage.removeItem('medcare_username');
     localStorage.removeItem('medcare_user_name');
@@ -333,9 +345,10 @@ export const authApi = {
   storeAuthData: (loginResponse: LoginResponse) => {
     const { user, tokens } = loginResponse.data;
     
-    // Store tokens
+    // Store tokens (admin_* used app-wide; medcare_* alias for legacy callers)
     localStorage.setItem('admin_access_token', tokens.accessToken);
     localStorage.setItem('admin_refresh_token', tokens.refreshToken);
+    localStorage.setItem('medcare_access_token', tokens.accessToken);
     
     // Store user data in multiple formats for compatibility
     localStorage.setItem('medcare_role', user.role);

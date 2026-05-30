@@ -9,6 +9,7 @@ import { IOrderStatusHistory } from '../types';
 import { DEFAULT_PAGE_LIMIT } from '../config/constants';
 import { parseLatLngBody } from '../utils/geo';
 import { getDeliveryProfileFileUrl } from '../config/upload';
+import { emitDeliveryTripStarted, emitDriverHandoff } from '../services/notification.service';
 
 type DeliveryPeriod = 'today' | 'week' | 'month' | 'all';
 
@@ -260,6 +261,8 @@ export const startDeliveryTrip = async (req: AuthRequest, res: Response): Promis
     order.statusHistory.push(tripStartedHistoryEntry(actorId));
     await order.save();
 
+    await emitDeliveryTripStarted(order.toObject());
+
     res.json({ success: true, message: 'Trip started', data: order });
   } catch (error) {
     res.status(500).json({
@@ -325,6 +328,8 @@ export const confirmDriverHandoff = async (req: AuthRequest, res: Response): Pro
     order.driverHandoffAt = new Date();
     order.statusHistory.push(handoffHistoryEntry(actorId));
     await order.save();
+
+    await emitDriverHandoff(order.toObject());
 
     res.json({ success: true, message: 'Handoff recorded', data: order });
   } catch (error) {

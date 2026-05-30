@@ -6,9 +6,10 @@ import Link from 'next/link';
 import { 
   LayoutDashboard, Users, Store, FileCheck, ShoppingCart, 
   AlertOctagon, BarChart2, Settings, 
-  Bell, LogOut, ShieldCheck
+  LogOut, ShieldCheck
 } from 'lucide-react';
 import { authApi } from '@/lib/auth-api';
+import NotificationBell from '@/components/NotificationBell';
 
 const NAV_ITEMS = [
   { label: 'Overview', href: '/admin', icon: LayoutDashboard },
@@ -25,6 +26,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [notifyAdminBell, setNotifyAdminBell] = useState(false);
   const [adminName, setAdminName] = useState('Admin');
 
   useEffect(() => {
@@ -38,6 +40,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (userData) {
       // Allow admin, pharmacy, and delivery roles to access admin panel
       if (['admin', 'pharmacy', 'delivery'].includes(userData.role)) {
+        setNotifyAdminBell(userData.role === 'admin');
         setAdminName(userData.username || userData.email.split('@')[0]);
         setIsAuthorized(true);
       } else {
@@ -157,10 +160,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             
             <div className="h-6 w-px bg-gray-200"></div>
             
-            <button className="relative p-2 text-gray-400 hover:text-brand-600 transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
+            {notifyAdminBell ? <NotificationBell api="admin" /> : null}
           </div>
         </header>
 

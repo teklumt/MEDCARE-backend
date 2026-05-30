@@ -1,3 +1,5 @@
+import type { NotificationsListPayload } from './api';
+
 type RequestOptions = Omit<RequestInit, 'body'> & { body?: Record<string, unknown> };
 
 const ADMIN_API_BASE = process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ?? 'http://localhost:5000/api/admin';
@@ -55,6 +57,29 @@ const adminFetch = async <T>(path: string, options: RequestOptions = {}): Promis
   const data = await response.json();
   return data.data as T;
 };
+
+export async function listAdminNotifications(page = 1, limit = 7): Promise<NotificationsListPayload> {
+  const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+  return adminFetch<NotificationsListPayload>(`/notifications?${query.toString()}`);
+}
+
+export async function markAdminNotificationsRead(body: { ids?: string[]; all?: boolean }): Promise<void> {
+  const token = getAdminToken();
+  if (!token) throw new Error('Not authenticated');
+  const response = await fetch(`${ADMIN_API_BASE}/notifications/read`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new Error(formatAdminApiError(payload, response.status));
+  }
+}
 
 export type VerificationsMeta = { page: number; limit: number; total: number };
 

@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { MapPin, Clock, Wallet, User as UserIcon, Truck, MessageSquare } from 'lucide-react';
-import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { Clock, Wallet, User as UserIcon, Truck, MessageSquare } from 'lucide-react';
+import NotificationBell from '@/components/NotificationBell';
 
 const NAV_ITEMS = [
   { id: 'Home', href: '/delivery', icon: Truck },
@@ -17,7 +17,6 @@ const NAV_ITEMS = [
 export default function DeliveryLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { language } = useLanguage();
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
@@ -34,16 +33,17 @@ export default function DeliveryLayout({ children }: { children: React.ReactNode
   return (
     <div className="h-[100dvh] overflow-hidden bg-gray-50 flex flex-col pb-20 sm:pb-0 sm:pt-0 sm:flex-row">
       {/* Side Navigation for Desktop/Tablet */}
-      <nav className="hidden sm:flex flex-col w-64 bg-white border-r border-gray-200 shrink-0">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-center h-16 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-brand-900 rounded-full flex items-center justify-center">
+      <nav className="hidden sm:flex flex-col w-64 bg-white border-r border-gray-200 shrink-0 overflow-visible">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between h-16 shrink-0 gap-2 overflow-visible relative z-30">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 bg-brand-900 rounded-full flex items-center justify-center shrink-0">
               <Truck className="w-4 h-4 text-white" />
             </div>
-            <span className="font-heading font-bold text-xl text-brand-900 tracking-tight">
+            <span className="font-heading font-bold text-xl text-brand-900 tracking-tight truncate">
               MED-CARE
             </span>
           </div>
+          <NotificationBell api="med" portal="delivery" panelAlign="start" />
         </div>
         <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {NAV_ITEMS.map((item) => {
@@ -67,7 +67,10 @@ export default function DeliveryLayout({ children }: { children: React.ReactNode
       </nav>
 
       <main className="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden">
-        {children}
+        <div className="sm:hidden shrink-0 flex justify-end px-4 py-2 border-b border-gray-100 bg-white overflow-visible relative z-30">
+          <NotificationBell api="med" portal="delivery" panelAlign="end" />
+        </div>
+        <div className="flex-1 min-h-0">{children}</div>
       </main>
 
       {/* Bottom Navigation for Mobile */}

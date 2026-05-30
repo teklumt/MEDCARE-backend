@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   Store, MapPin, ShieldCheck, Truck, Bell, Shield, LogOut, Camera, X, Check, 
@@ -260,9 +261,12 @@ export default function PharmacyProfilePage() {
            <div className="mt-3">
              {renderVerificationBadge()}
            </div>
-           <button className="w-full mt-4 py-2 px-3 bg-brand-50 text-brand-700 rounded-lg text-sm font-bold hover:bg-brand-100 transition-colors">
-              {language === 'am' ? 'የህዝብ ፕሮፋይልን ይመልከቱ' : 'View Public Profile'}
-           </button>
+           <Link
+             href="/pharmacy/storefront-preview"
+             className="block w-full mt-4 py-2 px-3 bg-brand-50 text-brand-700 rounded-lg text-sm font-bold hover:bg-brand-100 transition-colors text-center"
+           >
+             {language === 'am' ? 'የህዝብ ፕሮፋይልን ይመልከቱ' : 'View Public Profile'}
+           </Link>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-1">
           {([
@@ -295,6 +299,13 @@ export default function PharmacyProfilePage() {
 
       <div className="flex-1 overflow-y-auto w-full p-4 md:p-8">
         <div className="max-w-3xl mx-auto">
+           <Link
+             href="/pharmacy/storefront-preview"
+             className="md:hidden mb-4 py-3 px-4 rounded-xl bg-brand-50 text-brand-800 text-sm font-bold border border-brand-100 flex items-center justify-center gap-2 hover:bg-brand-100 transition-colors"
+           >
+             {language === 'am' ? 'የህዝብ ፕሮፋይልን ይመልከቱ' : 'View Public Profile'}
+             <ChevronRight className="w-4 h-4 shrink-0" />
+           </Link>
            {activeTab === 'profile' && (
              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                <div className="p-6 border-b border-gray-100">

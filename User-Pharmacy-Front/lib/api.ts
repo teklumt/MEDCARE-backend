@@ -813,3 +813,42 @@ export const initiateCommissionChapaPayment = async (body?: {
   if (!res.data) throw new Error('Could not start commission payment');
   return res.data;
 };
+
+// --- Stored notifications (Med API; same JWT as other /api/v1 calls) ---
+
+export type StoredNotification = {
+  _id: string;
+  recipientId: string;
+  category: 'order' | 'complaint';
+  event: string;
+  title: string;
+  body: string;
+  entityType: 'order' | 'complaint';
+  entityId: string;
+  readAt: string | null;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type NotificationsListPayload = {
+  notifications: StoredNotification[];
+  unreadCount: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  total: number;
+};
+
+export const listMedNotifications = async (page = 1, limit = 7): Promise<NotificationsListPayload> => {
+  const res = await apiGet<NotificationsListPayload>('/notifications', { page, limit });
+  if (!res.data) throw new Error('Could not load notifications');
+  return res.data;
+};
+
+export const markMedNotificationsRead = async (ids: string[]): Promise<void> => {
+  await apiPatch('/notifications/read', { ids });
+};
+
+export const markAllMedNotificationsRead = async (): Promise<void> => {
+  await apiPatch('/notifications/read', { all: true });
+};

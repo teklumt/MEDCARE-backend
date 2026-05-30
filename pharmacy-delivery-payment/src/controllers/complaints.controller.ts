@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Complaint from '../models/Complaint';
 import User from '../models/User';
 import { AuthRequest } from '../middleware/auth';
+import { buildComplaintAdminNotificationPayload, notifyMany } from '../services/notification.service';
 
 function generateComplaintRef(): string {
   return `CMP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
@@ -101,6 +102,16 @@ export const createComplaint = async (req: AuthRequest, res: Response): Promise<
         details: lastErr?.message ?? 'duplicate ref',
       });
       return;
+    }
+
+    try {
+      const admins = await User.find({ role: 'admin', isActive: true }).select('_id').lean();
+      await notifyMany(
+        admins.map((a) => a._id as mongoose.Types.ObjectId),
+        buildComplaintAdminNotificationPayload(complaint.toObject()),
+      );
+    } catch (nErr) {
+      console.warn('[notifications] Complaint admin fan-out skipped:', (nErr as Error)?.message);
     }
 
     res.status(201).json({ success: true, message: 'Complaint submitted', data: complaint });
