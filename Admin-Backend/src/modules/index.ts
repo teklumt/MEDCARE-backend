@@ -16,6 +16,7 @@ import { deliveryManagementRouter } from "./delivery-management/routes.js";
 import { complaintManagementRouter } from "./complaint-management/routes.js";
 import { paymentManagementRouter } from "./payment-management/routes.js";
 import { platformSettingsRouter } from "./platform-settings/routes.js";
+import { notificationsRouter } from "./notifications/routes.js";
 
 export const adminRouter = Router();
 
@@ -37,3 +38,4 @@ adminRouter.use("/deliveries", deliveryManagementRouter);
 adminRouter.use("/complaints", complaintManagementRouter);
 adminRouter.use("/payments", paymentManagementRouter);
 adminRouter.use("/platform-settings", platformSettingsRouter);
+adminRouter.use("/notifications", notificationsRouter);

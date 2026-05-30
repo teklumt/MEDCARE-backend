@@ -11,6 +11,15 @@ import { registrationService } from "../../services/registration.service.js";
 import { pharmacySignupVerificationService } from "../../services/pharmacy-signup-verification.service.js";
 import { passwordResetService } from "../../services/password-reset.service.js";
 
+/** Attach Resend/SMTP error text (non-production services only — see password-reset / signup verification). */
+function mailFailureDiagnostic(result: { ok: false; diagnostic?: string }): { diagnostic: string } | undefined {
+  const d = result.diagnostic;
+  if (typeof d === "string" && d.trim() !== "") {
+    return { diagnostic: d };
+  }
+  return undefined;
+}
+
 export const authAdminRouter = Router();
 
 authAdminRouter.post(
@@ -28,7 +37,7 @@ authAdminRouter.post(
           : result.code === "EMAIL_SEND_FAILED"
             ? 502
             : 400;
-      return errorResponse(res, result.message, result.code, status);
+      return errorResponse(res, result.message, result.code, status, mailFailureDiagnostic(result));
     }
     return successResponse(res, {
       sent: true,
@@ -77,7 +86,7 @@ authAdminRouter.post(
             : result.code === "EMAIL_SEND_FAILED"
               ? 502
               : 400;
-      return errorResponse(res, result.message, result.code, status);
+      return errorResponse(res, result.message, result.code, status, mailFailureDiagnostic(result));
     }
     return successResponse(res, { sent: true });
   },
@@ -141,7 +150,7 @@ authAdminRouter.post(
             : result.code === "EMAIL_SEND_FAILED"
               ? 502
               : 400;
-      return errorResponse(res, result.message, result.code, status);
+      return errorResponse(res, result.message, result.code, status, mailFailureDiagnostic(result));
     }
     return successResponse(res, { sent: true });
   },
@@ -224,7 +233,7 @@ authAdminRouter.post(
             : result.code === "EMAIL_SEND_FAILED"
               ? 502
               : 400;
-      return errorResponse(res, result.message, result.code, status);
+      return errorResponse(res, result.message, result.code, status, mailFailureDiagnostic(result));
     }
     return successResponse(res, { sent: true });
   },

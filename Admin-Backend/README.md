@@ -6,7 +6,7 @@ Production-ready TypeScript admin backend for MED-CARE Ethiopia.
 - Node.js + Express.js + TypeScript
 - MongoDB + Mongoose
 - JWT access token + refresh token
-- otplib (TOTP), nodemailer, winston, node-cron
+- otplib (TOTP), Resend + nodemailer (SMTP fallback), winston, node-cron
 - Jest + Supertest
 
 ## Endpoint Count
@@ -34,7 +34,10 @@ The `.env` file has been created with defaults. Review and update if needed:
 - MONGO_URI: MongoDB connection string (default: mongodb://localhost:27017/medcare_admin)
 - JWT_ACCESS_SECRET: Change from default in production
 - JWT_REFRESH_SECRET: Change from default in production
-- SMTP_*: Email configuration (optional for development)
+- RESEND_API_KEY / RESEND_FROM: transactional email via Resend (recommended)
+- SMTP_*: optional SMTP if Resend is not configured
+
+**Resend:** If sends fail with `validation_error`, `invalid_to`, or similar, confirm the **`to`** address is allowed on your account (sandbox often restricts recipients until you verify a sending domain — check [Resend](https://resend.com/dashboard) Logs). Backend logs include `detail` when a send fails.
 ```
 
 ### 3. Start MongoDB (if not running)

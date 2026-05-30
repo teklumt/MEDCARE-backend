@@ -4,6 +4,7 @@ import { PasswordResetVerification } from "../models/PasswordResetVerification.j
 import { RefreshToken } from "../models/RefreshToken.js";
 import { authRepository } from "../repositories/auth.repository.js";
 import { sendMailStrict, isSmtpConfigured } from "../utils/mailer.js";
+import { env } from "../config/env.js";
 
 const BCRYPT_ROUNDS = 10;
 const CODE_TTL_MS = 15 * 60 * 1000;
@@ -20,7 +21,7 @@ export type PasswordResetErrorCode =
 
 export type SendForgotPasswordResult =
   | { ok: true }
-  | { ok: false; code: PasswordResetErrorCode; message: string };
+  | { ok: false; code: PasswordResetErrorCode; message: string; diagnostic?: string };
 
 export type ResetPasswordResult =
   | { ok: true; userId: string }
@@ -83,12 +84,19 @@ export const passwordResetService = {
 
     try {
       await sendMailStrict(email, subject, html);
-    } catch {
+    } catch (cause: unknown) {
       await PasswordResetVerification.deleteMany({ email });
+      const diagnostic =
+        env.nodeEnv !== "production"
+          ? cause instanceof Error
+            ? cause.message
+            : String(cause)
+          : undefined;
       return {
         ok: false,
         code: "EMAIL_SEND_FAILED",
         message: "Could not send reset email. Please try again.",
+        ...(diagnostic ? { diagnostic } : {}),
       };
     }
 

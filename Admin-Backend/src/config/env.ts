@@ -2,6 +2,19 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+/** Trim wrapping quotes/spaces common in `.env` / dotenvx. */
+function stripEnvQuotes(v: string | undefined): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  let s = v.trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||
+    (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s === "" ? undefined : s;
+}
+
 const required = ["MONGO_URI", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"] as const;
 for (const key of required) {
   if (!process.env[key] && process.env.NODE_ENV !== "test") {
@@ -19,6 +32,15 @@ export const env = {
   jwtAccessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? "15m",
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? "30d",
   corsOrigins: (process.env.CORS_ORIGIN ?? "").split(",").map((v) => v.trim()).filter(Boolean),
+  /** HTTPS API — used when RESEND_API_KEY is set; takes precedence over SMTP. */
+  resend: {
+    apiKey: stripEnvQuotes(process.env.RESEND_API_KEY)?.trim(),
+    from: (
+      stripEnvQuotes(process.env.RESEND_FROM) ??
+      stripEnvQuotes(process.env.SMTP_FROM) ??
+      "MED-CARE Ethiopia <onboarding@resend.dev>"
+    ).trim(),
+  },
   smtp: {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT ?? 587),

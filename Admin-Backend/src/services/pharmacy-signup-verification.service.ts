@@ -6,6 +6,7 @@ import {
 } from "../models/PharmacySignupVerification.js";
 import { authRepository } from "../repositories/auth.repository.js";
 import { sendMailStrict, isSmtpConfigured } from "../utils/mailer.js";
+import { env } from "../config/env.js";
 
 const BCRYPT_ROUNDS = 10;
 const CODE_TTL_MS = 15 * 60 * 1000;
@@ -22,7 +23,7 @@ export type PharmacySignupVerifyErrorCode =
 
 export type SendCodeResult =
   | { ok: true }
-  | { ok: false; code: PharmacySignupVerifyErrorCode; message: string };
+  | { ok: false; code: PharmacySignupVerifyErrorCode; message: string; diagnostic?: string };
 
 export type VerifyConsumeResult =
   | { ok: true }
@@ -116,12 +117,19 @@ export const pharmacySignupVerificationService = {
 
     try {
       await sendMailStrict(email, subject, html);
-    } catch {
+    } catch (cause: unknown) {
       await PharmacySignupVerification.deleteMany(filter as Record<string, unknown>);
+      const diagnostic =
+        env.nodeEnv !== "production"
+          ? cause instanceof Error
+            ? cause.message
+            : String(cause)
+          : undefined;
       return {
         ok: false,
         code: "EMAIL_SEND_FAILED",
         message: "Could not send verification email. Please try again.",
+        ...(diagnostic ? { diagnostic } : {}),
       };
     }
 
