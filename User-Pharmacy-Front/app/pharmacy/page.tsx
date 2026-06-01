@@ -145,9 +145,8 @@ const TRANSLATIONS = {
 
 export default function PharmacyDashboardPage() {
   const router = useRouter();
-  const { language, setLanguage } = useLanguage();
-  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const { language } = useLanguage();
+const [mounted, setMounted] = useState(false);
   const [licenseInfo, setLicenseInfo] = useState({ number: 'EFDA-LIC-2024-8891', expiry: 'Dec 31, 2026', profExpiry: 'Jun 30, 2025' });
   const [orders, setOrders] = useState(ACTIVE_ORDERS);
   const [alerts, setAlerts] = useState(INVENTORY_ALERTS);
@@ -230,13 +229,7 @@ export default function PharmacyDashboardPage() {
 
     loadDashboard();
   }, []);
-
-  const toggleLanguage = (lang: 'en' | 'am') => {
-    setLanguage(lang);
-        setIsLangDropdownOpen(false);
-  };
-
-  const t = TRANSLATIONS[language];
+const t = TRANSLATIONS[language];
 
   // Derived state that only runs on client to avoid hydration mismatch
   const now = new Date();
@@ -268,34 +261,7 @@ export default function PharmacyDashboardPage() {
         </div>
         
         {/* Language Dropdown Section */}
-        <div className="relative z-50">
-          <button 
-            onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-            className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
-          >
-            <Globe className="w-4 h-4 text-brand-600" />
-            <span className="text-sm font-bold text-brand-950">{language === 'en' ? 'EN' : 'አማ'}</span>
-            <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
-          </button>
-          
-          {isLangDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-              <button 
-                onClick={() => toggleLanguage('en')}
-                className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'en' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
-              >
-                English
-              </button>
-              <button 
-                onClick={() => toggleLanguage('am')}
-                className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'am' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
-              >
-                አማርኛ
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+</div>
 
       {/* Platform commission (flat ETB / Chapa) */}
       <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-6 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

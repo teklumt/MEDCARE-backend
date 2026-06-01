@@ -1,13 +1,13 @@
-const nextJest = require('next/jest');
-
-const createJestConfig = nextJest({ dir: './' });
-
-module.exports = createJestConfig({
+/** @type {import('jest').Config} */
+module.exports = {
   testEnvironment: 'jest-environment-jsdom',
+  testMatch: ['**/tests/**/*.test.{ts,tsx,js}'],
+  transform: {
+    '^.+\\.(ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
+  },
   setupFilesAfterFramework: ['<rootDir>/tests/setup.ts'],
-  // ↑ intentional: @testing-library/jest-dom matchers loaded after framework
-  testMatch: ['**/tests/**/*.test.{ts,tsx}'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '\\.(css|scss|sass)$': '<rootDir>/tests/__mocks__/styleMock.js',
   },
-});
+};

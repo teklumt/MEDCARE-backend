@@ -183,9 +183,8 @@ export default function MessagesPage() {
   const teamMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const { language, setLanguage } = useLanguage();
-  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const [newMessage, setNewMessage] = useState('');
+  const { language } = useLanguage();
+const [newMessage, setNewMessage] = useState('');
 
   useEffect(() => {
     threadMessagesRef.current = patientThreadMessages;
@@ -397,13 +396,7 @@ export default function MessagesPage() {
       teamMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [activeTab, activePatientConvId, activeTeamConvId, patientThreadMessages, teamThreadMessages, patientThreadLoading, teamThreadLoading]);
-
-  const toggleLanguage = (lang: 'en' | 'am') => {
-    setLanguage(lang);
-    setIsLangDropdownOpen(false);
-  };
-
-  const t = TRANSLATIONS[language];
+const t = TRANSLATIONS[language];
 
   const filteredPatientRows = patientSidebarRows.filter((conv) => {
     const q = searchQuery.toLowerCase();
@@ -492,39 +485,7 @@ export default function MessagesPage() {
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-serif font-bold text-brand-950">{t.messages}</h2>
-            <div className="relative z-50">
-              <button
-                type="button"
-                onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-                className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
-              >
-                <Globe className="w-4 h-4 text-brand-600" />
-                <span className="text-sm font-bold text-brand-950">{language === 'en' ? 'EN' : 'አማ'}</span>
-                <ChevronDown
-                  className={`w-4 h-4 text-gray-500 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
-
-              {isLangDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-                  <button
-                    type="button"
-                    onClick={() => toggleLanguage('en')}
-                    className="w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors"
-                  >
-                    English
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleLanguage('am')}
-                    className="w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors"
-                  >
-                    አማርኛ
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+</div>
 
           <div className="flex rounded-xl bg-gray-100 p-1 mb-4">
             <button

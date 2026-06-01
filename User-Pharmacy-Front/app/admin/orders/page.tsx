@@ -176,21 +176,13 @@ type AdminOrderRow = (typeof INITIAL_ORDERS)[number];
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState(INITIAL_ORDERS);
-  const { language, setLanguage } = useLanguage();
-  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const { language } = useLanguage();
+const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [rxImageModal, setRxImageModal] = useState<string | null>(null);
   const [ordersTodayKpis, setOrdersTodayKpis] = useState<OrdersTodayKpis | null>(null);
   const [kpisLoading, setKpisLoading] = useState(true);
   const [kpisError, setKpisError] = useState<string | null>(null);
-  
-  
-  const toggleLanguage = (lang: 'en' | 'am') => {
-    setLanguage(lang);
-        setIsLangDropdownOpen(false);
-  };
-
-  const t = TRANSLATIONS[language];
+const t = TRANSLATIONS[language];
 
   useEffect(() => {
     const loadOrders = async () => {
@@ -698,36 +690,7 @@ export default function AdminOrdersPage() {
           <h1 className="text-3xl font-serif font-bold text-brand-950 mb-1">{t.platformOrders}</h1>
           <p className="text-gray-500 text-sm">{t.platformOrdersSub}</p>
         </div>
-        <div className="flex items-center">
-          <div className="relative z-50">
-            <button 
-              onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-              className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
-            >
-              <Globe className="w-4 h-4 text-brand-600" />
-              <span className="text-sm font-bold text-brand-950">{language === 'en' ? 'EN' : 'አማ'}</span>
-              <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {isLangDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-                <button 
-                  onClick={() => toggleLanguage('en')}
-                  className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'en' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
-                >
-                  English
-                </button>
-                <button 
-                  onClick={() => toggleLanguage('am')}
-                  className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'am' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
-                >
-                  አማርኛ
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+</div>
 
       {/* Stats Strip */}
       <div className="space-y-2">

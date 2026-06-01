@@ -6,10 +6,11 @@ import Link from 'next/link';
 import { 
   LayoutDashboard, Users, Store, FileCheck, ShoppingCart, 
   AlertOctagon, BarChart2, Settings, 
-  LogOut, ShieldCheck
+  LogOut, ShieldCheck, Menu, X
 } from 'lucide-react';
 import { authApi } from '@/lib/auth-api';
 import NotificationBell from '@/components/NotificationBell';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 const NAV_ITEMS = [
   { label: 'Overview', href: '/admin', icon: LayoutDashboard },
@@ -28,6 +29,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [notifyAdminBell, setNotifyAdminBell] = useState(false);
   const [adminName, setAdminName] = useState('Admin');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     // Check if user is authenticated with backend
@@ -66,12 +72,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="flex h-screen bg-accent-50 overflow-hidden font-sans">
+    <div className="flex h-[100dvh] bg-accent-50 overflow-hidden font-sans">
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-brand-100 flex flex-col shrink-0">
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-brand-100 flex flex-col shrink-0 transition-transform duration-200 ease-out lg:static lg:z-auto lg:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         {/* Logo Section */}
-        <div className="p-6 border-b border-brand-50">
-          <Link href="/admin" className="flex items-center gap-2 mb-2">
+        <div className="p-6 border-b border-brand-50 relative">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-brand-900 hover:bg-gray-100 rounded-lg lg:hidden"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <Link href="/admin" className="flex items-center gap-2 mb-2 pr-8 lg:pr-0">
             <div className="w-8 h-8 bg-brand-900 rounded-full flex items-center justify-center shadow-sm">
               <span className="text-white font-serif font-bold text-sm">M</span>
             </div>
@@ -143,22 +170,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         
         {/* Top Bar */}
-        <header className="bg-white border-b border-brand-100 h-16 flex items-center justify-between px-6 shrink-0 z-10">
-          {/* Top Bar Left Spacer */}
-          <div className="flex-1 max-w-xl">
+        <header className="bg-white border-b border-brand-100 h-16 flex items-center justify-between gap-3 px-4 sm:px-6 shrink-0 z-20">
+          <div className="flex items-center gap-3 min-w-0 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen((open) => !open)}
+              className="text-gray-600 hover:text-brand-900 p-2 bg-white rounded-full shadow-sm border border-gray-100 shrink-0"
+              aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={sidebarOpen}
+            >
+              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+            <span className="font-serif font-bold text-brand-950 truncate">Admin Portal</span>
           </div>
 
+          <div className="hidden lg:block flex-1 max-w-xl" />
+
           {/* Right Actions */}
-          <div className="flex items-center gap-4 ml-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-full">
+          <div className="flex items-center gap-2 sm:gap-4 ml-auto shrink-0">
+            <LanguageSwitcher />
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-full">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
               <span className="text-xs font-bold text-emerald-700">System Operational</span>
             </div>
             
-            <div className="h-6 w-px bg-gray-200"></div>
+            <div className="hidden sm:block h-6 w-px bg-gray-200"></div>
             
             {notifyAdminBell ? <NotificationBell api="admin" /> : null}
           </div>

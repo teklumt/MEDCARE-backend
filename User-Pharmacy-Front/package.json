@@ -7,9 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "clean": "next clean",
-    "test": "jest --runInBand",
-    "test:watch": "jest --watch"
+    "clean": "next clean"
   },
   "dependencies": {
     "@google/genai": "^1.17.0",

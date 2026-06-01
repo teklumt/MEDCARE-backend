@@ -125,10 +125,8 @@ export default function InventoryPage() {
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const { language, setLanguage } = useLanguage();
-  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-
-  useEffect(() => {
+  const { language } = useLanguage();
+useEffect(() => {
     const loadInventory = async () => {
       try {
         const response = await apiGet<any[]>('/pharmacy/me/inventory');
@@ -143,13 +141,7 @@ export default function InventoryPage() {
 
     loadInventory();
   }, []);
-
-  const toggleLanguage = (lang: 'en' | 'am') => {
-    setLanguage(lang);
-    setIsLangDropdownOpen(false);
-  };
-
-  const t = TRANSLATIONS[language];
+const t = TRANSLATIONS[language];
 
   const handleAddStock = async (newItem: any) => {
     try {
@@ -288,36 +280,7 @@ export default function InventoryPage() {
           <p className="text-gray-500 font-medium">{t.inventorySubtitle}</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative z-10 mr-2">
-            <button
-              onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-              className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
-            >
-              <Globe className="w-4 h-4 text-brand-600" />
-              <span className="text-sm font-bold text-brand-950">{language === 'en' ? 'EN' : 'አማ'}</span>
-              <ChevronDown
-                className={`w-4 h-4 text-gray-500 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`}
-              />
-            </button>
-
-            {isLangDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-                <button
-                  onClick={() => toggleLanguage('en')}
-                  className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'en' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
-                >
-                  English
-                </button>
-                <button
-                  onClick={() => toggleLanguage('am')}
-                  className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'am' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
-                >
-                  አማርኛ
-                </button>
-              </div>
-            )}
-          </div>
-          <button
+<button
             onClick={() => setIsBulkUploadOpen(true)}
             className="flex items-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-brand-950 px-4 py-2.5 rounded-xl font-bold transition-colors shadow-sm"
           >

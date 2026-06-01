@@ -14,8 +14,8 @@
     "type-check": "tsc --noEmit",
     "seed": "ts-node src/scripts/seed.ts",
     "fix-schema": "ts-node src/scripts/fix-order-schema.ts",
-    "test": "jest --runInBand",
-    "test:watch": "jest --watch"
+    "test": "npx jest --runInBand",
+    "test:watch": "npx jest --watch"
   },
   "keywords": [
     "pharmacy",

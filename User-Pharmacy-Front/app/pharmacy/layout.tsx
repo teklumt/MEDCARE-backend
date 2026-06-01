@@ -5,11 +5,13 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { 
   LayoutDashboard, Package, ShoppingCart, Truck, 
-  MessageSquare, BarChart2, Settings, LogOut, ShieldCheck, HelpCircle 
+  MessageSquare, BarChart2, Settings, LogOut, ShieldCheck, HelpCircle,
+  Menu, X
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { clearPrescriptionScanSessionStorage } from '@/lib/prescriptionScanSession';
 import NotificationBell from '@/components/NotificationBell';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 const NAV_ITEMS = [
   { id: 'Dashboard', href: '/pharmacy', icon: LayoutDashboard },
@@ -57,8 +59,13 @@ export default function PharmacyLayout({ children }: { children: React.ReactNode
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [pharmacyName, setPharmacyName] = useState('Pharmacy');
   const [pharmacyAvatar, setPharmacyAvatar] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const tExtra = EXTRA_TRANSLATIONS[language as keyof typeof EXTRA_TRANSLATIONS] || EXTRA_TRANSLATIONS.en;
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     const role = localStorage.getItem('medcare_role');
@@ -115,15 +122,40 @@ export default function PharmacyLayout({ children }: { children: React.ReactNode
   }
 
   return (
-    <div className="flex h-screen bg-accent-50 overflow-hidden">
+    <div className="flex h-[100dvh] bg-accent-50 overflow-hidden">
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-brand-100 flex flex-col shrink-0">
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-brand-100 flex flex-col shrink-0 transition-transform duration-200 ease-out lg:static lg:z-auto lg:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         {/* Profile Section */}
         <div 
-          className="p-6 border-b border-brand-50 cursor-pointer hover:bg-gray-50 transition-colors"
+          className="p-6 border-b border-brand-50 cursor-pointer hover:bg-gray-50 transition-colors relative"
           onClick={() => router.push('/pharmacy/profile')}
         >
-          <div className="flex items-center gap-3 mb-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSidebarOpen(false);
+            }}
+            className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-brand-900 hover:bg-gray-100 rounded-lg lg:hidden"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-3 mb-1 pr-8 lg:pr-0">
             <div className="w-10 h-10 bg-brand-900 rounded-full overflow-hidden flex items-center justify-center shrink-0">
               {pharmacyAvatar ? (
                 <img src={pharmacyAvatar} alt="Pharmacy Avatar" className="w-full h-full object-cover" />
@@ -192,9 +224,24 @@ export default function PharmacyLayout({ children }: { children: React.ReactNode
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-accent-50/30 flex flex-col min-h-0">
-        <div className="shrink-0 flex justify-end px-4 py-2 border-b border-brand-50/70 bg-white/95 overflow-visible relative z-30">
-          <NotificationBell api="med" portal="pharmacy" panelAlign="end" />
+      <main className="flex-1 overflow-y-auto bg-accent-50/30 flex flex-col min-h-0 min-w-0">
+        <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-2 h-14 border-b border-brand-50/70 bg-white/95 overflow-visible relative z-20">
+          <div className="flex items-center gap-3 min-w-0 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen((open) => !open)}
+              className="text-gray-600 hover:text-brand-900 p-2 bg-white rounded-full shadow-sm border border-gray-100 shrink-0"
+              aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={sidebarOpen}
+            >
+              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+            <span className="font-bold text-brand-950 truncate">{pharmacyName}</span>
+          </div>
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            <LanguageSwitcher />
+            <NotificationBell api="med" portal="pharmacy" panelAlign="end" />
+          </div>
         </div>
         <div className="flex-1 min-h-0">{children}</div>
       </main>

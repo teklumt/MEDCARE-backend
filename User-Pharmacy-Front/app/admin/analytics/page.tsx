@@ -75,9 +75,8 @@ function formatYmLabel(ym: string, locale: 'en' | 'am'): string {
 }
 
 export default function AdminAnalyticsPage() {
-  const { language, setLanguage } = useLanguage();
-  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const [trafficRange, setTrafficRange] = useState<'24h' | '7d' | '30d'>('30d');
+  const { language } = useLanguage();
+const [trafficRange, setTrafficRange] = useState<'24h' | '7d' | '30d'>('30d');
   const [loading, setLoading] = useState(true);
   const [trafficLoading, setTrafficLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,13 +94,7 @@ export default function AdminAnalyticsPage() {
   const [trafficSeries, setTrafficSeries] = useState<Array<{ name: string; orders: number }>>([]);
 
   const t = TRANSLATIONS[language];
-
-  const toggleLanguage = (lang: 'en' | 'am') => {
-    setLanguage(lang);
-    setIsLangDropdownOpen(false);
-  };
-
-  const rangeLabel = useMemo(() => {
+const rangeLabel = useMemo(() => {
     switch (trafficRange) {
       case '24h':
         return t.rangeLast24h;
@@ -215,39 +208,7 @@ export default function AdminAnalyticsPage() {
             <Download className="w-4 h-4" />
             {t.exportReport}
           </button>
-          <div className="relative z-50">
-            <button
-              type="button"
-              onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-              className="flex items-center gap-1.5 bg-white px-3 py-2.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors ml-2"
-            >
-              <Globe className="w-4 h-4 text-brand-600" />
-              <span className="text-sm font-bold text-brand-950">{language === 'en' ? 'EN' : 'አማ'}</span>
-              <ChevronDown
-                className={`w-4 h-4 text-gray-500 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`}
-              />
-            </button>
-
-            {isLangDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-                <button
-                  type="button"
-                  onClick={() => toggleLanguage('en')}
-                  className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'en' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
-                >
-                  English
-                </button>
-                <button
-                  type="button"
-                  onClick={() => toggleLanguage('am')}
-                  className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-brand-50 transition-colors ${language === 'am' ? 'text-brand-600 bg-brand-50/50' : 'text-gray-700'}`}
-                >
-                  አማርኛ
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+</div>
       </div>
 
       {error && (
