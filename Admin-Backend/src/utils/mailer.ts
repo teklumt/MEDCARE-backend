@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { Resend } from "resend";
-import { APIClient, SendEmailRequest } from "customerio-node/api";
+import { APIClient, SendEmailRequest } from "customerio-node";
 import { env } from "../config/env.js";
 import { logger } from "./logger.js";
 
@@ -102,8 +102,9 @@ async function sendViaCustomerio(to: string, subject: string, html: string): Pro
     from: env.customerio.from.trim(),
     subject: subject.trim(),
     body: html,
-    plaintext_body: toPlainText(html),
-  } as ConstructorParameters<typeof SendEmailRequest>[0]);
+    identifiers: { email: to.trim() },
+    body_plain: toPlainText(html),
+  });
   await customerioClient.sendEmail(request);
 }
 
