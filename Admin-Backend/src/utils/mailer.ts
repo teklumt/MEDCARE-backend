@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { Resend } from "resend";
-import { APIClient, SendEmailRequest } from "customerio-node";
+import { APIClient, SendEmailRequest, RegionUS, RegionEU } from "customerio-node";
 import { env } from "../config/env.js";
 import { logger } from "./logger.js";
 
@@ -17,7 +17,10 @@ export const isSmtpConfigured = (): boolean => isMailConfigured();
 // ---------------------------------------------------------------------------
 // Clients
 // ---------------------------------------------------------------------------
-const customerioClient = useCustomerio ? new APIClient(env.customerio.appApiKey!) : null;
+const customerioRegion = env.customerio.region === "EU" ? RegionEU : RegionUS;
+const customerioClient = useCustomerio
+  ? new APIClient(env.customerio.appApiKey!, { region: customerioRegion })
+  : null;
 const resendClient = useResend ? new Resend(env.resend.apiKey!) : null;
 const smtpTransporter = canUseSmtp
   ? nodemailer.createTransport({

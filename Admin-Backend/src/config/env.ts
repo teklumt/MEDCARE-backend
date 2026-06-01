@@ -35,6 +35,7 @@ export const env = {
   /** Customer.io transactional email — primary provider when API key is set. */
   customerio: {
     appApiKey: stripEnvQuotes(process.env.CUSTOMERIO_APP_API_KEY)?.trim(),
+    region: (stripEnvQuotes(process.env.CUSTOMERIO_REGION) ?? "US").toUpperCase() as "US" | "EU",
     from: (
       stripEnvQuotes(process.env.CUSTOMERIO_FROM_EMAIL) ??
       stripEnvQuotes(process.env.RESEND_FROM) ??
