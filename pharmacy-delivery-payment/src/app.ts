@@ -56,7 +56,7 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-app.use((err: Error, _req: Request, res: Response, _next: unknown) => {
+app.use((_err: Error, _req: Request, res: Response, _next: unknown) => {
   res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
