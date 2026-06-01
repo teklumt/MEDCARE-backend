@@ -252,11 +252,11 @@ describe("Auth routes", () => {
   });
 
   describe("POST /mfa/verify - additional", () => {
-    it("returns 400 on incorrect TOTP code", async () => {
+    it("returns 401 on incorrect TOTP code", async () => {
       (User.findById as any).mockResolvedValue({ _id: testAdmin.id, mfa: { secret: "SECRET" } });
       (authService.verifyMfaCode as any).mockResolvedValue(false);
       const res = await request(app).post(`${BASE}/mfa/verify`).set("Authorization", `Bearer ${adminToken()}`).send({ code: "000000" });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(401);
     });
 
     it("returns 401 without auth token", async () => {
@@ -291,18 +291,18 @@ describe("Auth routes", () => {
         data: { user: { id: "pharm-user-id" }, tokens: { accessToken: "x", refreshToken: "y" } },
       });
       const res = await request(app).post(`${BASE}/register/pharmacy`).send({
-        username: "PharmOwner", email: "pharm@test.com", password: "securePass123",
-        phone: "+251911222222", verificationCode: "123456",
+        businessName: "Care Pharmacy", email: "pharm@test.com", password: "securePass123",
+        phone: "+251911222222", businessLicenseNumber: "BL-12345", verificationCode: "123456",
       });
       expect(res.status).toBe(200);
       expect(res.body.data.user.id).toBe("pharm-user-id");
     });
 
     it("returns 400 on invalid verification code", async () => {
-      (pharmacySignupVerificationService.verifyAndConsume as any).mockResolvedValue({ ok: false, code: "INVALID_CODE" });
+      (pharmacySignupVerificationService.verifyAndConsume as any).mockResolvedValue({ ok: false, code: "INVALID_CODE", message: "Invalid code" });
       const res = await request(app).post(`${BASE}/register/pharmacy`).send({
-        username: "PharmOwner", email: "pharm@test.com", password: "securePass123",
-        phone: "+251911222222", verificationCode: "000000",
+        businessName: "Care Pharmacy", email: "pharm@test.com", password: "securePass123",
+        phone: "+251911222222", businessLicenseNumber: "BL-12345", verificationCode: "000000",
       });
       expect(res.status).toBe(400);
     });
@@ -320,18 +320,20 @@ describe("Auth routes", () => {
         data: { user: { id: "delivery-user-id" }, tokens: { accessToken: "x", refreshToken: "y" } },
       });
       const res = await request(app).post(`${BASE}/register/delivery`).send({
-        username: "Courier1", email: "courier@test.com", password: "securePass123",
-        phone: "+251911333333", verificationCode: "123456",
+        fullName: "Courier One", email: "courier@test.com", password: "securePass123",
+        phone: "+251911333333", nationalId: "ETH-123456789", vehicleType: "motorcycle",
+        pharmacyId: "507f1f77bcf86cd799439011", verificationCode: "123456",
       });
       expect(res.status).toBe(200);
       expect(res.body.data.user.id).toBe("delivery-user-id");
     });
 
     it("returns 400 on invalid verification code for delivery", async () => {
-      (pharmacySignupVerificationService.verifyAndConsume as any).mockResolvedValue({ ok: false, code: "INVALID_CODE" });
+      (pharmacySignupVerificationService.verifyAndConsume as any).mockResolvedValue({ ok: false, code: "INVALID_CODE", message: "Invalid code" });
       const res = await request(app).post(`${BASE}/register/delivery`).send({
-        username: "Courier1", email: "courier@test.com", password: "securePass123",
-        phone: "+251911333333", verificationCode: "000000",
+        fullName: "Courier One", email: "courier@test.com", password: "securePass123",
+        phone: "+251911333333", nationalId: "ETH-123456789", vehicleType: "motorcycle",
+        pharmacyId: "507f1f77bcf86cd799439011", verificationCode: "000000",
       });
       expect(res.status).toBe(400);
     });
