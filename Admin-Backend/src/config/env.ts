@@ -32,7 +32,17 @@ export const env = {
   jwtAccessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? "15m",
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? "30d",
   corsOrigins: (process.env.CORS_ORIGIN ?? "").split(",").map((v) => v.trim()).filter(Boolean),
-  /** HTTPS API — used when RESEND_API_KEY is set; takes precedence over SMTP. */
+  /** Customer.io transactional email — primary provider when API key is set. */
+  customerio: {
+    appApiKey: stripEnvQuotes(process.env.CUSTOMERIO_APP_API_KEY)?.trim(),
+    from: (
+      stripEnvQuotes(process.env.CUSTOMERIO_FROM_EMAIL) ??
+      stripEnvQuotes(process.env.RESEND_FROM) ??
+      stripEnvQuotes(process.env.SMTP_FROM) ??
+      "MED-CARE Ethiopia <noreply@medcare-et.com>"
+    ).trim(),
+  },
+  /** Resend — fallback when Customer.io is not configured. */
   resend: {
     apiKey: stripEnvQuotes(process.env.RESEND_API_KEY)?.trim(),
     from: (
@@ -41,6 +51,7 @@ export const env = {
       "MED-CARE Ethiopia <onboarding@resend.dev>"
     ).trim(),
   },
+  /** SMTP — last fallback. */
   smtp: {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT ?? 587),

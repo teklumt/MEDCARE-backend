@@ -1,170 +1,175 @@
 import nodemailer from "nodemailer";
 import { Resend } from "resend";
+import { APIClient, SendEmailRequest } from "customerio-node/api";
 import { env } from "../config/env.js";
 import { logger } from "./logger.js";
 
-/** Human-readable message from Resend error payload or thrown value. */
+// ---------------------------------------------------------------------------
+// Provider detection — Customer.io wins, then Resend, then SMTP
+// ---------------------------------------------------------------------------
+const useCustomerio = Boolean(env.customerio.appApiKey?.trim());
+const useResend = !useCustomerio && Boolean(env.resend.apiKey?.trim());
+const canUseSmtp = !useCustomerio && !useResend && Boolean(env.smtp.host && env.smtp.user && env.smtp.pass);
+
+export const isMailConfigured = (): boolean => useCustomerio || useResend || canUseSmtp;
+export const isSmtpConfigured = (): boolean => isMailConfigured();
+
+// ---------------------------------------------------------------------------
+// Clients
+// ---------------------------------------------------------------------------
+const customerioClient = useCustomerio ? new APIClient(env.customerio.appApiKey!) : null;
+const resendClient = useResend ? new Resend(env.resend.apiKey!) : null;
+const smtpTransporter = canUseSmtp
+  ? nodemailer.createTransport({
+      host: env.smtp.host,
+      port: env.smtp.port,
+      secure: false,
+      auth: { user: env.smtp.user, pass: env.smtp.pass },
+    })
+  : null;
+
+// ---------------------------------------------------------------------------
+// Branded HTML email template
+// ---------------------------------------------------------------------------
+export function buildEmailHtml(opts: { title: string; preheader?: string; body: string }): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>${opts.title}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f7f6;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f7f6;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="background:#16a34a;padding:32px 40px;text-align:center;">
+              <table cellpadding="0" cellspacing="0" style="display:inline-table;">
+                <tr>
+                  <td style="background:#ffffff;width:44px;height:44px;border-radius:10px;text-align:center;vertical-align:middle;">
+                    <span style="font-size:28px;font-weight:900;color:#16a34a;line-height:44px;">M</span>
+                  </td>
+                  <td style="padding-left:12px;vertical-align:middle;">
+                    <span style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">Med Care</span>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:12px 0 0;color:#dcfce7;font-size:13px;">${opts.preheader ?? opts.title}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 40px 32px;">
+              ${opts.body}
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f9fafb;padding:24px 40px;border-top:1px solid #e5e7eb;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#9ca3af;">
+                MED-CARE Ethiopia &mdash; AI-powered healthcare navigation &amp; pharmacy delivery.<br/>
+                If you did not request this email, you can safely ignore it.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+export function otpBlock(code: string): string {
+  return `<div style="background:#f0fdf4;border:2px dashed #86efac;border-radius:10px;padding:24px;text-align:center;margin:24px 0;">
+    <p style="margin:0 0 8px;font-size:13px;color:#15803d;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Your verification code</p>
+    <p style="margin:0;font-size:40px;font-weight:900;letter-spacing:12px;color:#166534;font-family:monospace;">${code}</p>
+    <p style="margin:8px 0 0;font-size:12px;color:#6b7280;">Expires in 15 minutes</p>
+  </div>`;
+}
+
+function toPlainText(html: string): string {
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// ---------------------------------------------------------------------------
+// Provider senders
+// ---------------------------------------------------------------------------
+async function sendViaCustomerio(to: string, subject: string, html: string): Promise<void> {
+  if (!customerioClient) throw new Error("CUSTOMERIO_NOT_INITIALIZED");
+  const request = new SendEmailRequest({
+    to: to.trim(),
+    from: env.customerio.from.trim(),
+    subject: subject.trim(),
+    body: html,
+    plaintext_body: toPlainText(html),
+  } as ConstructorParameters<typeof SendEmailRequest>[0]);
+  await customerioClient.sendEmail(request);
+}
+
 function formatResendError(err: unknown): string {
-  if (err == null) return "Resend send failed (empty error)";
+  if (!err) return "Resend send failed";
   if (typeof err === "string") return err;
   if (err instanceof Error) return err.message;
   if (typeof err === "object") {
     const o = err as Record<string, unknown>;
-    const name = typeof o.name === "string" ? o.name : "";
-    const message = typeof o.message === "string" ? o.message : "";
-    if (name || message) {
-      return [name, message].filter(Boolean).join(": ").trim();
-    }
-    try {
-      return JSON.stringify(o);
-    } catch {
-      return "Resend send failed";
-    }
+    return [o.name, o.message].filter(Boolean).join(": ") || JSON.stringify(o);
   }
   return String(err);
 }
 
-/** Winston-safe metadata (avoid `message` — reserved by Winston). */
-function errorForLog(err: unknown): Record<string, unknown> {
-  if (err instanceof Error) {
-    return { errName: err.name, errMessage: err.message };
-  }
-  if (err && typeof err === "object") return { resendPayload: err as Record<string, unknown> };
-  return { errMessage: String(err) };
-}
-
-const useResend = Boolean(env.resend.apiKey?.trim());
-const canUseSmtp = Boolean(env.smtp.host && env.smtp.user && env.smtp.pass);
-
-/** True when outbound email is configured (Resend API key or full SMTP). */
-export const isMailConfigured = (): boolean => useResend || canUseSmtp;
-
-/** Alias for existing call sites — same as {@link isMailConfigured}. */
-export const isSmtpConfigured = (): boolean => isMailConfigured();
-
-const mailFrom = (): string =>
-  useResend ? env.resend.from : env.smtp.from;
-
-const resendClient = useResend ? new Resend(env.resend.apiKey!) : null;
-
-const transporter =
-  !useResend && canUseSmtp
-    ? nodemailer.createTransport({
-        host: env.smtp.host,
-        port: env.smtp.port,
-        secure: false,
-        auth: {
-          user: env.smtp.user,
-          pass: env.smtp.pass,
-        },
-      })
-    : null;
-
-function htmlToPlainText(html: string): string {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() || "(MED-CARE notification)";
-}
-
-async function sendViaResend(toRaw: string, subject: string, html: string): Promise<void> {
-  if (!resendClient) {
-    throw new Error("RESEND_NOT_INITIALIZED");
-  }
-  const to = toRaw.trim();
-  const from = mailFrom().trim();
-  const plainText = htmlToPlainText(html);
-
+async function sendViaResend(to: string, subject: string, html: string): Promise<void> {
+  if (!resendClient) throw new Error("RESEND_NOT_INITIALIZED");
   const result = await resendClient.emails.send({
-    from,
-    to,
+    from: env.resend.from.trim(),
+    to: to.trim(),
     subject: subject.trim(),
     html,
-    text: plainText,
+    text: toPlainText(html),
   });
-
-  if (result.error) {
-    const detail = formatResendError(result.error);
-    logger.warn("Resend API rejected send", {
-      to,
-      subject,
-      from,
-      resendError: result.error,
-      detail,
-    });
-    throw new Error(detail);
-  }
-
-  if (result.data == null) {
-    logger.warn("Resend returned success with no payload", { to, subject });
-    throw new Error("Resend send failed (empty success response)");
-  }
+  if (result.error) throw new Error(formatResendError(result.error));
 }
 
+async function sendViaSmtp(to: string, subject: string, html: string): Promise<void> {
+  if (!smtpTransporter) throw new Error("SMTP_NOT_CONFIGURED");
+  await smtpTransporter.sendMail({ from: env.smtp.from, to: to.trim(), subject, html });
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/** Fire-and-forget — logs warning on failure, never throws. */
 export const sendMail = async (to: string, subject: string, html: string): Promise<void> => {
-  if (useResend && resendClient) {
-    try {
-      await sendViaResend(to, subject, html);
-    } catch (error) {
-      logger.warn("Resend send failed, email skipped", {
-        to: to.trim(),
-        subject,
-        ...errorForLog(error),
-      });
-    }
-    return;
-  }
-
-  if (!transporter) {
-    logger.warn("Email not configured (no RESEND_API_KEY and no SMTP), skipped", { to, subject });
-    return;
-  }
-
   try {
-    await transporter.sendMail({
-      from: env.smtp.from,
+    await sendMailStrict(to, subject, html);
+  } catch (err) {
+    logger.warn("Email send failed (non-critical, skipped)", {
       to: to.trim(),
       subject,
-      html,
-    });
-  } catch (error) {
-    logger.warn("SMTP send failed, email skipped", {
-      to: to.trim(),
-      subject,
-      ...errorForLog(error),
+      provider: useCustomerio ? "customerio" : useResend ? "resend" : "smtp",
+      errMessage: err instanceof Error ? err.message : String(err),
     });
   }
 };
 
-/** Sends mail or throws if no provider is configured or send fails. */
+/** Send or throw — use for OTP flows where the email must succeed. */
 export async function sendMailStrict(to: string, subject: string, html: string): Promise<void> {
-  if (useResend && resendClient) {
-    try {
-      await sendViaResend(to, subject, html);
-    } catch (error) {
-      logger.warn("Resend send failed", {
-        to: to.trim(),
-        subject,
-        ...errorForLog(error),
-      });
-      throw error;
-    }
-    return;
-  }
+  const provider = useCustomerio ? "customerio" : useResend ? "resend" : canUseSmtp ? "smtp" : null;
 
-  if (!transporter) {
-    throw new Error("SMTP_NOT_CONFIGURED");
-  }
+  if (!provider) throw new Error("SMTP_NOT_CONFIGURED");
+
   try {
-    await transporter.sendMail({
-      from: env.smtp.from,
+    if (useCustomerio) await sendViaCustomerio(to, subject, html);
+    else if (useResend) await sendViaResend(to, subject, html);
+    else await sendViaSmtp(to, subject, html);
+    logger.info(`Email sent via ${provider}`, { to: to.trim(), subject });
+  } catch (err) {
+    logger.warn(`${provider} send failed`, {
       to: to.trim(),
       subject,
-      html,
+      errMessage: err instanceof Error ? err.message : String(err),
     });
-  } catch (error) {
-    logger.warn("SMTP send failed", {
-      to: to.trim(),
-      subject,
-      ...errorForLog(error),
-    });
-    throw error;
+    throw err;
   }
 }

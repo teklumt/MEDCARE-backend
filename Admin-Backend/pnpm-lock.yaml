@@ -20,6 +20,9 @@ importers:
       csv-stringify:
         specifier: ^6.7.0
         version: 6.7.0
+      customerio-node:
+        specifier: ^4.5.1
+        version: 4.5.1
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -1079,6 +1082,10 @@ packages:
 
   csv-stringify@6.7.0:
     resolution: {integrity: sha512-UdtziYp5HuTz7e5j8Nvq+a/3HQo+2/aJZ9xntNTpmRRIg/3YYqDVgiS9fvAhtNbnyfbv2ZBe0bqCHqzhE7FqWQ==}
+
+  customerio-node@4.5.1:
+    resolution: {integrity: sha512-l0zxh393HyOZ3sv9CtnGgmUpL30UEx2l958zbxY88Q7WgOR9jY5nErg9zUV25i+djOQKS1NhmKwoRIJfVZ2dKg==}
+    engines: {node: '>=22'}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -3634,6 +3641,8 @@ snapshots:
       which: 2.0.2
 
   csv-stringify@6.7.0: {}
+
+  customerio-node@4.5.1: {}
 
   debug@4.4.3:
     dependencies:

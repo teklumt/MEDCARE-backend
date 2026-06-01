@@ -7,7 +7,7 @@ import { requireMFA } from "../../middleware/mfa.js";
 import { validateRequest } from "../../middleware/validate.js";
 import { errorResponse, successResponse } from "../../utils/response.js";
 import { getPagination } from "../../utils/pagination.js";
-import { sendMail } from "../../utils/mailer.js";
+import { sendMail, buildEmailHtml } from "../../utils/mailer.js";
 import { logAudit } from "../../utils/audit.js";
 import { logger } from "../../utils/logger.js";
 

@@ -5,7 +5,7 @@ import {
   type SignupVerificationPurpose,
 } from "../models/PharmacySignupVerification.js";
 import { authRepository } from "../repositories/auth.repository.js";
-import { sendMailStrict, isSmtpConfigured } from "../utils/mailer.js";
+import { sendMailStrict, isSmtpConfigured, buildEmailHtml, otpBlock } from "../utils/mailer.js";
 import { env } from "../config/env.js";
 
 const BCRYPT_ROUNDS = 10;
@@ -56,18 +56,27 @@ function verifyLookupFilter(email: string, purpose: SignupVerificationPurpose): 
 }
 
 function mailContent(purpose: SignupVerificationPurpose, plain: string): { subject: string; html: string } {
-  const label =
+  const roleLabel =
     purpose === "pharmacy_register"
-      ? "pharmacy"
+      ? "Pharmacy"
       : purpose === "patient_register"
-        ? "patient"
-        : "delivery";
-  const subject = `Your ${label} signup verification code`;
-  const html = `
-      <p>Your MED-CARE ${label} signup verification code is:</p>
-      <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${plain}</p>
-      <p>This code expires in 15 minutes. If you did not request this, you can ignore this email.</p>
-    `;
+        ? "Patient"
+        : "Delivery";
+  const subject = `Your MED-CARE ${roleLabel} signup verification code`;
+  const html = buildEmailHtml({
+    title: `Verify your ${roleLabel} account`,
+    preheader: `Your MED-CARE verification code is ${plain}`,
+    body: `
+      <h2 style="margin:0 0 8px;font-size:22px;color:#111827;">Verify your ${roleLabel} account</h2>
+      <p style="margin:0 0 20px;color:#6b7280;font-size:15px;">
+        Thanks for signing up for MED-CARE Ethiopia! Enter the code below to verify your email address and complete your registration.
+      </p>
+      ${otpBlock(plain)}
+      <p style="margin:0;color:#6b7280;font-size:13px;">
+        This code expires in <strong>15 minutes</strong>. If you did not create an account, you can safely ignore this email.
+      </p>
+    `,
+  });
   return { subject, html };
 }
 
