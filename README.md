@@ -500,16 +500,75 @@ Postman: `Admin-Backend/postman/`
 
 ## Testing
 
-```bash
-# Admin-Backend
-cd Admin-Backend
-pnpm test
+The project has **275 automated tests** across all three repositories.
 
-# Type-check Admin
-pnpm run lint
+| Repository | Framework | Test files | Tests |
+| --- | --- | --- | --- |
+| `Admin-Backend` | Jest + Supertest (ESM) | 14 | **155** |
+| `pharmacy-delivery-payment` | Jest + Supertest (CJS) | 9 | **63** |
+| `User-Pharmacy-Front` | Jest (utility logic) | 5 | **57** |
+| **Total** | | **28** | **275** |
+
+### Admin-Backend — 155 tests
+
+```bash
+cd Admin-Backend
+pnpm test          # run all 155 tests
+pnpm test:watch    # watch mode with interactive filter
 ```
 
-Med API: manual testing via Postman; Cypress E2E planned.
+| Test file | Tests | Module |
+| --- | --- | --- |
+| `auth.test.ts` | 34 | Login, MFA, registration (patient / pharmacy / delivery), password reset |
+| `admin-management.test.ts` | 16 | Create, list, update role, suspend, delete admin accounts |
+| `analytics.test.ts` | 16 | Overview, users, orders, drivers, traffic, alerts analytics |
+| `misc-management.test.ts` | 14 | Orders, deliveries, payments, drivers, audit logs |
+| `pharmacies.test.ts` | 11 | List, suspend, activate, badge toggle |
+| `alerts.test.ts` | 11 | Create, list, deactivate disease alerts |
+| `licenses.test.ts` | 10 | Approve, reject, revoke pharmacy licenses |
+| `dashboard.test.ts` | 8 | Platform stats, system health |
+| `users.test.ts` | 8 | List, deactivate, activate, filter users |
+| `platform-settings.test.ts` | 7 | Get/update platform config, maintenance mode |
+| `complaints.test.ts` | 7 | List, resolve, filter complaints |
+| `auth-guard.test.ts` | 5 | Blocks unauthenticated + malformed tokens |
+| `public.test.ts` | 5 | Public pharmacy list (no auth) |
+| `health.test.ts` | 3 | Health check endpoint |
+
+### pharmacy-delivery-payment — 63 tests
+
+```bash
+cd pharmacy-delivery-payment
+npm test           # run all 63 tests
+npm run test:watch
+```
+
+| Test file | Tests | Module |
+| --- | --- | --- |
+| `orders.test.ts` | 12 | Create, list, get, status update, cancel, tracking, role guards |
+| `delivery.test.ts` | 10 | Profile, status, assigned orders, history, earnings, location update |
+| `complaints.test.ts` | 8 | Create, list, get by ID, role guards |
+| `payments.test.ts` | 7 | Chapa initiate, webhook, get by ID, verify |
+| `hospitals.test.ts` | 6 | List, get by ID, 404, public access |
+| `auth.test.ts` | 9 | Patient/pharmacy/delivery signup, login, refresh, logout guard |
+| `health.test.ts` | 5 | Health endpoint, 404, API info |
+| `search.test.ts` | 4 | Medication search, missing query validation |
+| `notifications.test.ts` | 2 | List notifications, auth guard |
+
+### User-Pharmacy-Front — 57 tests
+
+```bash
+cd User-Pharmacy-Front
+npm test           # run all 57 tests
+npm run test:watch
+```
+
+| Test file | Tests | Module |
+| --- | --- | --- |
+| `utils/analytics.test.ts` | 14 | Revenue totals, top months, avg order value, top medications chart |
+| `utils/pharmacy.test.ts` | 14 | Distance calc, stock badges, delivery fee, open hours, ratings |
+| `utils/order.test.ts` | 11 | Status labels, cancellation rules, total calculation, progress % |
+| `utils/language.test.ts` | 9 | EN/AM translations, completeness, unsupported locale guard |
+| `utils/auth.test.ts` | 9 | Email validation, password strength, Ethiopian phone format |
 
 ---
 
