@@ -4,12 +4,13 @@
 </p>
 
 <p align="center">
-  <a href="#-overview">Overview</a> •
-  <a href="#-architecture">Architecture</a> •
-  <a href="#-repository-structure">Structure</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-production-deployment">Deployment</a> •
-  <a href="#-documentation">Docs</a>
+  <a href="#overview">Overview</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#database-design">Database</a> •
+  <a href="#repository-structure">Structure</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#production-deployment">Deployment</a> •
+  <a href="#testing">Testing</a>
 </p>
 
 ---
