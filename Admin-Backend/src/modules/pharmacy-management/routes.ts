@@ -9,7 +9,8 @@ import { requireRole } from "../../middleware/role.js";
 import { requireMFA } from "../../middleware/mfa.js";
 import { validateRequest } from "../../middleware/validate.js";
 import { errorResponse, successResponse } from "../../utils/response.js";
-import { sendMail, buildEmailHtml } from "../../utils/mailer.js";
+import { sendMail } from "../../utils/mailer.js";
+import { pharmacySuspended } from "../../utils/emailTemplates.js";
 import { logAudit } from "../../utils/audit.js";
 import { CommissionAccrualModel, CommissionPaymentModel } from "../../models/CommissionLedger.js";
 
@@ -94,24 +95,8 @@ pharmacyManagementRouter.patch(
     pharmacy.isActive = false;
     await pharmacy.save();
 
-    await sendMail(pharmacy.email, "Your pharmacy account has been suspended", buildEmailHtml({
-      title: "Pharmacy Suspended",
-      preheader: "Important notice about your MED-CARE pharmacy account.",
-      body: `
-        <h2 style="margin:0 0 8px;font-size:22px;color:#111827;">Your pharmacy has been suspended</h2>
-        <p style="margin:0 0 20px;color:#6b7280;font-size:15px;">
-          Your pharmacy account on MED-CARE Ethiopia has been <strong style="color:#dc2626;">suspended</strong> by the admin team.
-          Your pharmacy is no longer visible to patients and cannot accept orders.
-        </p>
-        <div style="background:#fef2f2;border-left:4px solid #dc2626;padding:16px 20px;border-radius:6px;margin-bottom:20px;">
-          <p style="margin:0 0 4px;color:#991b1b;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Reason for suspension</p>
-          <p style="margin:0;color:#7f1d1d;font-size:14px;">${reason}</p>
-        </div>
-        <p style="margin:0;color:#6b7280;font-size:13px;">
-          If you believe this is a mistake or wish to appeal, please contact the MED-CARE support team.
-        </p>
-      `,
-    }));
+    const { subject, html } = pharmacySuspended(reason, pharmacy.businessName);
+    await sendMail(pharmacy.email, subject, html);
     await logAudit(req, "pharmacy.suspend", "Pharmacy", String(pharmacy._id), { reason });
 
     return successResponse(res, { id: pharmacy._id, isActive: pharmacy.isActive });

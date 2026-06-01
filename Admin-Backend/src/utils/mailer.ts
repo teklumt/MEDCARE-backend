@@ -100,15 +100,40 @@ function toPlainText(html: string): string {
 // ---------------------------------------------------------------------------
 async function sendViaCustomerio(to: string, subject: string, html: string): Promise<void> {
   if (!customerioClient) throw new Error("CUSTOMERIO_NOT_INITIALIZED");
+
+  const from = env.customerio.from.trim();
+  const region = env.customerio.region;
+
+  logger.info("[customerio] attempting send", { to: to.trim(), subject, from, region });
+
   const request = new SendEmailRequest({
     to: to.trim(),
-    from: env.customerio.from.trim(),
+    from,
     subject: subject.trim(),
     body: html,
     identifiers: { email: to.trim() },
     body_plain: toPlainText(html),
   });
-  await customerioClient.sendEmail(request);
+
+  try {
+    const result = await customerioClient.sendEmail(request);
+    logger.info("[customerio] send success", { to: to.trim(), subject, result });
+  } catch (err: unknown) {
+    // Log the full raw error so we can see exactly what Customer.io returned
+    const raw =
+      err instanceof Error
+        ? { message: err.message, name: err.name, stack: err.stack }
+        : err;
+    logger.error("[customerio] send failed", {
+      to: to.trim(),
+      subject,
+      from,
+      region,
+      apiKey: env.customerio.appApiKey ? `${env.customerio.appApiKey.slice(0, 8)}...` : "NOT SET",
+      rawError: raw,
+    });
+    throw err;
+  }
 }
 
 function formatResendError(err: unknown): string {

@@ -7,7 +7,8 @@ import { requireMFA } from "../../middleware/mfa.js";
 import { validateRequest } from "../../middleware/validate.js";
 import { errorResponse, successResponse } from "../../utils/response.js";
 import { getPagination } from "../../utils/pagination.js";
-import { sendMail, buildEmailHtml } from "../../utils/mailer.js";
+import { sendMail } from "../../utils/mailer.js";
+import { licenseApproved, licenseRejected } from "../../utils/emailTemplates.js";
 import { logAudit } from "../../utils/audit.js";
 import { logger } from "../../utils/logger.js";
 
@@ -121,25 +122,8 @@ licenseVerificationRouter.patch("/:id/approve", requireRole("admin"), async (req
   await pharmacy.save();
 
   if (pharmacy?.email) {
-    await sendMail(pharmacy.email, "Your pharmacy license has been approved", buildEmailHtml({
-      title: "License Approved",
-      preheader: "Your MED-CARE pharmacy license has been approved.",
-      body: `
-        <h2 style="margin:0 0 8px;font-size:22px;color:#111827;">Congratulations! Your license is approved</h2>
-        <p style="margin:0 0 20px;color:#6b7280;font-size:15px;">
-          Your pharmacy license has been reviewed and <strong style="color:#16a34a;">approved</strong> by the MED-CARE Ethiopia admin team.
-          Your pharmacy is now active and visible to patients on the platform.
-        </p>
-        <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:16px 20px;border-radius:6px;">
-          <p style="margin:0;color:#15803d;font-size:14px;font-weight:600;">You can now:</p>
-          <ul style="margin:8px 0 0;padding-left:20px;color:#166534;font-size:14px;">
-            <li>Add and manage your medication inventory</li>
-            <li>Receive and fulfill patient orders</li>
-            <li>Communicate with patients via messaging</li>
-          </ul>
-        </div>
-      `,
-    }));
+    const { subject, html } = licenseApproved(pharmacy.businessName);
+    await sendMail(pharmacy.email, subject, html);
   }
 
   await logAudit(req, "license.approve", "Pharmacy", String(pharmacy._id));
@@ -172,24 +156,8 @@ licenseVerificationRouter.patch(
     await pharmacy.save();
 
     if (pharmacy?.email) {
-      await sendMail(pharmacy.email, "Your pharmacy license application was not approved", buildEmailHtml({
-        title: "License Not Approved",
-        preheader: "An update on your MED-CARE pharmacy license application.",
-        body: `
-          <h2 style="margin:0 0 8px;font-size:22px;color:#111827;">License application update</h2>
-          <p style="margin:0 0 20px;color:#6b7280;font-size:15px;">
-            After review, your pharmacy license application was <strong style="color:#dc2626;">not approved</strong> at this time.
-          </p>
-          <div style="background:#fef2f2;border-left:4px solid #dc2626;padding:16px 20px;border-radius:6px;margin-bottom:20px;">
-            <p style="margin:0 0 4px;color:#991b1b;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Reason</p>
-            <p style="margin:0;color:#7f1d1d;font-size:14px;">${reason}</p>
-          </div>
-          <p style="margin:0;color:#6b7280;font-size:13px;">
-            Please address the above and resubmit your application through your pharmacy dashboard.
-            If you have questions, contact the MED-CARE support team.
-          </p>
-        `,
-      }));
+      const { subject, html } = licenseRejected(reason, pharmacy.businessName);
+      await sendMail(pharmacy.email, subject, html);
     }
 
     await logAudit(req, "license.reject", "Pharmacy", String(pharmacy._id), { reason });

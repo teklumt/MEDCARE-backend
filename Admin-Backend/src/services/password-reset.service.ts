@@ -3,7 +3,8 @@ import crypto from "crypto";
 import { PasswordResetVerification } from "../models/PasswordResetVerification.js";
 import { RefreshToken } from "../models/RefreshToken.js";
 import { authRepository } from "../repositories/auth.repository.js";
-import { sendMailStrict, isSmtpConfigured, buildEmailHtml, otpBlock } from "../utils/mailer.js";
+import { sendMailStrict, isSmtpConfigured } from "../utils/mailer.js";
+import { passwordResetOtp } from "../utils/emailTemplates.js";
 import { env } from "../config/env.js";
 
 const BCRYPT_ROUNDS = 10;
@@ -32,23 +33,7 @@ function normalizeEmail(email: string): string {
 }
 
 function mailSubjectAndHtml(plainCode: string): { subject: string; html: string } {
-  const subject = "Your MED-CARE password reset code";
-  const html = buildEmailHtml({
-    title: "Reset your password",
-    preheader: "Use this code to reset your MED-CARE password.",
-    body: `
-      <h2 style="margin:0 0 8px;font-size:22px;color:#111827;">Reset your password</h2>
-      <p style="margin:0 0 20px;color:#6b7280;font-size:15px;">
-        We received a request to reset your MED-CARE account password.
-        Use the code below to complete the process.
-      </p>
-      ${otpBlock(plainCode)}
-      <p style="margin:0;color:#6b7280;font-size:13px;">
-        This code expires in <strong>15 minutes</strong>. If you did not request a password reset, you can safely ignore this email.
-      </p>
-    `,
-  });
-  return { subject, html };
+  return passwordResetOtp(plainCode);
 }
 
 export const passwordResetService = {
