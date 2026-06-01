@@ -1,4 +1,5 @@
-import type {NextConfig} from 'next';
+import type { NextConfig } from 'next';
+import withPWA from '@ducanh2912/next-pwa';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -8,53 +9,30 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  // Allow access to remote image placeholder.
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**', // This allows any path under the hostname
-      },
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'upload.wikimedia.org',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'res.cloudinary.com',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '5000',
-        pathname: '/**',
-      },
+      { protocol: 'https', hostname: 'picsum.photos',       port: '', pathname: '/**' },
+      { protocol: 'https', hostname: 'images.unsplash.com', port: '', pathname: '/**' },
+      { protocol: 'https', hostname: 'upload.wikimedia.org',port: '', pathname: '/**' },
+      { protocol: 'https', hostname: 'res.cloudinary.com',  port: '', pathname: '/**' },
+      { protocol: 'http',  hostname: 'localhost',           port: '5000', pathname: '/**' },
     ],
   },
-  output: 'standalone',
   transpilePackages: ['motion'],
-  webpack: (config, {dev}) => {
-    // HMR is disabled in AI Studio via DISABLE_HMR env var.
-    // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+  webpack: (config, { dev }) => {
     if (dev && process.env.DISABLE_HMR === 'true') {
-      config.watchOptions = {
-        ignored: /.*/,
-      };
+      config.watchOptions = { ignored: /.*/ };
     }
     return config;
   },
 };
 
-export default nextConfig;
+export default withPWA({
+  dest: 'public',
+  disable: process.env.NODE_ENV === 'development',
+  register: true,
+  workboxOptions: {
+    skipWaiting: true,
+    disableDevLogs: true,
+  },
+})(nextConfig);
