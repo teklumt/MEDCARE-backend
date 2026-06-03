@@ -269,6 +269,7 @@ export type PharmacyAnalytics = {
 /** Real revenue + order count analytics for the authenticated pharmacy owner. */
 export const getPharmacyAnalytics = async (period: '7d' | '30d' | '90d' = '30d'): Promise<PharmacyAnalytics> => {
   const res = await apiGet<PharmacyAnalytics>(`/pharmacy/me/analytics?period=${period}`);
+  if (!res.data) throw new Error("Pharmacy analytics not found");
   return res.data;
 };
 
