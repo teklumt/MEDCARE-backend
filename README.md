@@ -28,7 +28,7 @@
 | **Payments**        | [Chapa](https://chapa.co) gateway (Telebirr, CBE Birr, eBirr, etc.) + cash on delivery              |
 | **Languages**       | English & Amharic UI support                                                                        |
 
-**Final-year project** — Addis Ababa Science and Technology University (AASTU), Software Engineering.
+**Final-year project** — Addis Ababa Science and Technology University (AASTU), Software Engineering
 
 ---
 
