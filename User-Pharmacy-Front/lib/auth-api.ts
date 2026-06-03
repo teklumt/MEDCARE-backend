@@ -4,7 +4,7 @@ import { clearMedcareAiSessionStorage } from '@/lib/medcareAiSession';
 const AUTH_API_BASE = process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ?? 'http://localhost:5000/api/admin';
 
 /** Parse JSON safely — handles plain-text rate limit / gateway responses without crashing. */
-async function safeJson(response: Response): Promise<unknown> {
+async function safeJson(response: Response): Promise<any> {
   if (response.status === 429) throw new Error('Too many attempts. Please wait a moment and try again.');
   const text = await response.text();
   try {
