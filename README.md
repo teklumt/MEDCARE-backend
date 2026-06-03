@@ -2,8 +2,8 @@
   <strong>MED-CARE Ethiopia</strong><br/>
   <em>AI-powered healthcare navigation &amp; pharmacy delivery platform</em>
 </p>
-
-<p align="center">
+  
+<p align="center" >
   <a href="#overview">Overview</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#database-design">Database</a> •
