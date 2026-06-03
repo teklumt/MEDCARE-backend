@@ -10,9 +10,7 @@ import { authApi, setupTokenRefresh } from '@/lib/auth-api';
 const translations = {
   en: {
     tagline: "Your health. Your pharmacy. Your language.",
-    phone: "Phone Number",
     email: "Email Address",
-    or: "or",
     password: "Password",
     forgot: "Forgot password?",
     signIn: "Sign In",
@@ -20,9 +18,9 @@ const translations = {
     noAccount: "Don't have an account?",
     createOne: "Create one",
     secure: "🔒 Your connection is secure and encrypted.",
-    emptyPhoneEmail: "Please enter your phone number or email.",
+    emptyPhoneEmail: "Please enter your email address.",
     emptyPassword: "Please enter your password.",
-    invalidCreds: "Incorrect phone number or password. Please try again.",
+    invalidCreds: "Incorrect email or password. Please try again.",
     mfaHeader: "Two-Factor Authentication",
     mfaInstr: "Enter the 6-digit code from your authenticator app.",
     verify: "Verify",
@@ -59,9 +57,7 @@ const translations = {
   },
   am: {
     tagline: "ጤናዎ። ፋርማሲዎ። ቋንቋዎ።",
-    phone: "ስልክ ቁጥር",
     email: "ኢሜይል አድራሻ",
-    or: "ወይም",
     password: "የምስጢር ቃል",
     forgot: "የምስጢር ቃል ረሱ?",
     signIn: "ግባ",
@@ -69,9 +65,9 @@ const translations = {
     noAccount: "መለያ የለዎትም?",
     createOne: "ይፍጠሩ",
     secure: "🔒 ግንኙነትዎ ደህንነቱ የተጠበቀ ነው።",
-    emptyPhoneEmail: "ስልክ ቁጥር ወይም ኢሜይል ያስገቡ።",
+    emptyPhoneEmail: "ኢሜይል አድራሻ ያስገቡ።",
     emptyPassword: "የምስጢር ቃል ያስገቡ።",
-    invalidCreds: "ስልክ ቁጥር ወይም የምስጢር ቃል ትክክል አይደለም።",
+    invalidCreds: "ኢሜይል ወይም የምስጢር ቃል ትክክል አይደለም።",
     mfaHeader: "ሁለት-ደረጃ ማረጋገጫ",
     mfaInstr: "ከ authenticator መተግበሪያዎ 6-አሃዝ ኮድ ያስገቡ።",
     verify: "አረጋግጥ",
@@ -121,7 +117,6 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Form states
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -160,15 +155,6 @@ export default function LoginPage() {
     return () => clearInterval(interval);
   }, [view, resetTimer]);
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/\D/g, '');
-    if (val.length > 3) val = val.slice(0, 3) + ' ' + val.slice(3);
-    if (val.length > 7) val = val.slice(0, 7) + ' ' + val.slice(7);
-    setPhone(val.slice(0, 11));
-    if (phoneEmailError) setPhoneEmailError('');
-    if (generalError) setGeneralError('');
-  };
-
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(e.target.value);
     if (phoneEmailError) setPhoneEmailError('');
@@ -188,8 +174,8 @@ export default function LoginPage() {
     setGeneralError('');
 
     let isValid = true;
-    const identifier = email || phone.replace(/\s/g, '');
-    
+    const identifier = email.trim();
+
     if (!identifier) {
       setPhoneEmailError(tLocal.emptyPhoneEmail);
       isValid = false;
@@ -205,14 +191,6 @@ export default function LoginPage() {
     const loginEmail = identifier;
 
     try {
-      // If it's a phone number, handle differently
-      if (/^\+?251\d{9}$/.test(identifier.replace(/\s/g, ''))) {
-        // This is a phone number, but admin backend expects email
-        setGeneralError('Admin login requires email address, not phone number.');
-        setIsLoading(false);
-        return;
-      }
-
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(loginEmail)) {
@@ -435,9 +413,6 @@ export default function LoginPage() {
     }
   };
 
-  const isPhoneActive = email.trim() === '';
-  const isEmailActive = phone.trim() === '';
-
   return (
     <main className="min-h-screen flex flex-row-reverse selection:bg-brand-500 selection:text-white font-sans">
       
@@ -558,19 +533,18 @@ export default function LoginPage() {
               {view === 'login' && (
                 <form onSubmit={handleLogin} className="flex flex-col gap-5">
                   <div className="relative">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">{tLocal.phone}</label>
-                    <div className={`flex items-center border ${phoneEmailError ? 'border-red-300 ring-4 ring-red-500/10' : 'border-gray-200 focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10'} rounded-2xl bg-white overflow-hidden transition-all h-14 ${!isPhoneActive ? 'opacity-50 bg-gray-50' : ''}`}>
-                      <div className="flex items-center gap-2 pl-4 pr-3 border-r border-gray-100 bg-gray-50 h-full shrink-0">
-                        <span className="text-lg leading-none" role="img" aria-label="Ethiopia flag">🇪🇹</span>
-                        <span className="text-sm font-bold text-gray-500">+251</span>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">{tLocal.email}</label>
+                    <div className={`flex items-center border ${phoneEmailError ? 'border-red-300 ring-4 ring-red-500/10' : 'border-gray-200 focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10'} rounded-2xl bg-white overflow-hidden transition-all h-14`}>
+                      <div className="pl-4 shrink-0">
+                        <Mail className="w-5 h-5 text-gray-400" />
                       </div>
-                      <input 
-                        type="tel"
-                        disabled={!isPhoneActive}
-                        value={phone}
-                        onChange={handlePhoneChange}
-                        placeholder="91 234 5678"
-                        className="w-full h-full px-4 bg-transparent outline-none text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal disabled:text-gray-400"
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={handleEmailChange}
+                        placeholder="name@example.com"
+                        autoComplete="email"
+                        className="w-full h-full px-3 bg-transparent outline-none text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal"
                       />
                     </div>
                     {phoneEmailError && (
@@ -579,30 +553,6 @@ export default function LoginPage() {
                         <span className="text-xs font-medium">{phoneEmailError}</span>
                       </div>
                     )}
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="h-px bg-gray-100 flex-1"></div>
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">{tLocal.or}</span>
-                    <div className="h-px bg-gray-100 flex-1"></div>
-                  </div>
-
-                  <div className="relative">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">{tLocal.email}</label>
-                    <div className={`flex items-center border ${phoneEmailError ? 'border-red-300 ring-4 ring-red-500/10' : 'border-gray-200 focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10'} rounded-2xl bg-white overflow-hidden transition-all h-14 ${!isEmailActive ? 'opacity-50 bg-gray-50' : ''}`}>
-                      <div className="pl-4 shrink-0">
-                        <Mail className="w-5 h-5 text-gray-400" />
-                      </div>
-                      <input 
-                        type="email"
-                        disabled={!isEmailActive}
-                        value={email}
-                        onChange={handleEmailChange}
-                        placeholder="name@example.com"
-                        autoComplete="email"
-                        className="w-full h-full px-3 bg-transparent outline-none text-gray-900 font-medium placeholder:text-gray-400 placeholder:font-normal disabled:text-gray-400"
-                      />
-                    </div>
                   </div>
 
                   <div className="relative mt-2">

@@ -1,12 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
-import { setupTokenRefresh } from '@/lib/auth-api';
-
-/** Starts periodic access-token refresh whenever a refresh token exists (login/signup/layout mount). */
+// Tokens are 30 days — no periodic refresh needed.
 export function AuthTokenRefresh() {
-  useEffect(() => {
-    setupTokenRefresh();
-  }, []);
   return null;
 }

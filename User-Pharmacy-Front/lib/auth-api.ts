@@ -3,6 +3,18 @@ import { clearMedcareAiSessionStorage } from '@/lib/medcareAiSession';
 
 const AUTH_API_BASE = process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ?? 'http://localhost:5000/api/admin';
 
+/** Parse JSON safely — handles plain-text rate limit / gateway responses without crashing. */
+async function safeJson(response: Response): Promise<unknown> {
+  if (response.status === 429) throw new Error('Too many attempts. Please wait a moment and try again.');
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Backend returned non-JSON (e.g. nginx error page) — surface a clean message
+    throw new Error(text.trim() || `Server error (${response.status})`);
+  }
+}
+
 /** Merge API `details.diagnostic` (dev email-provider errors from Admin-Backend) into user-visible message. */
 function formatAdminAuthErrorMessage(data: unknown, fallback: string): string {
   const d = data as {
@@ -98,7 +110,7 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(data.message || 'Registration failed');
     }
@@ -111,7 +123,7 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(data.message || 'Registration failed');
     }
@@ -124,7 +136,7 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(formatAdminAuthErrorMessage(data, 'Could not send verification email'));
     }
@@ -136,7 +148,7 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(formatAdminAuthErrorMessage(data, 'Could not send verification email'));
     }
@@ -148,7 +160,7 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(formatAdminAuthErrorMessage(data, 'Could not send verification email'));
     }
@@ -160,7 +172,7 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(data.message || 'Registration failed');
     }
@@ -179,7 +191,7 @@ export const authApi = {
       method: 'POST',
       body: formData,
     });
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(data.message || 'Upload failed');
     }
@@ -190,7 +202,7 @@ export const authApi = {
     const url = new URL(`${AUTH_API_BASE}/public/pharmacies`);
     if (q.trim()) url.searchParams.set('q', q.trim());
     const response = await fetch(url.toString());
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(data.message || 'Failed to load pharmacies');
     }
@@ -213,7 +225,7 @@ export const authApi = {
       console.log('Response status:', response.status);
       console.log('Response ok:', response.ok);
 
-      const data = await response.json();
+      const data = await safeJson(response);
       console.log('Response data:', data);
       
       if (!response.ok) {
@@ -233,7 +245,7 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(formatAdminAuthErrorMessage(data, 'Could not send reset code'));
     }
@@ -249,7 +261,7 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await response.json();
+    const data = await safeJson(response);
     if (!response.ok) {
       throw new Error(data.message || 'Could not reset password');
     }
@@ -264,7 +276,7 @@ export const authApi = {
       body: JSON.stringify(mfaData),
     });
 
-    const data = await response.json();
+    const data = await safeJson(response);
     
     if (!response.ok) {
       throw new Error(data.message || 'MFA verification failed');
@@ -282,7 +294,7 @@ export const authApi = {
       body: JSON.stringify({ refreshToken }),
     });
 
-    const data = await response.json();
+    const data = await safeJson(response);
     
     if (!response.ok) {
       throw new Error(data.message || 'Token refresh failed');
@@ -292,8 +304,6 @@ export const authApi = {
   },
 
   logout: async (): Promise<void> => {
-    stopTokenRefreshTimer();
-
     const refreshToken = localStorage.getItem('admin_refresh_token');
 
     if (refreshToken) {
@@ -375,44 +385,6 @@ export const authApi = {
   }
 };
 
-let tokenRefreshIntervalId: ReturnType<typeof setInterval> | null = null;
-
-/** Clears the periodic refresh timer (e.g. on logout). Safe on server. */
-export function stopTokenRefreshTimer(): void {
-  if (typeof window === 'undefined') return;
-  if (tokenRefreshIntervalId !== null) {
-    clearInterval(tokenRefreshIntervalId);
-    tokenRefreshIntervalId = null;
-  }
-}
-
-/**
- * Rotate access tokens before expiry. Reads the latest refresh token from localStorage on each tick
- * so rotation from the previous refresh remains valid (backend revokes old refresh tokens).
- */
-export const setupTokenRefresh = (): ReturnType<typeof setInterval> | null => {
-  if (typeof window === 'undefined') return null;
-
-  stopTokenRefreshTimer();
-
-  if (!localStorage.getItem('admin_refresh_token')) return null;
-
-  tokenRefreshIntervalId = setInterval(async () => {
-    const rt = localStorage.getItem('admin_refresh_token');
-    if (!rt) {
-      stopTokenRefreshTimer();
-      return;
-    }
-    try {
-      const response = await authApi.refreshToken(rt);
-      authApi.storeAuthData(response);
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-      stopTokenRefreshTimer();
-      await authApi.logout();
-      window.location.href = '/login';
-    }
-  }, 14 * 60 * 1000);
-
-  return tokenRefreshIntervalId;
-};
+// Tokens are 30 days — no periodic refresh needed.
+export function stopTokenRefreshTimer(): void {}
+export const setupTokenRefresh = (): null => null;

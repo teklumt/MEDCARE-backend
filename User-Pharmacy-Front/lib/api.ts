@@ -258,6 +258,20 @@ export const getMyPharmacyReviews = async (): Promise<PharmacyReviewItem[]> => {
   return res.data ?? [];
 };
 
+export type PharmacyAnalytics = {
+  period: string;
+  orderCount: number;
+  revenue: number;
+  prevOrderCount: number;
+  prevRevenue: number;
+};
+
+/** Real revenue + order count analytics for the authenticated pharmacy owner. */
+export const getPharmacyAnalytics = async (period: '7d' | '30d' | '90d' = '30d'): Promise<PharmacyAnalytics> => {
+  const res = await apiGet<PharmacyAnalytics>(`/pharmacy/me/analytics?period=${period}`);
+  return res.data;
+};
+
 export const updateMyPharmacy = async (
   payload: UpdateMyPharmacyPayload,
 ): Promise<MyPharmacyProfile> => {

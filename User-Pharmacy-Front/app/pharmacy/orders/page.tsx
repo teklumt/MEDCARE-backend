@@ -43,6 +43,7 @@ type OrderEntry = {
   patientId: string;
   deliveryAddress?: DeliveryAddressPayload;
   tripStartedAt?: string | null;
+  createdAt?: string;
 };
 
 const ORDERS: OrderEntry[] = [];
@@ -52,7 +53,7 @@ const TRANSLATIONS = {
     orderManagement: 'Order Management',
     orderSubtitle: 'Process and track incoming patient orders.',
     actionRequired: 'Action Required',
-    urgentWarning: '3 orders have been waiting over 30 minutes. Please process them immediately.',
+    urgentWarning: 'orders have been waiting over 30 minutes. Please process them immediately.',
     viewOrders: 'View Orders',
     tabs: ['All Orders', 'New', 'Accepted', 'Preparing', 'Out for Delivery', 'Delivered', 'Prescription review'],
     searchPlaceholder: 'Search by Order ID or Patient Name...',
@@ -86,7 +87,7 @@ const TRANSLATIONS = {
     orderManagement: 'የእዘዛ አስተዳደር',
     orderSubtitle: 'የታካሚዎችን ትዕዛዞች ያካሂዱ እና ይከታተሉ።',
     actionRequired: 'አስቸኳይ እርምጃ ይፈልጋል',
-    urgentWarning: '3 ትዕዛዞች ከ30 ደቂቃ በላይ እየጠበቁ ናቸው። እባክዎ ወዲያውኑ ያስተናግዷቸው።',
+    urgentWarning: 'ትዕዛዞች ከ30 ደቂቃ በላይ እየጠበቁ ናቸው። እባክዎ ወዲያውኑ ያስተናግዷቸው።',
     viewOrders: 'ትዕዛዞችን ይመልከቱ',
     tabs: ['ሁሉም ትዕዛዞች', 'አዲስ', 'ተቀባይነት ያገኙ', 'በመዘጋጀት ላይ', 'በመንገድ ላይ', 'የደረሱ', 'የመድሃኒት ማረጋገጫ'],
     searchPlaceholder: 'በትዕዛዝ መለያ ወይም በታካሚ ስም ይፈልጉ...',
@@ -213,6 +214,7 @@ const [searchQuery, setSearchQuery] = useState('');
       total: order.totalAmount || 0,
       method,
       time: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
+      createdAt: order.createdAt ? String(order.createdAt) : '',
       payment,
       status: awaitingPatient ? 'awaiting_patient' : baseStatus,
       hasPrescription: Boolean(order.prescriptionUploadId),
@@ -652,15 +654,28 @@ const t = TRANSLATIONS[language];
         </div>
 </div>
 
-      {/* Urgent Alert Banner */}
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-        <div>
-          <h3 className="text-sm font-bold text-red-800">{t.actionRequired}</h3>
-          <p className="text-sm text-red-700 mt-0.5">{t.urgentWarning}</p>
-        </div>
-        <button className="ml-auto text-sm font-bold text-red-700 hover:text-red-900 underline">{t.viewOrders}</button>
-      </div>
+      {/* Urgent Alert Banner — shown only when new orders have been waiting > 30 min */}
+      {(() => {
+        const urgentCount = orders.filter(
+          (o) => o.status === 'new' && o.createdAt && Date.now() - new Date(o.createdAt).getTime() > 30 * 60 * 1000
+        ).length;
+        if (urgentCount === 0) return null;
+        return (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-bold text-red-800">{t.actionRequired}</h3>
+              <p className="text-sm text-red-700 mt-0.5">{urgentCount} {t.urgentWarning}</p>
+            </div>
+            <button
+              onClick={() => setActiveTab(1)}
+              className="ml-auto text-sm font-bold text-red-700 hover:text-red-900 underline whitespace-nowrap"
+            >
+              {t.viewOrders}
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Tabs */}
       <div className="flex overflow-x-auto scrollbar-hide border-b border-gray-200">

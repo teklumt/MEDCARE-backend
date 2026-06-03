@@ -934,26 +934,36 @@ export const getPharmacyAnalytics = async (
       typeof req.query.period === "string" ? req.query.period : "30d";
     const days = period === "7d" ? 7 : period === "90d" ? 90 : 30;
 
-    const since = new Date();
+    const now = new Date();
+    const since = new Date(now);
     since.setDate(since.getDate() - days);
+    const prevSince = new Date(now);
+    prevSince.setDate(prevSince.getDate() - days * 2);
 
-    const [orderCount, revenue] = await Promise.all([
-      Order.countDocuments({
-        pharmacyId: pharmacy._id,
-        createdAt: { $gte: since },
-      }),
+    const [orderCount, revenueAgg, prevOrderCount, prevRevenueAgg] = await Promise.all([
+      Order.countDocuments({ pharmacyId: pharmacy._id, createdAt: { $gte: since } }),
       Order.aggregate([
         { $match: { pharmacyId: pharmacy._id, createdAt: { $gte: since } } },
         { $group: { _id: null, total: { $sum: "$totalAmount" } } },
       ]),
+      Order.countDocuments({ pharmacyId: pharmacy._id, createdAt: { $gte: prevSince, $lt: since } }),
+      Order.aggregate([
+        { $match: { pharmacyId: pharmacy._id, createdAt: { $gte: prevSince, $lt: since } } },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+      ]),
     ]);
+
+    const revenue = revenueAgg[0]?.total || 0;
+    const prevRevenue = prevRevenueAgg[0]?.total || 0;
 
     res.json({
       success: true,
       data: {
         period,
         orderCount,
-        revenue: revenue[0]?.total || 0,
+        revenue,
+        prevOrderCount,
+        prevRevenue,
       },
     });
   } catch (error) {

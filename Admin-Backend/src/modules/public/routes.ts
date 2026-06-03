@@ -5,8 +5,6 @@ import { Router } from "express";
 import multer from "multer";
 import { Pharmacy } from "../../models/Pharmacy.js";
 import { successResponse, errorResponse } from "../../utils/response.js";
-import { authRateLimiter } from "../../middleware/rateLimiter.js";
-
 const uploadDir = path.join(process.cwd(), "uploads", "registration");
 fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -43,7 +41,7 @@ function escapeRegex(s: string): string {
 export const publicRouter = Router();
 
 /** Approved pharmacies for delivery signup employer search */
-publicRouter.get("/pharmacies", authRateLimiter, async (req, res) => {
+publicRouter.get("/pharmacies", async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const filter: Record<string, unknown> = {
     isActive: true,
@@ -65,7 +63,6 @@ publicRouter.get("/pharmacies", authRateLimiter, async (req, res) => {
 /** Public multipart upload for pharmacy license documents during signup */
 publicRouter.post(
   "/uploads/pharmacy-license",
-  authRateLimiter,
   (req, res, next) => {
     upload.single("file")(req, res, (err) => {
       if (err) {

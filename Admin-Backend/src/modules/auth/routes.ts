@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { body } from "express-validator";
 import { User } from "../../models/User.js";
-import { authRateLimiter } from "../../middleware/rateLimiter.js";
 import { validateRequest } from "../../middleware/validate.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { errorResponse, successResponse } from "../../utils/response.js";
@@ -24,7 +23,6 @@ export const authAdminRouter = Router();
 
 authAdminRouter.post(
   "/forgot-password/send-code",
-  authRateLimiter,
   body("email").isEmail(),
   validateRequest,
   async (req, res) => {
@@ -48,7 +46,6 @@ authAdminRouter.post(
 
 authAdminRouter.post(
   "/forgot-password/reset",
-  authRateLimiter,
   body("email").isEmail(),
   body("verificationCode").isString().trim().matches(/^\d{6}$/).withMessage("Must be a 6-digit code"),
   body("newPassword").isString().isLength({ min: 8, max: 128 }),
@@ -71,7 +68,6 @@ authAdminRouter.post(
 
 authAdminRouter.post(
   "/register/patient/send-verification",
-  authRateLimiter,
   body("email").isEmail(),
   validateRequest,
   async (req, res) => {
@@ -94,7 +90,6 @@ authAdminRouter.post(
 
 authAdminRouter.post(
   "/register/patient",
-  authRateLimiter,
   body("username").isString().trim().isLength({ min: 2, max: 40 }),
   body("email").isEmail(),
   body("password").isString().isLength({ min: 8 }),
@@ -135,7 +130,6 @@ authAdminRouter.post(
 
 authAdminRouter.post(
   "/register/pharmacy/send-verification",
-  authRateLimiter,
   body("email").isEmail(),
   validateRequest,
   async (req, res) => {
@@ -158,7 +152,6 @@ authAdminRouter.post(
 
 authAdminRouter.post(
   "/register/pharmacy",
-  authRateLimiter,
   body("businessName").isString().trim().isLength({ min: 2, max: 120 }),
   body("email").isEmail(),
   body("password").isString().isLength({ min: 8 }),
@@ -218,7 +211,6 @@ authAdminRouter.post(
 
 authAdminRouter.post(
   "/register/delivery/send-verification",
-  authRateLimiter,
   body("email").isEmail(),
   validateRequest,
   async (req, res) => {
@@ -241,7 +233,6 @@ authAdminRouter.post(
 
 authAdminRouter.post(
   "/register/delivery",
-  authRateLimiter,
   body("fullName").isString().trim().isLength({ min: 2, max: 100 }),
   body("email").isEmail(),
   body("password").isString().isLength({ min: 8 }),
@@ -290,7 +281,6 @@ authAdminRouter.post(
 
 authAdminRouter.post(
   "/login",
-  authRateLimiter,
   body("email").isEmail(),
   body("password").isString().isLength({ min: 8 }),
   body("totpCode").optional().isString(),
@@ -317,7 +307,6 @@ authAdminRouter.post(
 
 authAdminRouter.post(
   "/refresh",
-  authRateLimiter,
   body("refreshToken").isString(),
   validateRequest,
   async (req, res) => {
