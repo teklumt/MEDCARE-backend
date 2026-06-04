@@ -1,0 +1,346 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "prescription-scan",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f1fb215f-a666-4cbc-bcab-05a3b58c3b71",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-3792, 912],
+      "webhookId": "prescription-scanner-v1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst body = item.json.body || item.json;\nconst binary = item.binary || {};\n\nconst hasBinary = binary && binary.prescription_image;\n\nif (!hasBinary) {\n  return [{ json: {\n    success: false,\n    error: 'No prescription image found. Please attach an image.',\n    user_id: body.user_id || '',\n    patient_token: body.patient_token || '',\n    has_image: false\n  }}];\n}\n\nconst img = binary.prescription_image;\n\n// Use getBinaryDataBuffer to correctly read binary data\n// in BOTH filesystem and memory binary modes (fixes 'Cannot decode filesystem-v2' error)\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'prescription_image');\nconst base64 = buffer.toString('base64');\n\nreturn [{\n  json: {\n    user_id: body.user_id || '',\n    patient_token: body.patient_token || '',\n    has_image: true,\n    image_base64: base64,\n    image_mime_type: img.mimeType || 'image/jpeg',\n    image_file_name: img.fileName || 'prescription.jpg'\n  },\n  binary: { prescription_image: img }\n}];"
+      },
+      "id": "65c7e1a7-1139-4a13-97b5-91f38c186947",
+      "name": "Extract Image Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-3568, 912]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-has-image",
+              "leftValue": "={{ $json.has_image }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c81f3b02-39e6-4d4a-a7d4-c36d73b410e0",
+      "name": "Has Image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-3344, 912]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/ocr",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"mistral-ocr-latest\",\n  \"document\": {\n    \"type\": \"image_url\",\n    \"image_url\": \"{{ 'data:' + $json.image_mime_type + ';base64,' + $json.image_base64 }}\"\n  },\n  \"prompt\": \"This is a handwritten medical prescription, possibly written in unclear or cursive handwriting. Your task is to extract ONLY the prescribed medicine and drug names. Use your medical knowledge to interpret abbreviated, misspelled, or partially legible drug names — make your best guess based on context. Ignore everything else including: patient name, age, sex, weight, doctor name, clinic or hospital name, date, dosage (mg/ml/units), frequency (once daily, BID, TID), duration (for 5 days), route of administration (oral, IV, topical), diagnosis, and any instructions or notes. Return the result strictly as a JSON array of medicine names only, e.g. [\\\"Amoxicillin\\\", \\\"Metformin\\\", \\\"Omeprazole\\\"]. If a name is unclear, include your best interpretation. If no medicine names can be identified, return [].\"\n}",
+        "options": {}
+      },
+      "id": "7ab852dd-82b9-40ec-9d6e-6e6cebab5598",
+      "name": "Mistral OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-3120, 816],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "gV2nuFIG5K2AwE39",
+          "name": "Mistral api credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ocrData = $input.first().json;\nconst prevData = $('Extract Image Data').first().json;\n\nconst pages = ocrData.pages || [];\nconst ocrText = pages.length > 0 ? (pages[0].markdown || '') : '';\nconst lower = ocrText.toLowerCase();\n\nconst rxKeywords = [\n  'prescription', 'rx', 'medication', 'dosage', 'mg', 'ml',\n  'tablet', 'capsule', 'doctor', 'dr.', 'patient', 'diagnosis',\n  'clinic', 'hospital', 'pharmacist', 'dispense', 'refill',\n  'twice daily', 'once daily', 'take with', 'after meals',\n  'before meals', 'amoxicillin', 'metformin', 'paracetamol',\n  'ibuprofen', 'injection', 'syrup', 'sig:', 'disp:'\n];\n\nconst matchCount = rxKeywords.filter(kw => lower.includes(kw)).length;\nconst isPrescription = matchCount >= 2;\n\nreturn [{ json: {\n  user_id: prevData.user_id,\n  patient_token: prevData.patient_token,\n  has_image: true,\n  raw_ocr_text: ocrText,\n  is_prescription: isPrescription,\n  keyword_match_count: matchCount\n}}];"
+      },
+      "id": "6a78df0e-326d-4965-8b7f-f783cf1e048c",
+      "name": "Prescription Detector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-2896, 816]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawText = $json.raw_ocr_text || '';\n\nfunction extractAfter(text, keywords) {\n  for (const kw of keywords) {\n    const idx = text.toLowerCase().indexOf(kw.toLowerCase());\n    if (idx !== -1) {\n      const rest = text.substring(idx + kw.length).replace(/^[:\\s]+/, '').trim();\n      const firstLine = rest.split('\\n')[0].trim();\n      if (firstLine.length > 0 && firstLine.length < 120) return firstLine;\n    }\n  }\n  return null;\n}\n\nconst parsed = {\n  is_valid_prescription: true,\n  doctor_name: extractAfter(rawText, ['Doctor:', 'Dr.', 'Prescriber:', 'Physician:']),\n  doctor_specialty: extractAfter(rawText, ['Specialty:', 'Department:', 'Dept:']),\n  clinic_name: extractAfter(rawText, ['Clinic:', 'Hospital:', 'Health Center:', 'Facility:']),\n  patient_name: extractAfter(rawText, ['Patient:', 'Patient Name:', 'Name:']),\n  date: extractAfter(rawText, ['Date:', 'Prescribed on:', 'Written:']),\n  diagnosis: extractAfter(rawText, ['Diagnosis:', 'Dx:', 'Impression:', 'Condition:']),\n  refills: extractAfter(rawText, ['Refills:', 'Refill:']),\n  raw_ocr_text: rawText\n};\n\nreturn [{ json: {\n  user_id: $json.user_id,\n  patient_token: $json.patient_token,\n  parsed_prescription: parsed,\n  raw_ocr_text: rawText\n}}];"
+      },
+      "id": "28d92a90-7b62-4ac0-adc5-3f0fefa24e45",
+      "name": "Parse Prescription",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-2672, 816]
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiResponse = $input.first().json;\nconst parseResult = $('Parse Prescription').first().json;\n\n// Real Gemini output path confirmed from pinned data:\n// aiResponse.content.parts[0].text contains the JSON string\nconst messageContent =\n  aiResponse?.content?.parts?.[0]?.text ||\n  aiResponse?.output ||\n  aiResponse?.text ||\n  '{\"medicines\":[]}';\n\n// Parse the JSON response from the AI\nlet medicines = [];\ntry {\n  // Clean up potential markdown code fences the model might add\n  const cleaned = messageContent.replace(/```json\\n?/gi, '').replace(/```\\n?/gi, '').trim();\n  const parsed = JSON.parse(cleaned);\n  medicines = Array.isArray(parsed.medicines) ? parsed.medicines : [];\n} catch (e) {\n  // Fallback: extract quoted strings as medicine names\n  const matches = messageContent.match(/\"([^\"]+)\"/g);\n  if (matches) {\n    medicines = matches.map(m => m.replace(/\"/g, '').trim()).filter(Boolean);\n  }\n}\n\nconst parsed = parseResult.parsed_prescription;\n\nreturn [{ json: {\n  success: true,\n  user_id: parseResult.user_id,\n  patient_token: parseResult.patient_token,\n  parsed_prescription: {\n    is_valid_prescription: parsed.is_valid_prescription,\n    doctor_name: parsed.doctor_name,\n    doctor_specialty: parsed.doctor_specialty,\n    clinic_name: parsed.clinic_name,\n    patient_name: parsed.patient_name,\n    date: parsed.date,\n    diagnosis: parsed.diagnosis,\n    refills: parsed.refills\n  },\n  medicines: medicines,\n  medicine_count: medicines.length\n}}];"
+      },
+      "id": "368ca49e-17b1-4d53-b859-87e9ba3900af",
+      "name": "Build Medicine Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-2096, 816]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "9bb94708-d141-452d-b29f-b7f42f87f7d7",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-1872, 816]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn [{ json: {\n  success: false,\n  error: data.error || 'No prescription image was provided.',\n  hint: 'Send a POST request with a file field named prescription_image plus user_id and patient_token.',\n  user_id: data.user_id || ''\n}}];"
+      },
+      "id": "63cba6f4-0699-413d-885a-f23419d47762",
+      "name": "No Image Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-3120, 1008]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "23841d90-7862-4522-b200-853fce1cd112",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-2896, 1008]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a medical prescription parser. Your ONLY job is to extract medicine \nand drug names from OCR text of a prescription.\n\nRules:\n- Return ONLY a valid JSON object — no explanation, no markdown, no code fences.\n- Use exactly this format: {\"medicines\": [\"MedicineName1\", \"MedicineName2\"]}\n- If only one medicine is found, still return an array with one item.\n- If no medicines are found, return {\"medicines\": []}.\n- Do NOT include dosages, frequencies, duration, instructions, or any other \n  information — only the medicine/drug names.\n",
+              "role": "model"
+            },
+            {
+              "content": "=Extract all medicine names from the following prescription text:\n\n{{ $json.raw_ocr_text }}\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [-2448, 816],
+      "id": "2e08d0ea-8a34-45d6-b3d8-9bef78578cd2",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "MuYB9N7SPdNnt1YC",
+          "name": "Google Gemini(PaLM) Api account xxx"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Image Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Image Data": {
+      "main": [
+        [
+          {
+            "node": "Has Image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Image?": {
+      "main": [
+        [
+          {
+            "node": "Mistral OCR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Image Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mistral OCR": {
+      "main": [
+        [
+          {
+            "node": "Prescription Detector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prescription Detector": {
+      "main": [
+        [
+          {
+            "node": "Parse Prescription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Prescription": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Medicine Result": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Image Error": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Build Medicine Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "Webhook": [
+      {
+        "headers": {
+          "connection": "upgrade",
+          "host": "dawit-sema.dev",
+          "x-real-ip": "54.86.50.139",
+          "x-forwarded-for": "102.213.68.11, 54.86.50.139",
+          "x-forwarded-proto": "https",
+          "content-length": "72771",
+          "user-agent": "PostmanRuntime/7.54.0",
+          "accept": "*/*",
+          "cache-control": "no-cache",
+          "postman-token": "91381066-25e9-42b4-8225-fa114e3d618a",
+          "accept-encoding": "gzip, deflate, br",
+          "content-type": "multipart/form-data; boundary=----WebKitFormBoundaryOO5YN46VPuZpxxAH"
+        },
+        "params": {},
+        "query": {},
+        "body": {
+          "user_id": "683359a1f4e2b1234567890a",
+          "patient_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test"
+        },
+        "webhookUrl": "https://dawit-sema.dev/webhook/prescription-scan",
+        "executionMode": "production"
+      }
+    ]
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8f76e6c2ea34efc84fce91f150eadc601668fda22850bce967042be6b67592b1"
+  }
+}
