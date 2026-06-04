@@ -4,13 +4,13 @@ import app from '../src/app';
 jest.mock('../src/config/database', () => jest.fn());
 
 jest.mock('../src/controllers/auth.controller', () => ({
-  userSignup: jest.fn((req, res) => res.status(201).json({ success: true, data: { user: { id: 'u1', role: 'patient' }, tokens: { accessToken: 'tok', refreshToken: 'ref' } } })),
-  pharmacySignup: jest.fn((req, res) => res.status(201).json({ success: true, data: { user: { id: 'p1', role: 'pharmacy' }, tokens: { accessToken: 'tok', refreshToken: 'ref' } } })),
-  deliverySignup: jest.fn((req, res) => res.status(201).json({ success: true, data: { user: { id: 'd1', role: 'delivery' }, tokens: { accessToken: 'tok', refreshToken: 'ref' } } })),
-  login: jest.fn((req, res) => res.status(200).json({ success: true, data: { tokens: { accessToken: 'tok', refreshToken: 'ref' } } })),
-  refreshToken: jest.fn((req, res) => res.status(200).json({ success: true, data: { accessToken: 'new-tok' } })),
-  logout: jest.fn((req, res) => res.status(200).json({ success: true, message: 'Logged out' })),
-  getProfile: jest.fn((req, res) => res.status(200).json({ success: true, data: { user: { id: 'u1', role: 'patient' } } })),
+  userSignup: jest.fn((_req, res) => res.status(201).json({ success: true, data: { user: { id: 'u1', role: 'patient' }, tokens: { accessToken: 'tok', refreshToken: 'ref' } } })),
+  pharmacySignup: jest.fn((_req, res) => res.status(201).json({ success: true, data: { user: { id: 'p1', role: 'pharmacy' }, tokens: { accessToken: 'tok', refreshToken: 'ref' } } })),
+  deliverySignup: jest.fn((_req, res) => res.status(201).json({ success: true, data: { user: { id: 'd1', role: 'delivery' }, tokens: { accessToken: 'tok', refreshToken: 'ref' } } })),
+  login: jest.fn((_req, res) => res.status(200).json({ success: true, data: { tokens: { accessToken: 'tok', refreshToken: 'ref' } } })),
+  refreshToken: jest.fn((_req, res) => res.status(200).json({ success: true, data: { accessToken: 'new-tok' } })),
+  logout: jest.fn((_req, res) => res.status(200).json({ success: true, message: 'Logged out' })),
+  getProfile: jest.fn((_req, res) => res.status(200).json({ success: true, data: { user: { id: 'u1', role: 'patient' } } })),
 }));
 
 const BASE = '/api/v1/auth';
@@ -19,7 +19,7 @@ describe('Auth routes', () => {
   describe('POST /user/signup', () => {
     it('registers a patient with valid data', async () => {
       const res = await request(app).post(`${BASE}/user/signup`).send({
-        username: 'TestUser', email: 'user@test.com', password: 'Pass1234!', phone: '+251911111111',
+        fullName: 'Test User', email: 'user@test.com', password: 'Pass1234!', phone: '+251911111111',
       });
       expect(res.status).toBe(201);
       expect(res.body.data.user.role).toBe('patient');
@@ -34,8 +34,10 @@ describe('Auth routes', () => {
   describe('POST /pharmacy/signup', () => {
     it('registers a pharmacy with valid data', async () => {
       const res = await request(app).post(`${BASE}/pharmacy/signup`).send({
-        businessName: 'Care Pharmacy', email: 'pharm@test.com', password: 'Pass1234!',
-        phone: '+251911222222', businessLicenseNumber: 'BL-001',
+        fullName: 'Care Owner', businessName: 'Care Pharmacy', email: 'pharm@test.com',
+        password: 'Pass1234!', phone: '+251911222222', licenseNumber: 'BL-001',
+        licenseImageUrl: 'https://example.com/license.jpg',
+        address: { region: 'Addis Ababa', city: 'Addis Ababa', street: 'Bole Road' },
       });
       expect(res.status).toBe(201);
       expect(res.body.data.user.role).toBe('pharmacy');

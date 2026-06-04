@@ -5,21 +5,24 @@ import { deliveryToken, patientToken } from './helpers';
 jest.mock('../src/config/database', () => jest.fn());
 
 jest.mock('../src/controllers/delivery.controller', () => ({
-  getMyDeliveryProfile: jest.fn((req, res) => res.status(200).json({ success: true, data: { profile: { vehicleType: 'motorcycle', isOnline: false } } })),
-  getMyDeliveryStatus: jest.fn((req, res) => res.status(200).json({ success: true, data: { isOnline: true } })),
+  getMyDeliveryProfile: jest.fn((_req, res) => res.status(200).json({ success: true, data: { profile: { vehicleType: 'motorcycle', isOnline: false } } })),
+  getMyDeliveryStatus: jest.fn((_req, res) => res.status(200).json({ success: true, data: { isOnline: true } })),
   setMyDeliveryOnlineStatus: jest.fn((req, res) => res.status(200).json({ success: true, data: { isOnline: req.body.isOnline } })),
-  getMyAssignedOrders: jest.fn((req, res) => res.status(200).json({ success: true, data: { orders: [{ _id: 'o1' }], total: 1 } })),
-  getMyDeliveryHistory: jest.fn((req, res) => res.status(200).json({ success: true, data: { deliveries: [], total: 0 } })),
-  getMyDeliveryEarnings: jest.fn((req, res) => res.status(200).json({ success: true, data: { totalEarnings: 500, today: 100 } })),
-  startDeliveryTrip: jest.fn((req, res) => res.status(200).json({ success: true, message: 'Trip started' })),
-  confirmDriverHandoff: jest.fn((req, res) => res.status(200).json({ success: true, message: 'Handoff confirmed' })),
-  updateDriverLocation: jest.fn((req, res) => res.status(200).json({ success: true, message: 'Location updated' })),
-  uploadDeliveryProfilePhoto: jest.fn((req, res) => res.status(200).json({ success: true })),
-  deleteDeliveryProfilePhoto: jest.fn((req, res) => res.status(200).json({ success: true })),
+  getMyAssignedOrders: jest.fn((_req, res) => res.status(200).json({ success: true, data: { orders: [{ _id: 'o1' }], total: 1 } })),
+  getMyDeliveryHistory: jest.fn((_req, res) => res.status(200).json({ success: true, data: { deliveries: [], total: 0 } })),
+  getMyDeliveryEarnings: jest.fn((_req, res) => res.status(200).json({ success: true, data: { totalEarnings: 500, today: 100 } })),
+  startDeliveryTrip: jest.fn((_req, res) => res.status(200).json({ success: true, message: 'Trip started' })),
+  confirmDriverHandoff: jest.fn((_req, res) => res.status(200).json({ success: true, message: 'Handoff confirmed' })),
+  updateDriverLocation: jest.fn((_req, res) => res.status(200).json({ success: true, message: 'Location updated' })),
+  uploadDeliveryProfilePhoto: jest.fn((_req, res) => res.status(200).json({ success: true })),
+  deleteDeliveryProfilePhoto: jest.fn((_req, res) => res.status(200).json({ success: true })),
 }));
 
 jest.mock('../src/config/upload', () => ({
   uploadDeliveryProfile: { single: () => (_req: any, _res: any, next: any) => next() },
+  uploadPrescription: { single: () => (_req: any, _res: any, next: any) => next() },
+  scanPrescriptionMemory: { single: () => (_req: any, _res: any, next: any) => next() },
+  uploadMedicationImage: { single: () => (_req: any, _res: any, next: any) => next() },
 }));
 
 const BASE = '/api/v1/delivery';

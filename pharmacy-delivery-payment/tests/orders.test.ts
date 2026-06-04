@@ -5,10 +5,10 @@ import { patientToken, pharmacyToken } from './helpers';
 jest.mock('../src/config/database', () => jest.fn());
 
 jest.mock('../src/controllers/orders.controller', () => ({
-  createOrder: jest.fn((req, res) => res.status(201).json({
+  createOrder: jest.fn((_req, res) => res.status(201).json({
     success: true, data: { order: { _id: 'o1', ref: 'ORD-001', status: 'pending', totalAmount: 150 } },
   })),
-  getOrders: jest.fn((req, res) => res.status(200).json({
+  getOrders: jest.fn((_req, res) => res.status(200).json({
     success: true, data: { orders: [{ _id: 'o1', ref: 'ORD-001', status: 'pending' }], total: 1 },
   })),
   getOrderById: jest.fn((req, res) => {
@@ -18,10 +18,11 @@ jest.mock('../src/controllers/orders.controller', () => ({
   updateOrderStatus: jest.fn((req, res) => res.status(200).json({
     success: true, data: { order: { _id: req.params.id, status: req.body.status } },
   })),
-  cancelOrder: jest.fn((req, res) => res.status(200).json({ success: true, message: 'Order cancelled' })),
-  completeOrderPayment: jest.fn((req, res) => res.status(200).json({ success: true, data: { checkoutUrl: 'https://chapa.co/checkout' } })),
-  confirmPatientReceipt: jest.fn((req, res) => res.status(200).json({ success: true, message: 'Receipt confirmed' })),
-  getOrderTracking: jest.fn((req, res) => res.status(200).json({ success: true, data: { statusHistory: [] } })),
+  cancelOrder: jest.fn((_req, res) => res.status(200).json({ success: true, message: 'Order cancelled' })),
+  completeOrderPayment: jest.fn((_req, res) => res.status(200).json({ success: true, data: { checkoutUrl: 'https://chapa.co/checkout' } })),
+  confirmPatientReceipt: jest.fn((_req, res) => res.status(200).json({ success: true, message: 'Receipt confirmed' })),
+  getOrderTracking: jest.fn((_req, res) => res.status(200).json({ success: true, data: { statusHistory: [] } })),
+  getPharmacyOrders: jest.fn((_req, res) => res.status(200).json({ success: true, data: { orders: [], total: 0 } })),
 }));
 
 const BASE = '/api/v1/orders';

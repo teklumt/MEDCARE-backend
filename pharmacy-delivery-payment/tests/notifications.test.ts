@@ -5,10 +5,10 @@ import { patientToken } from './helpers';
 jest.mock('../src/config/database', () => jest.fn());
 
 jest.mock('../src/controllers/notifications.controller', () => ({
-  listNotifications: jest.fn((req, res) => res.status(200).json({
+  listNotifications: jest.fn((_req, res) => res.status(200).json({
     success: true, data: { notifications: [{ _id: 'n1', title: 'Order confirmed', readAt: null }], total: 1 },
   })),
-  markAsRead: jest.fn((req, res) => res.status(200).json({ success: true, message: 'Marked as read' })),
+  markNotificationsRead: jest.fn((_req, res) => res.status(200).json({ success: true, message: 'Marked as read' })),
 }));
 
 const BASE = '/api/v1/notifications';

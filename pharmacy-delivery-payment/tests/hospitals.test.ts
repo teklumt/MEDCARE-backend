@@ -4,7 +4,7 @@ import app from '../src/app';
 jest.mock('../src/config/database', () => jest.fn());
 
 jest.mock('../src/controllers/hospitals.controller', () => ({
-  listHospitals: jest.fn((req, res) => res.status(200).json({
+  listHospitals: jest.fn((_req, res) => res.status(200).json({
     success: true,
     data: { hospitals: [{ _id: 'h1', name: 'Tikur Anbessa Hospital', address: 'Addis Ababa' }], total: 1 },
   })),

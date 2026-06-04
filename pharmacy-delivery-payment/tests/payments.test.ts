@@ -5,15 +5,15 @@ import { patientToken } from './helpers';
 jest.mock('../src/config/database', () => jest.fn());
 
 jest.mock('../src/controllers/payments.controller', () => ({
-  initiateChapaPayment: jest.fn((req, res) => res.status(200).json({
+  initiateChapaPayment: jest.fn((_req, res) => res.status(200).json({
     success: true, data: { checkoutUrl: 'https://checkout.chapa.co/abc', txRef: 'MC-TXN-001' },
   })),
-  chapaWebhook: jest.fn((req, res) => res.status(200).json({ success: true, message: 'Webhook processed' })),
+  chapaWebhook: jest.fn((_req, res) => res.status(200).json({ success: true, message: 'Webhook processed' })),
   getPaymentById: jest.fn((req, res) => {
     if (req.params.id === 'nonexistent') return res.status(404).json({ success: false });
     return res.status(200).json({ success: true, data: { payment: { _id: req.params.id, status: 'success', amount: 150 } } });
   }),
-  verifyPayment: jest.fn((req, res) => res.status(200).json({ success: true, data: { status: 'success' } })),
+  verifyPayment: jest.fn((_req, res) => res.status(200).json({ success: true, data: { status: 'success' } })),
 }));
 
 const BASE = '/api/v1/payments';

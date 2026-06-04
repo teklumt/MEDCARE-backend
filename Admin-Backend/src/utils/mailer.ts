@@ -174,7 +174,7 @@ export const sendMail = async (to: string, subject: string, html: string): Promi
     await sendMailStrict(to, subject, html);
   } catch (err) {
     logger.warn("Email send failed (non-critical, skipped)", {
-      to: to.trim(),
+      to: to?.trim() ?? to,
       subject,
       provider: useCustomerio ? "customerio" : useResend ? "resend" : "smtp",
       errMessage: err instanceof Error ? err.message : String(err),

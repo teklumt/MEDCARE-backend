@@ -5,10 +5,10 @@ import { patientToken, deliveryToken } from './helpers';
 jest.mock('../src/config/database', () => jest.fn());
 
 jest.mock('../src/controllers/complaints.controller', () => ({
-  createComplaint: jest.fn((req, res) => res.status(201).json({
+  createComplaint: jest.fn((_req, res) => res.status(201).json({
     success: true, data: { complaint: { _id: 'c1', ref: 'CMP-001', status: 'open' } },
   })),
-  listMyComplaints: jest.fn((req, res) => res.status(200).json({
+  listMyComplaints: jest.fn((_req, res) => res.status(200).json({
     success: true, data: { complaints: [{ _id: 'c1', status: 'open' }], total: 1 },
   })),
   getComplaint: jest.fn((req, res) => {
