@@ -70,8 +70,10 @@ export function structuredAddressFromGeocodeComponents(
   const route = pickComponent(components, 'route');
   let street = [streetNum, route].filter(Boolean).join(' ').trim();
   if (!street) {
-    street =
-      pickComponent(components, 'premise', 'establishment', 'point_of_interest', 'plus_code') ?? '';
+    // Only use 'premise' as fallback (a building/complex name).
+    // Excludes 'plus_code' (contains "VRP6+G7W Near Dembel City Center"),
+    // 'establishment' and 'point_of_interest' (return nearby landmarks like "Dembel City Center").
+    street = pickComponent(components, 'premise') ?? '';
   }
 
   const subCity =
@@ -132,16 +134,11 @@ export async function reverseGeocodeLatLng(
   const components = first.address_components ?? [];
   const structured = structuredAddressFromGeocodeComponents(components);
 
-  if (
-    !structured.street &&
-    typeof first.formatted_address === 'string' &&
-    first.formatted_address.trim()
-  ) {
-    const head = first.formatted_address.split(',')[0]?.trim();
-    if (head) structured.street = head;
-  }
+  // No formatted_address fallback — for areas without street-level data (common in Addis Ababa),
+  // formatted_address contains landmark descriptions like "Near Dembel City Center" which are
+  // not useful as a street field. Leave street empty; the user fills it in manually.
 
-  if (!structured.street && !structured.subCity && !structured.city) return null;
+  if (!structured.subCity && !structured.city) return null;
 
   return structured;
 }

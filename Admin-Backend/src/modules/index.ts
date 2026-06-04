@@ -17,11 +17,14 @@ import { complaintManagementRouter } from "./complaint-management/routes.js";
 import { paymentManagementRouter } from "./payment-management/routes.js";
 import { platformSettingsRouter } from "./platform-settings/routes.js";
 import { notificationsRouter } from "./notifications/routes.js";
+import { healthAssistantRouter } from "./health-assistant/routes.js";
 
 export const adminRouter = Router();
 
 adminRouter.use("/public", publicRouter);
 adminRouter.use("/auth", authAdminRouter);
+// health-assistant must be registered BEFORE "/" (adminDashboardRouter has requireRole("admin"))
+adminRouter.use("/health-assistant", healthAssistantRouter);
 adminRouter.use("/admins", adminManagementRouter);
 adminRouter.use("/", adminDashboardRouter);
 adminRouter.use("/licenses", licenseVerificationRouter);
